@@ -27,6 +27,9 @@ Docker 构建在拉取 Python/Nginx 基础镜像时，Docker Hub auth token 网�
 - `e4f3634`：第一阶段基础存档。类型检查通过；174 项 Vitest 测试通过；前端 build 通过；Python 3 项测试通过，含真实 embedding 批量/检索/删除测试。
 - 后续真实项目链路：`MEMORY_LIVE_TEST=1 pnpm exec vitest run tests/business/memory-live.test.ts` 通过。测试使用隔离 PostgreSQL、真实 Python memU 服务、真实 Qwen 整理和提问、真实 embedding；覆盖作者隔离及撤销后不可检索。测试资料明确为 fixture，未写入真实参与者内容。
 - 目标仍未完成：页面与双账号操作、更多生命周期行为以及官方适配剩余项继续执行。
+- `acc72d4`：第二阶段存档，记忆生命周期作废机制与真实项目级采访联调。
+- 本机隔离运行：API 8081、记忆服务 8090、页面 5173，数据库 andthen_v12_demo；原 8080 容器和原数据库保持运行。
+- 浏览器已验证：读者建会话、官方搜索、关注 fixture；独立作者会话接受回访、记忆 ready、真实提问、回答保存、暂停/恢复/结束。发现并修复无请求体 POST 错发 JSON Content-Type。待继续：草稿发布、通知、撤回，以及异步状态刷新与成功反馈。
 
 ## 运行
 
