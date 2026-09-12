@@ -19,7 +19,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 ## Still required before goal completion
 
 1. AI-A analysis, AI-C optional structured drafting, AI-D validation routes/handlers and usage/input/output/concurrency quotas; case review transition. B implemented; prompts alone do not implement other stages.
-2. Research events/export, PRD core route compatibility, stricter schema responses and frontend docs.
+2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
 4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
 5. Docker rebuild/migrate/cold-start/persistence/backup-restore/performance against final commit; existing containers still run the old foundation image.
@@ -38,3 +38,11 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 - Existing module placeholder comments and frozen docs need updating to actual behavior.
 
 Commands: bundled `pnpm.cmd typecheck`, `pnpm.cmd test`; tests use real Postgres at localhost:55432 and create/drop isolated test databases. Never remove main Docker data volume.
+
+## Continuation evidence — research module
+
+The preceding turn made concrete progress (commit `af5adac`), not a wait or no-progress turn. This continuation verified clean main at that commit and Docker containers healthy but still on the older image.
+
+Implemented `POST /api/research/events` with strict event allowlist, server-side identity/cohort/exclusion, source/public-version checks, concurrent replay deduplication and conflict detection. Implemented scoped aggregate `GET /api/research/export`, excluding test/author/prompted behavior, with explicit matching denominator and null missing rates. Export contains no raw participant IDs or content. Invitation figures use current outcome among records whose windows have completed, with an explicit limitation because reply timestamps are not stored.
+
+Read `skills/backend-contracts/SKILL.md` and `skills/git-delivery/SKILL.md`. Contract documentation: `docs/research-api.md`. Verification: bundled `pnpm.cmd typecheck` passed; `pnpm.cmd test` passed 22 files / 129 tests. Focused research suite covers concurrent event replay, forged cohort/business events, researcher scope isolation, exclusion and null denominator behavior. Goal remains active; remaining AI stages, retention, Docker final build/restore/performance and real model verification remain outstanding.

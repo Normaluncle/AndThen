@@ -1,4 +1,5 @@
 import type { ModuleDefinition } from '../../shared/types.js';
+import { registerResearchRoutes } from './routes.js';
 
 /**
  * RESERVED MODULE — no routes or handlers are registered in the foundation
@@ -14,4 +15,5 @@ import type { ModuleDefinition } from '../../shared/types.js';
  */
 export const researchModule: ModuleDefinition = {
   name: 'research',
+  registerRoutes: registerResearchRoutes,
 };
