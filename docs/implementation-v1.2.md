@@ -117,3 +117,13 @@ docker compose --env-file .env.local up -d --build
 - `management.test.ts` 两项真实数据库测试通过，覆盖匿名/普通读者拒绝、研究员范围、管理员失败任务字段隔离；typecheck 和 Vite build 通过。API 8081 与隔离 worker 已更新，原 Docker 8080 未改动。
 - 浏览器负例：尝试对已撤回的 fixture 回访再次审核，得到 conflict 且状态仍为 withdrawn；未对真实作者内容执行归属或审核变更。
 - 最终回归 `pnpm test`：203 通过、1 项真实模型 opt-in 跳过；运行中的 OpenAPI 已包含两个 operator 路径。
+
+### AI 草稿与依据检查页面（2026-09-13）
+
+- 草稿页新增 AI-C 整理新版本与 AI-D 依据检查。任务执行期间禁止编辑/确认/发布；离开页面停止轮询结果回写。读取状态失败可重新读取，处理失败可重新发起；原回答和草稿保留。
+- 区分队列 succeeded 与模型结果成功：`error_code`、缺少 draft_id/validation、failed/cancelled 都不能被展示为有效结果。成功整理后加载新的未确认版本。规则检查单独说明，不能冒充 AI 检查。
+- 浏览器实测先发现 Qwen 将采访 message 标为 source_quote，服务端以 source_incomplete 拒绝且第 3 版原稿保留。增加提示词中的引用类型映射，版本更新为 2026-09-13.2，证据校验没有放宽。`drafting.test.ts` 新增错误引用类型的回归场景。
+- 同一 fixture 重试成功：第 4 版有六条有依据内容、状态 draft，尚未确认或发布。随后 AI-D 成功，页面显示“未发现阻断项，仍需作者确认”。这是真实模型的测试材料验收，不是真实作者案例或广泛质量保证。
+- 项目 ai_runs：首次 AI-C 失败 439/372 输入/输出 token、3733ms；重试 AI-C 成功 569/658、6739ms；AI-D 成功 873/16、702ms。另有两次诊断探针，分别 439/275 和 569/658 token；本轮总计五次真实模型请求，2889 输入、1979 输出 token。探针不是产品验收替代品，未写入业务草稿。
+- 验证：typecheck 通过；pnpm test 203 通过、1 项 opt-in 跳过；页面 API/流程测试 6 通过；Vite build 通过。隔离 worker 已加载修订提示词。
+- 仍需：原始依据正文的便捷查看/逐项编辑操作、管理页正向写操作及自然发现完整浏览器闭环、采访失败重试、记忆与失败任务完整恢复操作、OAuth 实现及外部凭证、Docker 新镜像等原计划剩余项。Goal 不标完成。

@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {draftActions, interviewActions, poll} from './workflow.js';
+import {draftActions, interviewActions, poll, readAiTask} from './workflow.js';
 
 test('unsaved edits cannot confirm or publish an earlier server version', () => {
   const saved = [{id:'1',text:'原文'}];
@@ -41,4 +41,26 @@ test('polling ignores results arriving after navigation and stops after failure'
   await new Promise(r=>setTimeout(r,20));
   stopFailure();
   assert.equal(errors,1);
+});
+
+test('completed queue tasks with failed or missing AI output never replace the draft',async()=>{
+  for(const job of [
+    {status:'succeeded',result:{error_code:'invalid_output',draft_id:'unsafe'}},
+    {status:'succeeded',result:{draft_id:null}},
+    {status:'failed'}, {status:'cancelled'},
+  ]) {
+    let requests=0;
+    const result=await readAiTask(async path=>{requests++;assert.equal(path,'/jobs/test');return job;},'test','draft');
+    assert.equal(result.status,'failed');assert.equal(result.draft,undefined);assert.equal(requests,1);
+  }
+});
+
+test('AI task reads fetch only a successful generated draft and keep validation distinct',async()=>{
+  const calls=[];
+  const draft={id:'new',version:3,status:'draft'};
+  const result=await readAiTask(async path=>{calls.push(path);return path==='/jobs/test'?{status:'succeeded',result:{draft_id:'new'}}:draft;},'test','draft');
+  assert.deepEqual(calls,['/jobs/test','/drafts/new']);assert.deepEqual(result.draft,draft);
+  const validation={blocking:true,findings:[{severity:'blocking',message:'需补依据'}]};
+  assert.deepEqual(await readAiTask(async()=>({status:'succeeded',result:{validation}}),'test','validation'),{status:'succeeded',validation});
+  assert.deepEqual(await readAiTask(async()=>({status:'running'}),'test','draft'),{status:'running'});
 });
