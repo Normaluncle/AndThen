@@ -1,8 +1,9 @@
 import { randomUUID } from 'node:crypto';
+import { logLlmPolicy } from './ai/client.js';
 import { getEnv } from './config/env.js';
 import { createDatabase, createPool } from './db/client.js';
 import { JobRegistry, JobQueue, JobWorker, recordWorkerHeartbeat } from './jobs/index.js';
-import { registerModuleJobHandlers } from './modules/index.js';
+import { registerModuleJobHandlers, runModuleWorkerStart } from './modules/index.js';
 import { createLogger } from './shared/logger.js';
 import type { ModuleContext } from './shared/types.js';
 
@@ -15,6 +16,7 @@ import type { ModuleContext } from './shared/types.js';
 async function main(): Promise<void> {
   const env = getEnv();
   const logger = createLogger(env, { base: { service: 'andthen-worker', env: env.NODE_ENV } });
+  logLlmPolicy(env, logger);
 
   const pool = createPool({
     connectionString: env.DATABASE_URL,
@@ -36,6 +38,10 @@ async function main(): Promise<void> {
 
   const workerId = env.WORKER_ID ?? `worker-${randomUUID()}`;
   logger.info({ workerId, kinds: registry.kinds() }, 'registered job handlers');
+
+  // Let modules seed work that must exist independently of any request
+  // (e.g. an outbox sweep keyed by dedupeKey).
+  await runModuleWorkerStart(ctx);
 
   const worker = new JobWorker({
     queue: ctx.jobs,

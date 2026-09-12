@@ -1,4 +1,4 @@
-import type { Env } from '../config/env.js';
+import { isLlmConfigured, llmKeyPolicy, type Env } from '../config/env.js';
 import { AppError } from '../http/errors.js';
 import type { Logger } from '../shared/logger.js';
 
@@ -137,5 +137,39 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
 
   return { configured, model, baseUrl, complete };
 }
+
+/**
+ * Report the LLM credential policy once at boot.
+ *
+ * `anonymous_local` is a supported configuration (no key needed). A remote base
+ * URL without a key is surfaced as a warning instead of failing silently at the
+ * first call. `unconfigured` is not an error: AI tasks stay disabled and the
+ * manual path is unaffected.
+ */
+export function logLlmPolicy(env: Env, logger: Logger): void {
+  switch (llmKeyPolicy(env)) {
+    case 'key_missing_for_remote':
+      logger.warn(
+        { llmBaseUrl: env.LLM_BASE_URL },
+        'LLM_BASE_URL is remote but LLM_API_KEY is unset; AI calls will fail until a key is provided',
+      );
+      break;
+    case 'anonymous_local':
+      logger.info(
+        { llmBaseUrl: env.LLM_BASE_URL },
+        'LLM provider is local and anonymous; no API key required',
+      );
+      break;
+    case 'unconfigured':
+      logger.info(
+        'LLM provider is not configured; AI tasks stay disabled and manual mode is unaffected',
+      );
+      break;
+    case 'key_present':
+      break;
+  }
+}
+
+export { isLlmConfigured };
 
 export type { Env };

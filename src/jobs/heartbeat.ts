@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { desc, eq } from 'drizzle-orm';
 import type { Database } from '../db/client.js';
 import { workerHeartbeats } from '../db/schema.js';
 
@@ -38,6 +38,17 @@ export async function getWorkerHeartbeat(db: Database, workerId: string) {
     .select()
     .from(workerHeartbeats)
     .where(eq(workerHeartbeats.workerId, workerId))
+    .limit(1);
+  return rows[0];
+}
+
+/** Most recently seen heartbeat of a given kind; used by the worker healthcheck. */
+export async function getLatestWorkerHeartbeat(db: Database, kind = 'worker') {
+  const rows = await db
+    .select()
+    .from(workerHeartbeats)
+    .where(eq(workerHeartbeats.kind, kind))
+    .orderBy(desc(workerHeartbeats.lastSeenAt))
     .limit(1);
   return rows[0];
 }

@@ -1,12 +1,13 @@
 import helmet from '@fastify/helmet';
 import { sql } from 'drizzle-orm';
-import Fastify, { type FastifyError } from 'fastify';
+import Fastify, { type FastifyError, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   serializerCompiler,
   validatorCompiler,
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { logLlmPolicy } from './ai/client.js';
 import type { Env } from './config/env.js';
 import type { Database } from './db/client.js';
 import { registerAuth } from './http/auth.js';
@@ -118,6 +119,8 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   registerRequestId(app);
   registerAuth(app, db);
 
+  logLlmPolicy(env, logger);
+
   const ctx: ModuleContext = {
     db,
     env,
@@ -130,49 +133,48 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
 
   const r = app.withTypeProvider<ZodTypeProvider>();
 
-  r.get(
-    '/healthz',
-    {
-      schema: {
-        tags: ['system'],
-        summary: 'Liveness probe',
-        response: {
-          200: envelopeSchema(z.object({ status: z.literal('ok'), time: z.string() })),
-        },
-      },
-    },
-    async (request) =>
-      success(request.id, { status: 'ok' as const, time: new Date().toISOString() }),
-  );
+  const liveness = async (request: FastifyRequest) =>
+    success(request.id, { status: 'ok' as const, time: new Date().toISOString() });
 
-  r.get(
-    '/readyz',
-    {
-      schema: {
-        tags: ['system'],
-        summary: 'Readiness probe (checks the database)',
-        response: {
-          200: envelopeSchema(z.object({ status: z.literal('ready'), database: z.literal('ok') })),
-          503: z.object({
-            request_id: z.string(),
-            status: z.literal('error'),
-            error_code: z.string(),
-            message: z.string(),
-          }),
-        },
-      },
+  const livenessSchema = {
+    tags: ['system'],
+    summary: 'Liveness probe',
+    response: {
+      200: envelopeSchema(z.object({ status: z.literal('ok'), time: z.string() })),
     },
-    async (request, reply) => {
-      try {
-        await db.execute(sql`select 1`);
-        return success(request.id, { status: 'ready' as const, database: 'ok' as const });
-      } catch {
-        return reply
-          .status(503)
-          .send(failure(request.id, 'service_unavailable', 'Database is not reachable'));
-      }
+  };
+
+  const readiness = async (request: FastifyRequest, reply: FastifyReply) => {
+    try {
+      await db.execute(sql`select 1`);
+      return success(request.id, { status: 'ready' as const, database: 'ok' as const });
+    } catch {
+      return reply
+        .status(503)
+        .send(failure(request.id, 'service_unavailable', 'Database is not reachable'));
+    }
+  };
+
+  const readinessSchema = {
+    tags: ['system'],
+    summary: 'Readiness probe (checks the database)',
+    response: {
+      200: envelopeSchema(z.object({ status: z.literal('ready'), database: z.literal('ok') })),
+      503: z.object({
+        request_id: z.string(),
+        status: z.literal('error'),
+        error_code: z.string(),
+        message: z.string(),
+      }),
     },
-  );
+  };
+
+  // Canonical paths are /health/live and /health/ready. The original short
+  // aliases are kept for existing probes and hidden from the OpenAPI document.
+  r.get('/health/live', { schema: livenessSchema }, liveness);
+  r.get('/healthz', { schema: { ...livenessSchema, hide: true } }, liveness);
+  r.get('/health/ready', { schema: readinessSchema }, readiness);
+  r.get('/readyz', { schema: { ...readinessSchema, hide: true } }, readiness);
 
   /* ---- Business modules ---- */
 

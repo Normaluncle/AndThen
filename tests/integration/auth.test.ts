@@ -1,9 +1,20 @@
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp } from '../../src/app.js';
-import { sessions, users } from '../../src/db/schema.js';
+import {
+  auditLogs,
+  authorVerifications,
+  consents,
+  loginTokens,
+  sessions,
+  users,
+} from '../../src/db/schema.js';
 import { success } from '../../src/http/errors.js';
-import { createUser, issueLoginToken } from '../../src/modules/identity/service.js';
+import {
+  ANONYMOUS_READER_COHORT,
+  createUser,
+  issueLoginToken,
+} from '../../src/modules/identity/service.js';
 import { hashToken } from '../../src/modules/identity/tokens.js';
 import { createLogger } from '../../src/shared/logger.js';
 import type { AppInstance } from '../../src/shared/types.js';
@@ -14,7 +25,7 @@ describe('identity: authentication, session lifecycle and isolation', () => {
   let app: AppInstance;
 
   beforeAll(async () => {
-    ctx = await createTestContext();
+    ctx = await createTestContext('auth');
     const built = await buildApp({
       env: ctx.env,
       db: ctx.db,
@@ -287,5 +298,208 @@ describe('identity: authentication, session lifecycle and isolation', () => {
     expect(res.statusCode).toBe(404);
     expect(res.json().error_code).toBe('not_found');
     expect(res.json().request_id).toBe(res.headers['x-request-id']);
+  });
+
+  /* ---- anonymous reader sessions (FR-04) ---- */
+
+  it('establishes an anonymous reader session only with explicit consent', async () => {
+    const missingConsent = await app.inject({
+      method: 'POST',
+      url: '/api/auth/readers',
+      payload: {},
+    });
+    expect(missingConsent.statusCode).toBe(400);
+    expect(missingConsent.json().error_code).toBe('validation_error');
+
+    const refused = await app.inject({
+      method: 'POST',
+      url: '/api/auth/readers',
+      payload: { consent: { accepted: false, version: 'v1' } },
+    });
+    expect(refused.statusCode).toBe(400);
+
+    const ok = await app.inject({
+      method: 'POST',
+      url: '/api/auth/readers',
+      payload: { consent: { accepted: true, version: 'reader-v1' } },
+    });
+    expect(ok.statusCode).toBe(200);
+    const body = ok.json() as {
+      data: { session_token: string; user: { id: string; role: string; cohort: string } };
+    };
+    expect(body.data.user.role).toBe('reader');
+    expect(body.data.user.cohort).toBe(ANONYMOUS_READER_COHORT);
+    expect(body.data.session_token).toMatch(/^[A-Za-z0-9_-]{43}$/);
+
+    // The session works immediately.
+    const me = await app.inject({
+      method: 'GET',
+      url: '/api/me',
+      headers: { authorization: `Bearer ${body.data.session_token}` },
+    });
+    expect(me.statusCode).toBe(200);
+    expect(me.json().data.user.id).toBe(body.data.user.id);
+
+    // Consent is recorded per purpose, and the reader is never a privileged role.
+    const recorded = await ctx.db
+      .select()
+      .from(consents)
+      .where(and(eq(consents.userId, body.data.user.id), eq(consents.purpose, 'reader_session')));
+    expect(recorded).toHaveLength(1);
+    expect(recorded[0]!.status).toBe('granted');
+    expect(recorded[0]!.version).toBe('reader-v1');
+  });
+
+  it('ignores client attempts to choose role or cohort on the reader endpoint', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/readers',
+      payload: {
+        consent: { accepted: true, version: 'reader-v1' },
+        role: 'admin',
+        cohort: 'team',
+      },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error_code).toBe('validation_error');
+
+    // Nothing was created by the rejected request.
+    const admins = await ctx.db.select().from(users).where(eq(users.role, 'admin'));
+    expect(admins).toHaveLength(0);
+  });
+
+  it('serves /api/me as an alias of /api/auth/me', async () => {
+    const { user, sessionToken } = await seedSession('researcher');
+    const headers = { authorization: `Bearer ${sessionToken}` };
+    const canonical = await app.inject({ method: 'GET', url: '/api/me', headers });
+    const alias = await app.inject({ method: 'GET', url: '/api/auth/me', headers });
+    expect(canonical.statusCode).toBe(200);
+    expect(alias.statusCode).toBe(200);
+    expect(canonical.json().data).toEqual(alias.json().data);
+    expect(canonical.json().data.user.id).toBe(user.id);
+  });
+
+  /* ---- login token purposes ---- */
+
+  it('refuses to exchange an invitation-purpose token for a session', async () => {
+    const user = await createUser(ctx.db, { role: 'author', cohort: 'external' });
+    const invitation = await issueLoginToken(ctx.db, {
+      userId: user.id,
+      purpose: 'invitation',
+      ttlSeconds: 3600,
+      metadata: { case_id: 'case-1' },
+    });
+
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sessions',
+      payload: { login_token: invitation.token },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json().error_code).toBe('forbidden');
+
+    // Rejected without consuming the token: it is still needed to locate the case.
+    const stored = await ctx.db.select().from(loginTokens).where(eq(loginTokens.id, invitation.id));
+    expect(stored[0]!.usedAt).toBeNull();
+    expect(stored[0]!.purpose).toBe('invitation');
+
+    const createdSessions = await ctx.db.select().from(sessions).where(eq(sessions.userId, user.id));
+    expect(createdSessions).toHaveLength(0);
+  });
+
+  it('allows bootstrap and author_binding tokens to establish sessions', async () => {
+    for (const purpose of ['bootstrap', 'author_binding'] as const) {
+      const user = await createUser(ctx.db, { role: 'author', cohort: 'external' });
+      const token = await issueLoginToken(ctx.db, { userId: user.id, purpose, ttlSeconds: 3600 });
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/auth/sessions',
+        payload: { login_token: token.token },
+      });
+      expect(res.statusCode, `purpose ${purpose}`).toBe(200);
+      expect(res.json().data.user.id).toBe(user.id);
+    }
+  });
+
+  /* ---- admin-managed accounts ---- */
+
+  it('lets only an admin create author/researcher accounts, without verifying authorship', async () => {
+    for (const role of ['reader', 'author', 'researcher'] as const) {
+      const { sessionToken } = await seedSession(role);
+      const res = await app.inject({
+        method: 'POST',
+        url: '/api/admin/users',
+        headers: { authorization: `Bearer ${sessionToken}` },
+        payload: { role: 'author' },
+      });
+      expect(res.statusCode, `role ${role} must not create accounts`).toBe(403);
+      expect(res.json().error_code).toBe('forbidden');
+    }
+
+    const { sessionToken: adminToken, user: admin } = await seedSession('admin');
+    const created = await app.inject({
+      method: 'POST',
+      url: '/api/admin/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { role: 'author', display_name: 'Pilot Author', cohort: 'external' },
+    });
+    expect(created.statusCode).toBe(200);
+
+    const body = created.json().data as {
+      user: { id: string; role: string; cohort: string };
+      login_token: string;
+      author_verified: boolean;
+    };
+    expect(body.user.role).toBe('author');
+    expect(body.user.cohort).toBe('external');
+    expect(body.author_verified).toBe(false);
+
+    // Creating an account is NOT author verification.
+    const verifications = await ctx.db
+      .select()
+      .from(authorVerifications)
+      .where(eq(authorVerifications.userId, body.user.id));
+    expect(verifications).toHaveLength(0);
+
+    // The credential works and yields exactly the created identity.
+    const exchanged = await app.inject({
+      method: 'POST',
+      url: '/api/auth/sessions',
+      payload: { login_token: body.login_token },
+    });
+    expect(exchanged.statusCode).toBe(200);
+    expect(exchanged.json().data.user.id).toBe(body.user.id);
+    expect(exchanged.json().data.user.role).toBe('author');
+
+    // Governance action is audited against the acting admin.
+    const audit = await ctx.db
+      .select()
+      .from(auditLogs)
+      .where(and(eq(auditLogs.action, 'admin.user_created'), eq(auditLogs.subjectId, body.user.id)));
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.actorUserId).toBe(admin.id);
+    expect(audit[0]!.properties).toMatchObject({ author_verified: false });
+  });
+
+  it('rejects an admin trying to mint another admin through the account endpoint', async () => {
+    const { sessionToken } = await seedSession('admin');
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/users',
+      headers: { authorization: `Bearer ${sessionToken}` },
+      payload: { role: 'admin' },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error_code).toBe('validation_error');
+  });
+
+  it('never leaks a one-time credential into the response of an unauthenticated caller', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/admin/users',
+      payload: { role: 'author' },
+    });
+    expect(res.statusCode).toBe(401);
+    expect(res.body).not.toContain('login_token');
   });
 });

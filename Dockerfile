@@ -1,7 +1,12 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:ecfaec9ed6d810b56388c508f4121597bfbba70d41a6dfeee4d8cad5f295fc32
+
+# Base image is pinned by digest, not by the floating `24-alpine` tag, so a
+# rebuild cannot silently pick up a different Node. Update the digest
+# deliberately and re-run the test suite.
+ARG NODE_IMAGE=node:24-alpine@sha256:50c8e8ca1d27439048670df5883f32d57cf81cff6233222c893fd0d9884cbd81
 
 # ---------- base ----------
-FROM node:24-alpine AS base
+FROM ${NODE_IMAGE} AS base
 # Keep corepack on the same registry as .npmrc so the pnpm download is reliable.
 ENV COREPACK_NPM_REGISTRY=https://registry.npmmirror.com
 ENV PNPM_HOME=/pnpm
@@ -26,7 +31,7 @@ COPY .npmrc package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile --prod --reporter=append-only
 
 # ---------- runtime ----------
-FROM node:24-alpine AS runtime
+FROM ${NODE_IMAGE} AS runtime
 ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=8080

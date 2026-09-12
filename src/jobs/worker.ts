@@ -1,5 +1,6 @@
 import type { Logger } from '../shared/logger.js';
 import type { JobQueue } from './queue.js';
+import { fenceOf, JobLeaseLostError } from './transaction.js';
 import type { JobHandlerRegistry } from './types.js';
 import type { JobRow } from '../db/schema.js';
 
@@ -144,6 +145,7 @@ export class JobWorker {
             const ok = await queue.heartbeat(job.id, job.fencingToken, this.leaseSeconds);
             if (!ok) throw new Error('job lease lost');
           },
+          withFence: (fn) => queue.withFence(fenceOf(job), fn),
         }),
         leaseLost,
       ]);
@@ -154,21 +156,26 @@ export class JobWorker {
       } else {
         logger.warn(
           { jobId: job.id, kind: job.kind, fencingToken: job.fencingToken },
-          'stale job result rejected (lease was reclaimed)',
+          'stale job result rejected (lease expired or reclaimed)',
         );
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
+      const wasLeaseLost = err instanceof JobLeaseLostError;
       const committed = await queue.fail(job.id, job.fencingToken, message, {
         retryable: true,
         maxAttempts: job.maxAttempts,
       });
       if (committed) {
         logger.warn({ jobId: job.id, kind: job.kind, err: message }, 'job failed');
+      } else if (wasLeaseLost) {
+        // Expected when the handler noticed the loss itself: the job already
+        // belongs to another worker, so there is nothing to record here.
+        logger.warn({ jobId: job.id, kind: job.kind }, 'job lease lost during handling');
       } else {
         logger.warn(
           { jobId: job.id, kind: job.kind, err: message },
-          'stale job failure ignored (lease was reclaimed)',
+          'stale job failure ignored (lease expired or reclaimed)',
         );
       }
     } finally {

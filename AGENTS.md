@@ -1,5 +1,14 @@
 # AGENTS.md — working agreement for this repository
 
+## Current authorization (2026-09-12)
+
+The user explicitly authorized Codex to take over implementation after the
+WorkBuddy quota failure. Existing WorkBuddy work and sessions must be preserved.
+Codex-authored commits use command-scoped `Codex Development Agent
+<codex@localhost>` identity, rather than attributing new work to WorkBuddy.
+Token issuance responses necessarily return a new opaque token once; the secret
+rule below prohibits logs, storage of raw tokens, and unrelated responses.
+
 This file is binding for every development agent (including future worktrees).
 Read it before writing code. Then read the skill(s) relevant to your task and
 say which ones you read in your delivery report.

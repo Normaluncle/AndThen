@@ -8,6 +8,13 @@
       "when": 1789200975624,
       "tag": "0000_shallow_storm",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789202376710,
+      "tag": "0001_thin_human_torch",
+      "breakpoints": true
     }
   ]
 }

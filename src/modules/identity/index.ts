@@ -15,6 +15,10 @@ export { registerIdentityRoutes } from './routes.js';
 export { registerAuth, parseBearerToken, requireAuthContext } from '../../http/auth.js';
 
 export {
+  ANONYMOUS_READER_COHORT,
+  EXCHANGEABLE_LOGIN_TOKEN_PURPOSES,
+  createManagedUser,
+  createReaderSession,
   createSession,
   createUser,
   exchangeLoginToken,
@@ -26,7 +30,16 @@ export {
   revokeSession,
 } from './service.js';
 
-export type { AuthenticatedSession, CreateUserInput, IssuedToken, UserRole } from './service.js';
+export type {
+  AuthenticatedSession,
+  CreateManagedUserInput,
+  CreateReaderSessionInput,
+  CreateUserInput,
+  IssuedToken,
+  ManagedUserResult,
+  ReaderSessionResult,
+  UserRole,
+} from './service.js';
 
 export {
   generateOpaqueToken,

@@ -1,4 +1,5 @@
 import type { JobRow } from '../db/schema.js';
+import type { Transaction } from '../db/client.js';
 import type { Logger } from '../shared/logger.js';
 
 export type JobStatus = JobRow['status'];
@@ -14,6 +15,15 @@ export interface JobHandlerContext {
   logger: Logger;
   /** Extends the lease. Throws if the lease was lost (fencing mismatch). */
   heartbeat: () => Promise<void>;
+  /**
+   * Run a business write under this job's fence, in one transaction.
+   *
+   * REQUIRED for any handler that writes state: it re-checks the fencing token,
+   * the `running` status and the lease while holding the job row `FOR UPDATE`,
+   * so a late result cannot be persisted after the job was reclaimed. Throws
+   * `JobLeaseLostError` when the claim is gone.
+   */
+  withFence: <T>(fn: (tx: Transaction) => Promise<T>) => Promise<T>;
 }
 
 export interface JobResult {

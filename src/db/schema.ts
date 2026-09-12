@@ -74,6 +74,8 @@ export const materialLevelEnum = pgEnum('material_level', [
 ]);
 
 export const consentPurposeEnum = pgEnum('consent_purpose', [
+  /** Agreeing to a first-party anonymous reader session identifier (FR-04). */
+  'reader_session',
   'private_interview',
   'external_model_processing',
   'demo_public_display',

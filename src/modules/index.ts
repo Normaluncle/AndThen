@@ -27,6 +27,28 @@ export function registerModuleJobHandlers(ctx: ModuleContext, registry: JobHandl
   }
 }
 
+/**
+ * Run each module's `onWorkerStart` hook once, before the worker loop begins.
+ * A failing hook is logged and skipped: one module's startup seed must not stop
+ * the worker from draining everyone else's jobs.
+ *
+ * `moduleList` is injectable so the lifecycle can be tested without adding a
+ * fake module to the real registry.
+ */
+export async function runModuleWorkerStart(
+  ctx: ModuleContext,
+  moduleList: readonly ModuleDefinition[] = modules,
+): Promise<void> {
+  for (const module of moduleList) {
+    if (!module.onWorkerStart) continue;
+    try {
+      await module.onWorkerStart(ctx);
+    } catch (err: unknown) {
+      ctx.logger.error({ err, module: module.name }, 'module onWorkerStart hook failed');
+    }
+  }
+}
+
 export {
   identityModule,
   sourcesModule,

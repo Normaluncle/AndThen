@@ -49,6 +49,15 @@ export interface ModuleDefinition {
   registerRoutes?: ModuleRegistrar;
   /** Job kinds this module handles, registered on the worker. */
   registerJobHandlers?: (ctx: ModuleContext, registry: JobHandlerRegistry) => void;
+  /**
+   * Called exactly once by the worker, after handlers are registered and before
+   * the loop starts. Use it to seed work that must exist regardless of who
+   * triggered it — e.g. the followups module enqueueing an outbox sweep with a
+   * `dedupeKey` so a restart never leaves undrained side effects behind.
+   *
+   * Must be idempotent and must not block: the worker has not started polling yet.
+   */
+  onWorkerStart?: (ctx: ModuleContext) => Promise<void> | void;
 }
 
 export interface Pagination {

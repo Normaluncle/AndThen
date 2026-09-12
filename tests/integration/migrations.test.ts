@@ -4,9 +4,9 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { resolveMigrationsDir } from '../../src/config/env.js';
 import { createDatabase, createPool, type Database } from '../../src/db/client.js';
 import { runMigrations } from '../../src/db/migrate.js';
-import { makeTestEnv, testDatabaseUrl, withDatabaseName } from '../helpers/testdb.js';
+import { isolatedDatabaseName, makeTestEnv, testDatabaseUrl, withDatabaseName } from '../helpers/testdb.js';
 
-const FRESH_DB = 'andthen_mig_test';
+const FRESH_DB = isolatedDatabaseName('migrations_fresh');
 
 const EXPECTED_TABLES = [
   'ai_runs',

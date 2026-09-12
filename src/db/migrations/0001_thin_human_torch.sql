@@ -1,0 +1,1 @@
+ALTER TYPE "public"."consent_purpose" ADD VALUE 'reader_session' BEFORE 'private_interview';

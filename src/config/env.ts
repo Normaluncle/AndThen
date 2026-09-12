@@ -32,6 +32,7 @@ const envSchema = z.object({
 
   WORKER_ID: z.string().optional(),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),
+  WORKER_HEALTH_MAX_AGE_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
   JOB_LEASE_SECONDS: z.coerce.number().int().min(5).max(3600).default(60),
   JOB_POLL_INTERVAL_MS: z.coerce.number().int().min(50).max(60_000).default(1000),
   JOB_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
@@ -70,9 +71,74 @@ export function resetEnvCache(): void {
   cached = undefined;
 }
 
-/** True when the OpenAI-compatible provider is fully configured. */
+/**
+ * How the LLM credential should be interpreted.
+ *
+ * - `unconfigured`          no base URL or model. AI stays disabled; the manual
+ *                           (human) path is unaffected and nothing is fabricated.
+ * - `key_present`           remote provider with a key.
+ * - `anonymous_local`       loopback/private provider that legitimately needs no
+ *                           key (ollama, llama.cpp, vLLM on the same host).
+ * - `key_missing_for_remote` a non-local base URL with no key: almost certainly a
+ *                           misconfiguration, so it is logged loudly at boot
+ *                           rather than failing silently at first call.
+ */
+export type LlmKeyPolicy =
+  | 'unconfigured'
+  | 'key_present'
+  | 'anonymous_local'
+  | 'key_missing_for_remote';
+
+const LOCAL_HOSTNAMES = new Set([
+  'localhost',
+  '127.0.0.1',
+  '0.0.0.0',
+  '::1',
+  '[::1]',
+  'host.docker.internal',
+  'gateway.docker.internal',
+]);
+
+/** True for loopback, RFC1918, link-local, `.local`/`.internal` and bare hosts. */
+export function isLocalLlmHost(rawUrl: string): boolean {
+  let hostname: string;
+  try {
+    hostname = new URL(rawUrl).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (LOCAL_HOSTNAMES.has(hostname)) return true;
+  if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return true;
+  // A single-label host (no dot) is an in-cluster/service name.
+  if (!hostname.includes('.')) return true;
+
+  const match = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(hostname);
+  if (!match) return false;
+  const a = Number(match[1]);
+  const b = Number(match[2]);
+  if (a === 127 || a === 10) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 169 && b === 254) return true;
+  return false;
+}
+
+export function llmKeyPolicy(env: Env): LlmKeyPolicy {
+  if (!env.LLM_BASE_URL || !env.LLM_MODEL) return 'unconfigured';
+  if (env.LLM_API_KEY) return 'key_present';
+  return isLocalLlmHost(env.LLM_BASE_URL) ? 'anonymous_local' : 'key_missing_for_remote';
+}
+
+/**
+ * True when an OpenAI-compatible provider is usable.
+ *
+ * A key is NOT required: anonymous local providers (ollama/llama.cpp/vLLM) are
+ * supported, which is why this only checks the base URL and model. With nothing
+ * configured it returns false and AI handlers must stay disabled — the manual
+ * path keeps working and no output is invented.
+ */
 export function isLlmConfigured(env: Env): boolean {
-  return Boolean(env.LLM_BASE_URL && env.LLM_MODEL);
+  return llmKeyPolicy(env) !== 'unconfigured';
 }
 
 /**

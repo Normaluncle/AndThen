@@ -14,7 +14,8 @@ x-app-env: &app-env
 
 services:
   db:
-    image: postgres:18-alpine
+    # Pinned by digest: `18-alpine` alone is a floating tag.
+    image: postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
     environment:
       POSTGRES_USER: andthen
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-andthen}
@@ -66,7 +67,7 @@ services:
         - CMD
         - node
         - -e
-        - "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+        - "fetch('http://127.0.0.1:8080/health/live').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
       interval: 10s
       timeout: 5s
       retries: 10
@@ -82,14 +83,26 @@ services:
     command: ["node", "dist/worker.js"]
     environment:
       <<: *app-env
+      # A stable id is required so the healthcheck can find this worker's
+      # heartbeat row.
+      WORKER_ID: ${WORKER_ID:-worker-1}
       WORKER_CONCURRENCY: "4"
       JOB_LEASE_SECONDS: "60"
       JOB_POLL_INTERVAL_MS: "1000"
+      WORKER_HEALTH_MAX_AGE_SECONDS: "60"
     depends_on:
       db:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+    # Reads worker_heartbeats: proves the loop actually ticked, rather than
+    # reporting "up" from inside a process that may be wedged.
+    healthcheck:
+      test: ["CMD", "node", "dist/health/worker-check.js"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     networks: [internal]
     restart: unless-stopped
 

@@ -1,11 +1,15 @@
 import { and, eq, inArray, sql } from 'drizzle-orm';
-import type { Database } from '../db/client.js';
+import type { Database, Executor, Transaction } from '../db/client.js';
 import { jobs } from '../db/schema.js';
 import type { JobRow } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
+import { withJobFence, type JobFence } from './transaction.js';
 import type { ClaimOptions, EnqueueOptions, EnqueueResult } from './types.js';
 
 const ACTIVE_STATUSES = ['queued', 'running'] as const;
+
+/** Every mutation of a running job is guarded by this predicate. */
+const LEASE_HELD = sql`lease_expires_at IS NOT NULL AND lease_expires_at > now()`;
 
 /**
  * Durable job queue.
@@ -21,8 +25,17 @@ const ACTIVE_STATUSES = ['queued', 'running'] as const;
 export class JobQueue {
   constructor(private readonly db: Database) {}
 
-  async enqueue(options: EnqueueOptions): Promise<EnqueueResult> {
-    const inserted = await this.db
+  /**
+   * Enqueue a job.
+   *
+   * Pass `executor` (an open transaction) to make "save the input and queue the
+   * work" atomic — if the transaction rolls back, the job never exists. Without
+   * it the insert uses the pool.
+   */
+  async enqueue(options: EnqueueOptions, executor?: Executor): Promise<EnqueueResult> {
+    const db = executor ?? this.db;
+
+    const inserted = await db
       .insert(jobs)
       .values({
         kind: options.kind,
@@ -41,7 +54,7 @@ export class JobQueue {
     if (!options.dedupeKey) {
       throw AppError.internal('Job insert conflicted without a dedupe key');
     }
-    const existing = await this.db
+    const existing = await db
       .select()
       .from(jobs)
       .where(and(eq(jobs.dedupeKey, options.dedupeKey), inArray(jobs.status, [...ACTIVE_STATUSES])))
@@ -49,6 +62,14 @@ export class JobQueue {
     const job = existing[0];
     if (!job) throw AppError.internal('Deduplicated job could not be found');
     return { job, deduped: true };
+  }
+
+  /**
+   * Run a business write under this job's fence, in one transaction.
+   * See `withJobFence` — required for every handler that writes state.
+   */
+  async withFence<T>(fence: JobFence, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withJobFence(this.db, fence, fn);
   }
 
   /**
@@ -93,7 +114,10 @@ export class JobQueue {
     return job;
   }
 
-  /** Extend the lease. Returns false when the lease was already lost. */
+  /**
+   * Extend the lease. Returns false when the lease was already lost — either the
+   * fencing token moved on, the job is no longer running, or the lease expired.
+   */
   async heartbeat(jobId: string, fencingToken: number, leaseSeconds: number): Promise<boolean> {
     const result = await this.db.execute(sql`
       UPDATE jobs
@@ -102,14 +126,17 @@ export class JobQueue {
       WHERE id = ${jobId}
         AND fencing_token = ${fencingToken}
         AND status = 'running'
+        AND ${LEASE_HELD}
       RETURNING id
     `);
     return (result.rows as unknown[]).length > 0;
   }
 
   /**
-   * Mark succeeded. Returns false (result rejected) if the fencing token no
-   * longer matches — i.e. the job was reclaimed by another worker.
+   * Mark succeeded. Returns false (result rejected) when the claim is no longer
+   * valid: the fencing token moved on, the job is not running, or the lease has
+   * expired. An expired lease is rejected even before anyone reclaims it, so a
+   * worker that overran its lease cannot commit.
    */
   async complete(
     jobId: string,
@@ -127,6 +154,7 @@ export class JobQueue {
       WHERE id = ${jobId}
         AND fencing_token = ${fencingToken}
         AND status = 'running'
+        AND ${LEASE_HELD}
       RETURNING id
     `);
     return (updated.rows as unknown[]).length > 0;
@@ -135,7 +163,7 @@ export class JobQueue {
   /**
    * Mark failed. Retryable failures return the job to `queued` with backoff,
    * unless attempts are exhausted, in which case it becomes `failed`.
-   * Returns false when the fencing token no longer matches.
+   * Returns false when the claim is no longer valid (see `complete`).
    */
   async fail(
     jobId: string,
@@ -167,6 +195,7 @@ export class JobQueue {
       WHERE id = ${jobId}
         AND fencing_token = ${fencingToken}
         AND status = 'running'
+        AND ${LEASE_HELD}
       RETURNING id
     `);
     return (updated.rows as unknown[]).length > 0;

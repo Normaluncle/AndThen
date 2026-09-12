@@ -9,7 +9,7 @@ describe('OpenAPI document', () => {
   let app: AppInstance;
 
   beforeAll(async () => {
-    ctx = await createTestContext();
+    ctx = await createTestContext('openapi');
     const built = await buildApp({
       env: ctx.env,
       db: ctx.db,
@@ -40,8 +40,8 @@ describe('OpenAPI document', () => {
     expect(spec.info.title).toContain('AndThen');
     expect(Object.keys(spec.paths)).toEqual(
       expect.arrayContaining([
-        '/healthz',
-        '/readyz',
+        '/health/live',
+        '/health/ready',
         '/api/auth/sessions',
         '/api/auth/me',
         '/api/auth/logout',
