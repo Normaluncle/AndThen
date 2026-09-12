@@ -41,6 +41,8 @@ export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
       // Lock source first: deletion and public-permission revocation use the same order.
       const [source] = await tx.select().from(sources).where(eq(sources.id, input.source_id)).for('update');
       if (!source || !await isPubliclyVisible(tx, source)) throw AppError.notFound();
+      const [actor] = await tx.select().from(users).where(eq(users.id, auth.userId)).for('share');
+      if (!actor || actor.disabledAt) throw AppError.unauthorized('Account unavailable');
       const scope = `research:${auth.userId}`;
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`${scope}:${input.client_event_id}`}))`);
       const hash = contentHash(input);

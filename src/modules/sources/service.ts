@@ -863,19 +863,23 @@ export async function setInterest(
   sourceId: string,
   active: boolean,
 ): Promise<SetInterestResult> {
-  const source = await findSourceById(ctx.db, sourceId);
-  if (!source || !(await isPubliclyVisible(ctx.db, source))) {
+  return ctx.db.transaction(async tx => {
+  await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, sourceId)).for('update');
+  const [actor] = await tx.select().from(users).where(eq(users.id, auth.userId)).for('share');
+  if (!actor || actor.disabledAt) throw AppError.unauthorized('Account unavailable');
+  const source = await findSourceById(tx, sourceId);
+  if (!source || !(await isPubliclyVisible(tx, source))) {
     throw AppError.notFound('Story not found');
   }
 
   const now = ctx.now();
-  const isAuthor = await isSourceAuthor(ctx.db, source, auth.userId);
+  const isAuthor = await isSourceAuthor(tx, source, auth.userId);
   // Test fixtures and excluded cohorts never enter research metrics, and an
   // author following their own source is not organic demand (PRD FR-05).
   const excluded =
     isExcludedCohort(auth.cohort) || isAuthor || source.provenance === 'test_fixture';
 
-  const rows = await ctx.db
+  const rows = await tx
     .insert(interests)
     .values({
       readerKey: auth.userId,
@@ -899,7 +903,7 @@ export async function setInterest(
     })
     .returning({ updatedAt: interests.updatedAt });
 
-  await writeResearchEvent(ctx.db, {
+  await writeResearchEvent(tx, {
     eventType: 'interest_changed',
     cohort: auth.cohort,
     readerKey: auth.userId,
@@ -908,6 +912,7 @@ export async function setInterest(
   });
 
   return { sourceId, active, updatedAt: rows[0]?.updatedAt ?? now };
+  });
 }
 
 export interface FollowingItem {

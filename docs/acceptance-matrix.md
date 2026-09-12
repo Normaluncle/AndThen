@@ -22,7 +22,7 @@ Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP provi
 | T12 invented date / number | `evidence.test.ts`, `drafting.test.ts` reject unsupported text, refs and private leakage | Covered conservative exact-evidence checks; paraphrase quality not evaluated |
 | T13 edit invalidates confirmation | `interviews.test.ts`, `validation.test.ts` reject old hash and require new version | Covered |
 | T14 duplicate publish / notify | `interviews.test.ts` concurrent publication and outbox replay; `reader-deletion.test.ts` removes old recipients | Covered |
-| T15 withdraw / delete | `interviews.test.ts` source cleanup; `interview-deletion.test.ts` publication withdrawal, derivatives and replay; `interview-ai.test.ts` rejects late reply after explicit deletion | Source/interview/activity scopes covered; whole-account closure remains absent |
+| T15 withdraw / delete | Source/interview/activity tests plus `account-deletion.test.ts` credentials, author content, independent receipts and concurrent follow race | End-user active-store erasure covered; backup/provider retention remains explicitly separate |
 | T16 Zhihu search errors | No Zhihu search integration or fake live results; authorized import is the Demo input | Not applicable under revised scope; no claim of tested Zhihu 429 behavior |
 | T17 failure / quota | `llm-client.test.ts` timeout/retry; `interview-ai.test.ts` full-handler 429 and malformed JSON fallback preserves saved answers and hides provider body; daily admission cap test | HTTP failure handling covered; real-provider availability remains unverified |
 | T18 restart / redeploy | Live fixture survived DB/API/worker restart and API/worker recreation; nonempty backup restore | Passed for `1f0f59e`; final-runtime repetition pending |
@@ -45,7 +45,7 @@ All paths below have `/api` prefix.
 | PATCH drafts/:id; POST drafts/:id/confirm; POST drafts/:id/publish | Implemented with hash/version checks |
 | POST followups/:id/withdraw | Author path implemented; separate accepted operator workflow still needs scope review |
 | GET me/notifications | Implemented as an alias of notifications, same owner filter |
-| POST me/data-deletion | Implemented only for explicit reader_activity; author source deletion is DELETE sources/:id. Whole-account closure absent |
+| POST me/data-deletion | Explicit reader_activity scope; author source deletion is DELETE sources/:id and account closure is POST me/account-deletion with independent receipt credential |
 | GET admin/research-export | Implemented with source authorization, date/cohort filters, deidentified event details and explicit denominator limitations; legacy research/export uses the same contract |
 
 ## Implementation-plan delivery gates
