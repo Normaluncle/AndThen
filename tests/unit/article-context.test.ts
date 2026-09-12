@@ -17,4 +17,7 @@ it('extracts a single canonical URL from share text and Markdown without network
 });
 it('keeps the five-question narrative and reader-data boundaries in the interview contract',()=>{
  expect(PROMPTS.ai_b_interview).toContain('总共只有五个主问题');expect(PROMPTS.ai_b_interview).toContain('最后1问');expect(PROMPTS.ai_b_interview).toContain('一小篇');expect(PROMPTS.ai_b_interview).toContain('不是作者事实');
+ expect(PROMPTS.ai_b_interview).toContain('第五问（remaining_questions=1）');
+ expect(PROMPTS.ai_b_interview).toContain('若作者此前尚未表达给相似处境读者的建议或寄语');
+ expect(PROMPTS.ai_b_interview).toContain('若已经表达过，就不重复索要建议');
 });

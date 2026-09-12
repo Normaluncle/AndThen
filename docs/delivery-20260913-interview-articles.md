@@ -15,3 +15,8 @@
 边界：五问引导质量仍需真实作者试写反馈，不能用提示词检查宣称稳定产出800–1500字。少于100字的提示/按钮限制是Demo体验，未改变后端发布契约。格式整理不扩写事实。受限官方OAuth能力仍等待凭证；本次未推送GitHub。
 
 已阅读并采用：skills/backend-contracts/SKILL.md、skills/database-migrations/SKILL.md、skills/ai-evaluation/SKILL.md、skills/docker-ops/SKILL.md、skills/git-delivery/SKILL.md。
+
+## 第五问收尾微调
+
+第五问尚未谈过给相似处境读者的建议/寄语时，优先邀请作者对这些读者说说心里话；已谈过就不重复索要建议，由AI选择其他开放收尾问题。仍最多五问。仅修改AI-B提示词与版本号、补充回归断言，收费及标签实现均未修改。已沿用本记录列出的AI评估、Git交付和Docker技能。
+本次验证：pnpm typecheck、pnpm build通过；pnpm test为232通过/1个opt-in跳过（58.64秒）。运行中worker确认提示词版本2026-09-13.4及新收尾规则已加载；未额外消耗真实模型调用评估文案质量。
