@@ -6,6 +6,7 @@ export function Management({role}) {
   const [detail,setDetail]=useState(null),[caseData,setCaseData]=useState(null),[links,setLinks]=useState([]),[consents,setConsents]=useState([]);
   const [subject,setSubject]=useState(''),[evidence,setEvidence]=useState(''),[checked,setChecked]=useState(false);
   const [name,setName]=useState(''),[issued,setIssued]=useState(null),[failures,setFailures]=useState(null);
+  const [showCredential,setShowCredential]=useState(false);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   async function run(action,message='') {
     setBusy(true);setError('');setNotice('');
@@ -82,10 +83,10 @@ export function Management({role}) {
       <p>账号使用 team_test 分组。登录凭证只在本页面临时展示，不保存到浏览器存储；离开页面后不再显示。</p>
       <label>测试作者名称<input value={name} onChange={e=>setName(e.target.value)}/></label>
       <button disabled={busy||!name} onClick={()=>run(async()=>{
-        setIssued(null);const data=await api('/admin/users','POST',{role:'author',display_name:name,cohort:'team_test'});
+        setIssued(null);setShowCredential(false);const data=await api('/admin/users','POST',{role:'author',display_name:name,cohort:'team_test'});
         setIssued(data);setSubject(data.user.id);
       },'测试账号已创建，尚未核验任何来源。')}>创建测试账号</button>
-      {issued&&<div><p>账号编号：{issued.user.id}</p><label>一次性登录凭证<input type="password" readOnly value={issued.login_token}/></label><p>过期时间：{issued.expires_at}</p><button onClick={()=>setIssued(null)}>隐藏并清除本页凭证</button></div>}
+      {issued&&<div><p>账号编号：{issued.user.id}</p><label>一次性登录凭证<input type={showCredential?'text':'password'} readOnly value={issued.login_token}/></label><button onClick={()=>setShowCredential(v=>!v)}>{showCredential?'隐藏凭证':'显示凭证'}</button><p>过期时间：{issued.expires_at}</p><button onClick={()=>{setIssued(null);setShowCredential(false);}}>隐藏并清除本页凭证</button></div>}
       <h2>失败任务</h2><button disabled={busy} onClick={()=>run(async()=>setFailures(await api('/operator/jobs')))}>查看失败任务</button>
       {failures?.items.length===0&&<p>没有失败任务。</p>}{failures?.items.map(job=><article key={job.id}><p>{job.kind} · {job.status} · 尝试 {job.attempts} 次</p><small>任务编号：{job.id} · {job.updated_at}</small></article>)}
       {failures?.next_offset!==null&&failures?.next_offset!==undefined&&<button disabled={busy} onClick={()=>run(async()=>setFailures(await api('/operator/jobs?offset='+failures.next_offset)))}>下一页失败任务</button>}

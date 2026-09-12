@@ -179,3 +179,13 @@ docker compose --env-file .env.local up -d --build
 - 新增真实数据库回归验证无关账号 403、未核验时导入者可更新、核验后原导入者 403、核验作者可更新，拒绝内容不落库。官方候选准备回归仍通过。
 - pnpm typecheck 通过；pnpm test 210 通过、1 项真实模型 opt-in 跳过（50.88 秒）；pnpm --dir demo build 通过。新提交页面尚待浏览器验收，Docker 镜像尚未包含本检查点。
 - 技能沿用：backend-contracts、database-migrations、git-delivery 和 web-development React 指南。PRD/契约同步，无迁移修改。整体 Goal active。
+
+## 2026-09-13 Docker 管理到采访浏览器检查点
+
+- 后端/前端镜像已更新至资料写权限检查点，Compose 迁移与服务健康通过。原数据库和账号在容器重建后保留。
+- 管理页新增显示/隐藏一次性凭证按钮（默认隐藏、新账号重置、清除时清空显示状态），解决测试时密码字段难以取用的入口问题。浏览器显式显示、隐藏后，用该凭证在独立作者页面成功登录；未将凭证写入文件或本报告。
+- 浏览器完成：管理创建测试作者 → 作者提交虚构原文片段 → 同意私有采访和模型处理 → 管理核验测试归属 → 建立回访 → 审核 eligible → 登记测试触达 → 作者工作台收到 invite_recorded → 接受回访 → 启用作者记忆 → ready → 开始真实采访 → 提交私有回答 → 第二问 → 暂停。
+- 本轮没有对外发私信或核验真实作者。账号 e267b911-82da-4fb2-a39a-9e6a78c2d49a，来源 3b054137-bf77-4949-b8e8-39e64e834695，回访 b4a8317a-6de5-4c1a-a956-f7c533430c99，采访 9ba7fe2c-7899-4dc4-b3eb-592da7674714 均为隔离 Docker 测试链路。第一轮凭证操作未完成登录的测试账号保留，未删除其他工作。
+- 真实 Qwen 记忆整理：1 次，131 输入/195 输出 token，3001 ms，一次索引写入。真实 AI-B 两次分别 809/101 token、2218 ms；941/86 token、1333 ms。记忆页显示三条经历与工资拒谈边界；数据库确认作者回答 visibility=private。向量调用 token 尚未单独统计。
+- 类型检查通过；pnpm test 210 通过、1 项真实模型 opt-in 跳过（49.62 秒）；Docker 前端构建成功。浏览器记录是实际 Docker + 真实提供方，不能代替剩余读者关注、发布、通知与撤回验收。
+- 技能沿用 backend-contracts、docker-ops、git-delivery、web-development React 指南。Goal 保持 active；采访 paused 可直接继续。
