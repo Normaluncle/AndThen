@@ -4,9 +4,12 @@
  * Tool + permission policy.
  *
  * Scope note: a git worktree is NOT a security sandbox and these rules are NOT a
- * complete shell sandbox. They only block the explicitly destructive commands the
- * orchestrator is responsible for, and refuse to auto-approve anything ambiguous.
- * Anything undecidable is escalated to the main controller instead of guessed.
+ * complete shell sandbox. They only filter permission requests the agent chooses
+ * to raise, and refuse to auto-approve anything ambiguous. Because Bash and
+ * PowerShell are pre-approved via --allowedTools, a shell command can execute
+ * without any permission round-trip, so this policy must not be described as
+ * guaranteed execution interception. Anything undecidable is escalated to the
+ * main controller instead of guessed.
  */
 
 const PERMISSION_MODE = 'acceptEdits';
@@ -86,7 +89,12 @@ function buildToolManifest() {
     permissionMode: PERMISSION_MODE,
     allowedTools: [...ALLOWED_TOOLS],
     disallowedTools: [...DISALLOWED_TOOLS],
-    note: 'worktree is not a security sandbox; rules are not a complete shell sandbox',
+    interception: 'advisory-only',
+    note:
+      'worktree is not a security sandbox; rules are not a complete shell sandbox. ' +
+      'Bash/PowerShell are in --allowedTools, so shell commands may run without a ' +
+      'session/request_permission round-trip; the command regexes only filter requests ' +
+      'the agent does raise and must not be treated as guaranteed execution blocking.',
   };
 }
 

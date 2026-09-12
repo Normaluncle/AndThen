@@ -39,6 +39,8 @@ Global options:
   --proxy <url>                override detected system proxy
   --max-concurrency <n>        global concurrent agents (1..2, 3 only when verified)
   --verified-concurrency-3     acknowledge concurrency 3 has been verified
+  --quiet                      suppress streamed assistant text (tool/status lines kept)
+  --migrate-cwd                allow moving an existing agent session to a new --cwd
 
 Docs: docs/workbuddy-orchestration.md`;
 
@@ -88,9 +90,30 @@ function buildContext(argv) {
   return { config, store, locks };
 }
 
-function makeAgent(store, name, cwd) {
-  const existing = store.readAgent(name) || {};
-  return { ...existing, name, cwd: cwd || existing.cwd || process.cwd() };
+/**
+ * Resolve the agent's working directory. An existing agent is bound to its
+ * recorded worktree: resume defaults to the saved cwd, and an explicit --cwd
+ * that differs is refused unless --migrate-cwd is given. This prevents a resume
+ * launched from another shell directory from silently moving the session to a
+ * different worktree.
+ */
+function resolveAgent(store, name, explicitCwd, migrateCwd, defaultCwd) {
+  const existing = store.readAgent(name);
+  if (!existing) return { name, cwd: explicitCwd || defaultCwd, isNew: true };
+  const savedCwd = existing.cwd || null;
+  if (explicitCwd && savedCwd && path.resolve(savedCwd) !== path.resolve(explicitCwd)) {
+    if (!migrateCwd) {
+      throw new OrchError(
+        codes.CONFIG,
+        `agent "${name}" is bound to ${savedCwd}; refusing to run in ${explicitCwd}. Pass --migrate-cwd to move the session.`,
+        { exitCode: EXIT.CONFIG, details: { savedCwd, requestedCwd: explicitCwd } },
+      );
+    }
+    store.appendAudit(name, { type: 'cwd_migrated', from: savedCwd, to: explicitCwd });
+    store.writeAgent(name, { cwd: explicitCwd, cwdMigratedFrom: savedCwd, cwdMigratedAt: new Date().toISOString() });
+    return { ...existing, name, cwd: explicitCwd, migratedFrom: savedCwd };
+  }
+  return { ...existing, name, cwd: savedCwd || explicitCwd || defaultCwd };
 }
 
 function exitCodeForStatus(status, errCode) {
@@ -140,7 +163,7 @@ async function runOne(argv, mode) {
   const agentName = argv.agent;
   if (!agentName) throw new OrchError(codes.USAGE, '--agent <name> is required', { exitCode: EXIT.USAGE });
 
-  const agent = makeAgent(store, agentName, argv.cwd ? path.resolve(argv.cwd) : config.cwd);
+  const agent = resolveAgent(store, agentName, argv.cwd ? path.resolve(argv.cwd) : null, argv.migrateCwd === true, config.cwd);
   const taskFile = argv.taskFile || agent.taskFile;
   if (!taskFile) throw new OrchError(codes.USAGE, '--task-file <path> is required for a new task', { exitCode: EXIT.USAGE });
   if (!fs.existsSync(taskFile)) throw new OrchError(codes.USAGE, `task file not found: ${taskFile}`, { exitCode: EXIT.USAGE });

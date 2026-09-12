@@ -18,6 +18,25 @@ const SYSTEM_PROMPT = [
 ].join(' ');
 
 const TRANSIENT = new Set([codes.TIMEOUT, codes.DISCONNECT, codes.INTERNAL]);
+const TERMINAL_TOOL_STATUS = new Set(['completed', 'failed', 'error', 'cancelled']);
+
+/**
+ * A short, safe label for a tool call. Titles can embed multi-line scripts or
+ * secrets, so only the first token of the first line is used for stdout.
+ */
+function toolLabel(update) {
+  const raw = String((update && (update.name || update.title || update.toolCallId)) || 'tool');
+  const firstLine = raw.split(/\r?\n/)[0].replace(/`/g, '').trim();
+  const token = firstLine.split(/\s+/)[0] || 'tool';
+  const short = token.length > 32 ? `${token.slice(0, 29)}...` : token;
+  return redactString(short);
+}
+
+/** Redacted detail for local (state-dir) storage only; never printed. */
+function toolDetail(update) {
+  const raw = String((update && (update.title || update.name)) || '');
+  return redactString(raw).slice(0, 300);
+}
 
 function isTransient(err) {
   if (!err) return false;
@@ -97,7 +116,10 @@ async function runTask({ config, store, locks, task, emit = () => {} }) {
     lastWindow: null,
     lastUsed: null,
     outputChars: 0,
+    textBuffer: '',
+    toolIndex: new Map(),
   };
+  const quiet = Boolean(config.quiet);
 
   const result = {
     agent: agentName,
@@ -120,6 +142,28 @@ async function runTask({ config, store, locks, task, emit = () => {} }) {
     const text = redactString(String(line));
     store.appendLog(agentName, text);
     emit(text);
+  };
+
+  // Assistant text is streamed as tokens; emit complete lines instead of one
+  // line per chunk. `all` flushes the trailing partial line at prompt end.
+  const flushText = (all) => {
+    if (rt.textBuffer.length === 0) return;
+    let out = rt.textBuffer;
+    if (all) {
+      rt.textBuffer = '';
+    } else {
+      const idx = out.lastIndexOf('\n');
+      if (idx < 0) return;
+      rt.textBuffer = out.slice(idx + 1);
+      out = out.slice(0, idx + 1);
+    }
+    const text = out.replace(/\s+$/, '');
+    if (!text) return;
+    if (quiet) {
+      store.appendLog(agentName, text);
+      return;
+    }
+    log(text);
   };
 
   const persist = (patch) => {
@@ -184,16 +228,35 @@ async function runTask({ config, store, locks, task, emit = () => {} }) {
       const text = update.content && update.content.text;
       if (text) {
         rt.outputChars += text.length;
-        log(text.trimEnd());
+        rt.textBuffer += text;
+        flushText(false);
       }
     } else if (kind === 'tool_call') {
-      const name = update.title || update.toolCallId || 'tool';
-      result.tools.push({ name, status: 'requested' });
-      store.appendAudit(agentName, { type: 'tool_call', name });
-      log(`TOOL ${name}`);
+      const entry = {
+        toolCallId: update.toolCallId || null,
+        name: toolLabel(update),
+        detail: toolDetail(update),
+        status: 'started',
+      };
+      result.tools.push(entry);
+      if (entry.toolCallId) rt.toolIndex.set(entry.toolCallId, entry);
+      store.appendAudit(agentName, { type: 'tool_call', name: entry.name, toolCallId: entry.toolCallId });
+      log(`TOOL ${entry.name} start`);
     } else if (kind === 'tool_call_update') {
-      store.appendAudit(agentName, { type: 'tool_result', status: update.status, toolCallId: update.toolCallId });
-      log(`TOOL_RESULT ${update.status}`);
+      const status = typeof update.status === 'string' ? update.status : null;
+      const entry = update.toolCallId ? rt.toolIndex.get(update.toolCallId) : null;
+      if (entry && status) entry.status = status;
+      store.appendAudit(agentName, {
+        type: 'tool_result',
+        name: entry ? entry.name : null,
+        status,
+        toolCallId: update.toolCallId || null,
+      });
+      // Only one line per terminal tool result; ignore streaming updates that
+      // carry no status (previously printed "TOOL_RESULT undefined").
+      if (status && TERMINAL_TOOL_STATUS.has(status)) {
+        log(`TOOL ${entry ? entry.name : 'tool'} ${status}`);
+      }
     }
 
     for (const id of modelIdsIn(update._meta)) {
@@ -352,6 +415,7 @@ async function runTask({ config, store, locks, task, emit = () => {} }) {
       );
     } finally {
       rt.active = false;
+      flushText(true);
     }
 
     if (rt.violation) {

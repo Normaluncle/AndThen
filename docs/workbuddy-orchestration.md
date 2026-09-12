@@ -107,6 +107,12 @@ node tools/workbuddy/cli.cjs resume --agent dev-a --json
 (`E_NO_SESSION`) and never creates a new session. After `session/load` it
 re-sets the model and context window and reads them back before prompting.
 
+**Session ↔ worktree binding.** An existing agent is bound to the `--cwd` saved
+at first run. `resume` always uses that saved directory, even when launched from
+a different shell directory. Passing an explicit `--cwd` that differs is refused
+with exit `8` (`E_CONFIG`) unless `--migrate-cwd` is given, which moves the
+session to the new worktree and records the migration in the agent audit log.
+
 ### 4. Status
 
 ```powershell
@@ -123,6 +129,21 @@ node tools/workbuddy/cli.cjs cancel --agent dev-a --json
 `cancel` terminates the target agent's child process tree (and its runner
 process) only, then clears the agent lock. Other agents are unaffected.
 
+### Output
+
+Live output is compact and line-oriented:
+
+- One `TOOL <name> start` line per tool call and one `TOOL <name> <status>` line
+  per terminal result (`completed`/`failed`/`error`/`cancelled`). Streaming
+  `tool_call_update` events without a status produce no line.
+- Tool labels are the short tool name only; titles that embed scripts or secrets
+  are summarized and redacted. The full redacted detail is written to the local
+  state-dir checkpoint and audit log, never printed.
+- Assistant text is streamed as whole lines (token chunks are buffered), not one
+  line per chunk.
+- `--quiet` suppresses assistant text while keeping tool/status/model/window
+  lines; the text is still stored in the redacted local log.
+
 ### Global flags
 
 Add any of these to `start`/`resume`:
@@ -132,6 +153,8 @@ Add any of these to `start`/`resume`:
 --cli "C:/Users/Administrator/AppData/Local/Programs/WorkBuddyAI/resources/app.asar.unpacked/cli/bin/codebuddy"
 --product-config D:/AndThen/workbuddy-probe-results/acp/product-resolved.json
 --max-concurrency 2
+--quiet              # suppress streamed assistant text (keep tool/status lines)
+--migrate-cwd        # allow moving an existing agent session to a new --cwd
 --no-wait            # return immediately if no slot is free instead of waiting
 --force-retry        # override the same-task side-effect guard
 ```
@@ -213,12 +236,24 @@ never emitted as current output and never trigger violations.
 - Agent-delegation tools (`Task`, `Agent`, `TeamCreate`, `TeamDelete`, plan
   modes) are disallowed.
 - Destructive commands (hard git reset, force clean/push, volume deletion,
-  disk/network/registry/power changes, pipe-to-shell) are denied.
+  disk/network/registry/power changes, pipe-to-shell) are denied **when they
+  arrive as a permission request**.
 - Ambiguous commands (soft `git reset`, generic `rm`/`Remove-Item`, process
   termination) are escalated: denied in-line and flagged `needsMainControl` for
   the main controller.
 - Every tool call, permission request, and permission result is written to the
   agent's `audit.jsonl`.
+
+### Interception is advisory, not a hard block
+
+`Bash` and `PowerShell` are listed in `--allowedTools`, so shell commands may
+execute **without** a `session/request_permission` round-trip. The command
+regexes above only filter the permission requests the agent chooses to raise.
+They are **not** a guaranteed execution interceptor, and it must not be claimed
+that every forbidden command is always blocked. This is intentional: the policy
+is a guardrail plus an audit trail, not a sandbox, and no system security
+configuration is changed to enforce it. `buildToolManifest()` reports
+`interception: advisory-only` for this reason.
 
 ## Running the tests
 
@@ -229,15 +264,19 @@ node --test tests/orchestrator/*.test.cjs
 Tests use a fake ACP child (`tests/orchestrator/fake-acp-child.cjs`) and cover:
 first prompt only after 1M, resume re-set, 300K rejection, model drift
 rejection, non-SUCCESS outcome, disconnect/timeout cleanup, same-session mutex,
-cross-session concurrency limit, cancel isolation, redaction, stale locks, and
-"missing session is not recreated".
+cross-session concurrency limit, cancel isolation, redaction, stale locks,
+"missing session is not recreated", compact streaming output, and resume cwd
+binding. Real tool-use and memory acceptance is recorded in
+`docs/checkpoints/orchestration.md`.
 
 ## Unverified boundaries
 
 - Real end-to-end tool/memory acceptance is run by the main controller through
-  this entrypoint; the suite here exercises a fake ACP child only.
-- The permission rules are not a sandbox and cannot see inside arbitrary child
-  processes the agent may spawn.
+  this entrypoint. It has been exercised once for real (see the checkpoint); the
+  automated suite still uses a fake ACP child.
+- The permission policy is not a sandbox and is not a complete execution
+  interceptor (see above). It cannot see inside arbitrary child processes the
+  agent may spawn.
 - Cross-process waiting uses `fs.watch` with a fallback heartbeat; very large
   numbers of simultaneous `start` invocations were not stress-tested.
 - `product-resolved.json` is a versioned snapshot; re-run `doctor` after any

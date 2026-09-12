@@ -127,6 +127,7 @@ function resolveConfig({ argv = {}, env = process.env, cwd = process.cwd() } = {
     autocompact: AUTOCOMPACT,
     maxConcurrency,
     concurrencyVerified,
+    quiet: argv.quiet === true || env.WORKBUDDY_QUIET === '1',
     permissionMode: PERMISSION_MODE,
     allowedTools: [...ALLOWED_TOOLS],
     disallowedTools: [...DISALLOWED_TOOLS],

@@ -181,3 +181,67 @@ test('doctor exits 0 when the environment is valid', () => {
   assert.equal(res.status, 0, res.stdout + res.stderr);
   assert.equal(parseJson(res).ok, true);
 });
+
+function childCwd(logPath) {
+  const entry = readFakeLog(logPath).find((e) => e.dir === 'cwd');
+  return entry && entry.cwd;
+}
+
+test('resume from a different shell cwd still uses the saved worktree', () => {
+  const stateDir = mkdtemp('wb-cli-');
+  const repoA = initRepo();
+  const shellB = mkdtemp('wb-shell-');
+  const taskFile = path.join(stateDir, 'task.md');
+  fs.writeFileSync(taskFile, 'Implement the thing.');
+
+  const log1 = path.join(stateDir, 'one.jsonl');
+  const first = runCli(
+    ['start', ...baseArgs(stateDir, ['--agent', 'cli-cwd', '--task-file', taskFile, '--cwd', repoA, '--task-id', 'one'])],
+    { FAKE_ACP_MODE: 'normal', FAKE_ACP_LOG: log1 },
+    shellB,
+  );
+  assert.equal(first.status, 0, first.stderr);
+  assert.equal(path.resolve(childCwd(log1)), path.resolve(repoA));
+
+  const log2 = path.join(stateDir, 'two.jsonl');
+  const second = runCli(
+    ['resume', ...baseArgs(stateDir, ['--agent', 'cli-cwd', '--task-id', 'two'])],
+    { FAKE_ACP_MODE: 'normal', FAKE_ACP_LOG: log2 },
+    shellB,
+  );
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(path.resolve(childCwd(log2)), path.resolve(repoA), 'resume must use the saved cwd, not the shell cwd');
+});
+
+test('refuses a conflicting --cwd on resume unless --migrate-cwd is given', () => {
+  const stateDir = mkdtemp('wb-cli-');
+  const repoA = initRepo();
+  const repoC = initRepo();
+  const shellB = mkdtemp('wb-shell-');
+  const taskFile = path.join(stateDir, 'task.md');
+  fs.writeFileSync(taskFile, 'Implement the thing.');
+
+  const first = runCli(
+    ['start', ...baseArgs(stateDir, ['--agent', 'cli-cwd2', '--task-file', taskFile, '--cwd', repoA, '--task-id', 'one'])],
+    { FAKE_ACP_MODE: 'normal', FAKE_ACP_LOG: path.join(stateDir, 'one.jsonl') },
+    shellB,
+  );
+  assert.equal(first.status, 0, first.stderr);
+
+  const conflict = runCli(
+    ['resume', ...baseArgs(stateDir, ['--agent', 'cli-cwd2', '--task-id', 'two', '--cwd', repoC])],
+    { FAKE_ACP_MODE: 'normal' },
+    shellB,
+  );
+  assert.equal(conflict.status, 8, conflict.stdout + conflict.stderr);
+  assert.equal(parseJson(conflict).error.code, 'E_CONFIG');
+
+  const logM = path.join(stateDir, 'migrated.jsonl');
+  const migrated = runCli(
+    ['resume', ...baseArgs(stateDir, ['--agent', 'cli-cwd2', '--task-id', 'two', '--cwd', repoC, '--migrate-cwd'])],
+    { FAKE_ACP_MODE: 'normal', FAKE_ACP_LOG: logM },
+    shellB,
+  );
+  assert.equal(migrated.status, 0, migrated.stdout + migrated.stderr);
+  assert.equal(path.resolve(childCwd(logM)), path.resolve(repoC));
+});

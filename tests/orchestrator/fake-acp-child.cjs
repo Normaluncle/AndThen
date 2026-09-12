@@ -113,6 +113,22 @@ function onPrompt(msg) {
     return;
   }
 
+  if (MODE === 'stream') {
+    notify({ sessionUpdate: 'usage_update', size: 1000000, used: 10 });
+    notify({ sessionUpdate: 'tool_call', toolCallId: 't1', title: 'Read d:\\x\\file.md (1 - 50)', status: 'in_progress' });
+    // Streaming updates with no status must not be printed.
+    notify({ sessionUpdate: 'tool_call_update', toolCallId: 't1' });
+    notify({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'in_progress' });
+    notify({ sessionUpdate: 'tool_call_update', toolCallId: 't1', status: 'completed' });
+    notify({ sessionUpdate: 'tool_call', toolCallId: 't2', title: 'Bash\nnode -e "token=SUPERSECRETTOKENVALUE"' });
+    notify({ sessionUpdate: 'tool_call_update', toolCallId: 't2', status: 'failed' });
+    for (const chunk of ['Hel', 'lo ', 'wor', 'ld\n', 'second', ' line']) {
+      notify({ sessionUpdate: 'agent_message_chunk', content: { type: 'text', text: chunk } });
+    }
+    finishPrompt(msg);
+    return;
+  }
+
   let usageSize = Number(contextValue);
   if (MODE === 'window300k') usageSize = 300000;
   notify({ sessionUpdate: 'usage_update', size: usageSize, used: 1234 });
@@ -199,6 +215,8 @@ process.stdin.on('data', (chunk) => {
 if (MODE === 'stderr_secret') {
   process.stderr.write('connecting with token=SUPERSECRETTOKENVALUE and Bearer abcdef0123456789\n');
 }
+
+log({ dir: 'cwd', cwd: process.cwd() });
 
 process.on('SIGTERM', () => process.exit(0));
 process.on('SIGINT', () => process.exit(0));

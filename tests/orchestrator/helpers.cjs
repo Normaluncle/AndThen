@@ -32,6 +32,7 @@ function makeConfig(overrides = {}) {
     autocompact: '1000000',
     maxConcurrency: 2,
     concurrencyVerified: false,
+    quiet: false,
     permissionMode: PERMISSION_MODE,
     allowedTools: [...ALLOWED_TOOLS],
     disallowedTools: [...DISALLOWED_TOOLS],
