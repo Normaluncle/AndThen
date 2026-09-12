@@ -18,7 +18,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 
 ## Still required before goal completion
 
-1. AI-C structured drafting, shared usage/input/output/concurrency quotas and case review transition. AI-A, B and D now have handlers and tests; real provider evaluation remains unverified.
+1. Shared usage/input/output/concurrency quotas and case review transition. AI-A/B/C/D now have handlers and tests; real provider evaluation remains unverified.
 2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
 4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
@@ -54,3 +54,11 @@ Previous turn was progress (`f34a350`). Implemented source analysis routes/worke
 Outstanding review: stale/cancelled AI jobs should consistently close their audit run status without persisting a late output (currently some preflight/finalization rejection paths can leave a `running` audit row). AI-C, shared quotas, case review, retention and final Docker acceptance remain required.
 
 Verification for AI-A/D: typecheck passed. Initial full suite found an obsolete assertion that the analysis route must not exist; changed it to require the integrated analysis and validation OpenAPI paths. Rerun passed all 24 files / 132 tests. No real provider credentials were used. This continuation is concrete implementation/test progress, and the goal is still active.
+
+## Continuation evidence — AI-C and cancelled run audits
+
+Previous turn was progress (`e80dbf6`). Added `/interviews/:id/draft-ai` and `ai.draft` handler with finished-interview/author/consent gates, pinned evidence, expected latest-version check, bounded input and strict draft output. Generated statements must pass evidence/visibility checks and kind-specific provenance checks. Successful output creates a new unconfirmed version without removing an old publication. Concurrent manual edits invalidate late generated drafts. The module registry now closes AI audit metadata on thrown context/lease errors without writing model output or business state; source-deleted audit rows are not recreated.
+
+New tests use a simulated HTTP server and cover no-consent zero calls, unconfirmed draft creation, stale versions, invented numbers/dates, private-to-public leakage and delayed response after author edit, including cancelled audit status. Read/apply existing AI-evaluation, backend-contracts and git-delivery project skills. `docs/ai-api.md` updated. Process-crash audit reconciliation (as opposed to caught handler errors) remains to implement with operational cleanup. Goal stays active pending quotas/review/retention/Docker/delivery acceptance.
+
+Verification: bundled `pnpm.cmd typecheck` passed and `pnpm.cmd test` passed 25 files / 133 tests. Existing Docker containers were not rebuilt in this milestone.

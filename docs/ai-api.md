@@ -20,10 +20,20 @@ With configuration and permission, returns 202 with `mode: ai_pending` and `job_
 
 Rules cannot be cleared by a model. A model finding with blocking severity forces `blocking:true` even if its top-level flag says otherwise. Pending validation prevents confirmation/publication. Persisted blocking findings prevent confirmation/publication of that draft/hash; a new explicit author edit creates a new version. No model result confirms an author statement or publishes anything.
 
-The remaining AI-C structured-drafting handler and shared global usage/concurrency quotas are not yet implemented. AI-B interview generation is implemented separately. Real-provider evaluation remains unverified without credentials; HTTP-provider tests are explicitly synthetic.
+## Draft organization (AI-C)
+
+`POST /api/interviews/:id/draft-ai` with `{ "expected_version": 0 }` queues a new draft for a finished interview. Use the current highest case draft version instead of zero if a version already exists. The endpoint requires the bound verified author, private interview consent, external processing consent, provider configuration, and available pinned snapshot/answers. It returns 202 with `job_id` and `deduped`. Without provider configuration use the existing manual `/interviews/:id/draft` endpoint; no generated output is fabricated.
+
+The worker sends bounded evidence, validates the candidate schema and evidence/visibility references, and permits `source_quote` only for exact snapshot material. Author reports/reflections require interview-message evidence. The final write rechecks source availability, consents, interview revision and latest draft version under a job fence. A concurrent author edit makes the model result stale rather than overwriting it.
+
+A successful run creates a new `draft` version with `aiAssisted: true`, no confirmations, a server-computed hash and pinned snapshot/interview references. The previous published version stays published. An invalid or failed model result creates no draft and returns `fallback_mode: manual_draft`. Audit rows close as cancelled when context changes; output is not retained on cancellation.
+
+Shared global usage/concurrency quotas are still outstanding. AI-A/B/C/D have implemented handlers, but real-provider evaluation remains unverified without credentials; HTTP-provider tests are explicitly synthetic.
 
 ## Verification
 
 `tests/business/analysis.test.ts`: consent prevents requests, private-read authorization, stale hashes, exact citation binding, actual usage persistence, invalid model references, sensitive-content no-send path, unchanged case state.
 
 `tests/business/validation.test.ts`: rule-only/no-permission path, pending-job gate, model severity overriding an inconsistent flag, stale hash rejection, and new-version confirmation isolation.
+
+`tests/business/drafting.test.ts`: no-permission zero calls, stale base version rejection, unconfirmed AI draft creation, old-publication preservation, invented-fact/private-leak rejection, and late result discard/audit cancellation after an author edit.

@@ -1,5 +1,9 @@
 import type { ModuleContext, ModuleDefinition } from '../shared/types.js';
 import type { JobHandlerRegistry } from '../jobs/types.js';
+import { and, eq } from 'drizzle-orm';
+import { aiRuns } from '../db/schema.js';
+import { AppError } from '../http/errors.js';
+import { JobLeaseLostError } from '../jobs/transaction.js';
 import { identityModule } from './identity/index.js';
 import { sourcesModule } from './sources/index.js';
 import { casesModule } from './cases/index.js';
@@ -22,8 +26,26 @@ export const modules: readonly ModuleDefinition[] = [
 ];
 
 export function registerModuleJobHandlers(ctx: ModuleContext, registry: JobHandlerRegistry): void {
+  const audited: JobHandlerRegistry = {
+    get: kind => registry.get(kind),
+    kinds: () => registry.kinds(),
+    register(kind, handler) {
+      registry.register(kind, !kind.startsWith('ai.') ? handler : async job => {
+        try { return await handler(job); }
+        catch (err) {
+          // This only closes audit metadata. It never writes model output or business state,
+          // so it remains safe after loss of a business-write fence or source deletion.
+          const cancelled = job.signal.aborted || err instanceof JobLeaseLostError;
+          await ctx.db.update(aiRuns).set({ status: cancelled ? 'cancelled' : 'failed', output: null,
+            errorCode: cancelled ? 'context_invalidated' : err instanceof AppError ? err.code : 'task_failed', finishedAt: ctx.now() })
+            .where(and(eq(aiRuns.jobId, job.job.id), eq(aiRuns.status, 'running')));
+          throw err;
+        }
+      });
+    },
+  };
   for (const module of modules) {
-    module.registerJobHandlers?.(ctx, registry);
+    module.registerJobHandlers?.(ctx, audited);
   }
 }
 
