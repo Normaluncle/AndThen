@@ -1,19 +1,66 @@
-MIT License
+AndThen — Reserved Rights and Team Development Permission
+Version 1.0 — 2026-09-13
 
-Copyright (c) 2026 AndThen contributors
+Copyright (c) 2026 the respective AndThen copyright holders.
+All rights reserved except as expressly provided below.
 
-Permission is hereby granted, free of charge, to any person obtaining a copy of this software and
-associated documentation files (the "Software"), to deal in the Software without restriction, including
-without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the
-following conditions:
+1. Scope
+This notice applies to original project code and documentation in versions
+bearing this notice, only to the extent the project copyright holders have
+rights to license them. This is a project-specific restricted permission,
+not an open-source license.
 
-The above copyright notice and this permission notice shall be included in all copies or substantial
-portions of the Software.
+2. Public access
+Public visibility does not grant permission to modify, create derivative
+works, redistribute, sublicense, sell, commercially exploit, or deploy the
+project as an external service. Downloading an unmodified copy solely to
+read and inspect it is permitted, retaining copyright and this notice.
+Rights required by GitHub's Terms of Service, including applicable viewing
+and forking rights, and mandatory rights under applicable law are unaffected.
+A public fork or clone does not by itself authorize modification or reuse.
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
-LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO
-EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
-USE OR OTHER DEALINGS IN THE SOFTWARE.
+3. Authorized team development
+A person expressly authorized in writing by the project copyright holders
+(or their authorized representative) to develop AndThen may copy, run, test,
+and modify the project solely for the team's AndThen project, submit changes
+to its designated repository, and deploy it on the team's behalf within the
+scope of that authorization. A recorded invitation identifying the person
+as an AndThen project developer may document this authorization.
+This permission does not allow that person to republish the project as a
+separate product, use it for unrelated commercial purposes, distribute it
+outside the approved project channels, or sublicense it to others.
 
+4. Contributions
+Public access, opening an issue, or submitting a pull request does not grant
+team-development permission. External code contributions require prior
+written authorization. Contributions remain owned by their respective
+copyright holders; any necessary rights for the team to use, modify, publish
+or license contributions must be expressly agreed with those contributors.
+No copyright assignment is implied by this notice.
+
+5. Third-party materials and earlier releases
+Third-party dependencies and separately licensed materials retain their own
+terms. User content, Zhihu content, trademarks and images are not licensed
+by this notice unless expressly identified otherwise.
+This notice does not revoke licenses already validly granted for earlier
+releases, including previously published MIT-licensed copies. It does not
+claim exclusive control of material independently available under MIT or
+another license. New original contributions governed by this notice are not
+a new MIT grant merely because earlier releases used MIT.
+
+6. Separate permission
+Any permission beyond the above must be obtained in writing from the
+relevant copyright holders. Contact the repository owner, Normaluncle,
+through the contact channels on their GitHub profile. Do not post confidential
+information in a public issue.
+
+7. Disclaimer
+To the maximum extent permitted by applicable law, the project is provided
+"AS IS", without warranties of any kind. The copyright holders shall not be
+liable for claims or damages arising from use of the project.
+
+中文说明（便于阅读，具体授权以以上条款为准）：
+保留所有权利。外部访问者可查看并下载未修改副本用于阅读，未获外部修改、
+再分发、商用或部署服务的许可。经书面授权的队友可为团队的 AndThen 项目
+进行开发、测试和约定范围内的部署，不能另行发布产品或对外转授权。
+GitHub平台条款、法定权利、第三方许可及此前已有效授予的MIT许可不受影响。

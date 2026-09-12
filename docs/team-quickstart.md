@@ -50,3 +50,14 @@ Swagger：http://127.0.0.1:8082/docs 。这些地址仅在启动服务的那台�
 ## 数据保护
 
 不要运行 `docker compose down -v`、删除卷或清空数据库来更新代码。重新构建会执行新增迁移并保留数据库卷。每位队友保留自己的本地环境；未来共享测试服务器需另行配置域名、HTTPS和正式登录，不能直接开放本机试玩身份。
+
+## 备份与恢复检查（Windows PowerShell）
+
+备份与恢复脚本在scripts/中，使用它们前核对脚本的Compose项目/环境参数与目标栈一致：
+
+```powershell
+Get-Help ./scripts/backup.ps1 -Detailed
+Get-Help ./scripts/restore-check.ps1 -Detailed
+```
+
+备份保存在Git忽略的data目录；恢复检查只应指向隔离数据库，不覆盖共享主库。备份轮替在运行备份脚本时执行，并不代表已配置每日自动任务。

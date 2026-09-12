@@ -2,7 +2,7 @@
 
 第一次使用 GitHub，可以把仓库理解为团队共同的工程档案：main 是整合版本，分支是个人工作区，commit 是存档，PR 是合并前的检查窗口。
 
-## 最短工作流
+## 最短工作流（仅限已获团队开发授权的成员）
 
 ```bash
 git clone https://github.com/Normaluncle/AndThen.git
@@ -18,7 +18,7 @@ git push -u origin feat/your-task
 
 然后在 GitHub 打开 Pull Request，按模板填写，请一位队友 review。优先使用 Squash merge 合并一项完整任务。开始下一项任务前回到 main 并 pull。Codex 新分支使用 `codex/` 前缀，人工队友可用 `feat/`、`fix/`、`docs/`。
 
-没有仓库写权限的参与者先 Fork，再从自己的仓库发 PR；公开并不代表陌生人能改 main。首次邀请队友需由仓库所有者在 Settings → Collaborators 添加其 GitHub 用户名。不要共享 GitHub 账号或 API key。
+外部访问者请先取得明确的团队开发授权，再修改或提交代码。公开、Fork、提交Issue均不等于获得修改许可；权限边界见 LICENSE。首次邀请队友需由仓库所有者在 Settings → Collaborators 添加其 GitHub 用户名。不要共享 GitHub 账号或 API key。
 
 ## 按工作内容分工
 
@@ -39,13 +39,13 @@ git push -u origin feat/your-task
 - 集中完成一批相关修改再验证；只对新增变化或失败项补充重测。
 - SQL 只添加新迁移，不改已应用的迁移。不要删除数据库卷来“解决”冲突。
 - 不提交 `.env.local`、账号凭证、真实采访材料、数据库、日志或个人运行证据。
-- 代理开发先读 AGENTS.md 及对应 skills；提交身份按其当前授权执行。
+- 团队开发约定：身份由服务端确定；发布需要单独同意；业务模块通过模块注册，不改应用入口；不上传密钥或真实作者材料。个人代理指令和临时探针只留本地。
 
 GitHub Actions 配置会执行类型、后端测试及前端构建，不使用真实模型密钥。首轮远端结果以 Actions 页面为准，不能仅凭配置文件存在称为通过。
 
-## main 的保护建议
+## main 的保护设置
 
-仓库所有者在 Settings → Rules / Branches 为 main 开启：通过 PR 合并、至少一人批准、要求 `checks` 成功、禁止强推和删除。团队成员用户名尚未明确，所以不预设 CODEOWNERS，不把所有人设为管理员。这些是设置步骤，只有 GitHub 上实际启用后才构成强制保护。
+仓库所有者在 Settings → Rules / Branches 为 main 开启：通过 PR 合并、至少一人批准、要求 `checks` 成功、禁止强推和删除。团队成员用户名尚未明确，所以不预设 CODEOWNERS，不把所有人设为管理员。目前 main 已启用上述保护，仓库管理员保留应急绕过权限。
 
 ## 遇到冲突
 

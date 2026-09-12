@@ -8,7 +8,7 @@
 ![Stage](https://img.shields.io/badge/阶段-可运行_Demo-2563eb)
 ![Node](https://img.shields.io/badge/Node.js-24-43853d)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)
-![License](https://img.shields.io/badge/License-MIT-111827)
+![License](https://img.shields.io/badge/License-Reserved_Rights-111827)
 
 [产品需求](docs/PRD.md) · [运行 Demo](#运行-demo) · [前端接入](docs/frontend-integration.md) · [团队协作](CONTRIBUTING.md) · [接口文档](docs/openapi.json)
 
@@ -64,7 +64,7 @@ flowchart LR
 | OAuth 作者绑定 | 接口已实现；真实授权验收仍取决于赛事 App ID / App Key 等外部条件 |
 | 公共网站 | 仓库公开不等于网站已部署；服务器、域名与正式运营待配置 |
 
-工程证据与限制见 [验收记录](docs/delivery-20260913-interview-articles.md) 和 [v1.2 状态](docs/goal-audit-v1.2.md)。测试通过不代表采访质量或生产容量已获保证。
+可验证范围与限制见 [验收矩阵](docs/acceptance-matrix.md)。测试通过不代表采访质量或生产容量已获保证。
 
 ## 运行 Demo
 
@@ -95,7 +95,7 @@ docker compose --env-file .env.local -p andthen-v12-demo -f docker-compose.yml -
 3. **各自开分支**：前端、后端、文档分别推进，避免直接同时修改主分支。
 4. **提交 PR**：写清变化与验证，请另一位队友审阅后合并。
 
-详细操作、角色分工与冲突处理见 [CONTRIBUTING.md](CONTRIBUTING.md)。公开访问者可以 clone / fork；只有被授予写权限的队友才能直接推送分支。
+详细操作、角色分工与冲突处理见 [CONTRIBUTING.md](CONTRIBUTING.md)。公开访问者可以查看和下载未修改副本用于阅读；修改和团队开发需要明确授权，公开或 Fork 不代表获得修改、再分发或商用许可。
 
 ## 工程地图
 
@@ -107,12 +107,11 @@ services/memory/      Python + memU 作者记忆服务
 demo/                 React / Vite 功能 Demo
 tests/               单元、业务与真实 PostgreSQL 集成测试
 docs/                 PRD、契约、验收和接入说明
-skills/               本仓库开发约定
 ```
 
 技术栈：Node.js 24 / TypeScript / Fastify 5 / PostgreSQL 18 / Drizzle / React / Vite / memU。
 
-后端开发入口：[BACKEND.md](BACKEND.md) · [架构](docs/architecture.md) · [契约](docs/contracts.md) · [代理约定](AGENTS.md)。旧 WorkBuddy 探针说明保留在 [历史文档](docs/archive-readme-workbuddy.md)，不代表当前产品能力。
+后端开发入口：[BACKEND.md](BACKEND.md) · [架构](docs/architecture.md) · [契约](docs/contracts.md)。
 
 ## 展示素材
 
@@ -120,7 +119,7 @@ skills/               本仓库开发约定
 
 ## 许可与内容归属
 
-项目原创代码采用 [MIT License](LICENSE)：允许复制、修改和商用，需保留版权与许可声明。第三方依赖遵循各自许可证；知乎内容、用户材料、商标与未来提供的图片不因本代码许可自动获得再分发授权。
+项目采用[保留所有权利与团队开发授权](LICENSE)，不向外部授予修改、再分发或商用许可。经明确授权的队友可为本项目开发协作。第三方依赖及内容遵循各自许可；此前已有效授予的 MIT 许可不因本次变更被追溯撤销。
 
 <div align="center">
 

@@ -49,3 +49,11 @@ Thumbs.db
 .idea/
 .vscode/*
 !.vscode/extensions.json
+
+# Local development-agent instructions (not product deliverables)
+/AGENTS.md
+/skills/
+/tools/workbuddy/
+/tests/orchestrator/
+/workbuddy-*-probe.cjs
+/Run-WorkBuddyProbe.ps1
