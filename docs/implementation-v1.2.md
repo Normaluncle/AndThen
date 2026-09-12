@@ -154,3 +154,11 @@ docker compose --env-file .env.local up -d --build
 - 已仅重启隔离 8081 API 与 v12 worker，加载本轮及上一轮队列代码。原 8080 Docker 服务未操作。
 - 浏览器测试作者进入资料与记忆页：显示唯一已核验测试资料、原文片段、已有可用记忆，以及四条已有记忆和工资拒谈边界；官方发现候选未冒充为该作者资料。本轮没有新模型调用。
 - 技能：backend-contracts、database-migrations、git-delivery，以及此前读取的 web-development React 指南。PRD 与共享响应契约已同步。全部 Goal 仍未完成。
+
+## 2026-09-13 采访重试检查点
+
+- 新增 POST /interviews/:id/retry 与“重试 AI 提问”按钮。保留回答，重新核验所有权、同意、版本、活动状态、未回答问题和五问预算；取消旧任务并递增版本，继续复用既有 AI-B 输出验证。
+- 模拟 HTTP 提供方 + 真实数据库：重复问题、429、坏 JSON 后均可主动恢复并追加一个问题，旧回答完全保留；其他作者 403、重复点击 409、缺少同意 422、暂停/预算耗尽 409。前端逻辑测试覆盖按钮条件。
+- pnpm typecheck 通过；pnpm test 209 通过、1 项真实模型 opt-in 跳过，49.17 秒；node --test demo/src/workflow.test.js demo/src/api.test.js 八项通过；pnpm --dir demo build 通过。
+- 本轮未调用真实模型。新接口尚待重启隔离 API 后做按钮浏览器验收，不能将模拟故障回归算成真实模型或页面验收。
+- 技能：backend-contracts、ai-evaluation、git-delivery；沿用 web-development React 指南。变更为采访路由/服务、前端按钮/状态、回归及 PRD/接口契约，无数据库迁移。整体 Goal 继续 active。

@@ -88,7 +88,33 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       expect(after.json().data.messages).toHaveLength(2);
       if (mode !== 'repeat') expect(after.body).toContain('异常前已保存的回答');
       expect(after.body).not.toContain('provider-private-error');
+      providerMode = 'normal';
+      const retryBody = { expected_version: after.json().data.session.revision };
+      const stranger = await seedUser(h, 'author');
+      expect((await h.app.inject({ method: 'POST', url: `${base}/retry`, headers: auth(stranger.token), payload: retryBody })).statusCode).toBe(403);
+      const retried = await h.app.inject({ method: 'POST', url: `${base}/retry`, headers: auth(fixture.author.token), payload: retryBody });
+      expect(retried.statusCode, retried.body).toBe(202);
+      expect((await h.app.inject({ method: 'POST', url: `${base}/retry`, headers: auth(fixture.author.token), payload: retryBody })).statusCode).toBe(409);
+      providerMode = 'sequence';
+      await runJob(h.moduleCtx, 'ai.interview.next');
+      const recovered = (await h.app.inject({ url: base, headers: auth(fixture.author.token) })).json().data;
+      expect(recovered.session.mode).toBe('ai');
+      expect(recovered.session.stopReason).toBeNull();
+      expect(recovered.messages).toHaveLength(3);
+      expect(recovered.messages[1]).toEqual(after.json().data.messages[1]);
     } finally { providerMode = 'normal'; }
+  });
+  it('rechecks retry consent and rejects exhausted or paused interviews', async () => {
+    const fixture = await start(false);
+    const url = `/api/interviews/${fixture.session.id}/retry`;
+    const request = () => h.app.inject({ method: 'POST', url, headers: auth(fixture.author.token), payload: { expected_version: fixture.session.revision } });
+    await h.ctx.db.update(interviewSessions).set({ stopReason: 'model_timeout' }).where(eq(interviewSessions.id, fixture.session.id));
+    expect((await request()).statusCode).toBe(422);
+    await h.ctx.db.insert(consents).values({ userId: fixture.author.user.id, sourceId: fixture.story.source.id, purpose: 'external_model_processing' });
+    await h.ctx.db.update(interviewSessions).set({ questionsAsked: 5 }).where(eq(interviewSessions.id, fixture.session.id));
+    expect((await request()).statusCode).toBe(409);
+    await h.ctx.db.update(interviewSessions).set({ questionsAsked: 1, status: 'paused' }).where(eq(interviewSessions.id, fixture.session.id));
+    expect((await request()).statusCode).toBe(409);
   });
   it('discards the in-flight model reply after explicit interview deletion', async () => {
     const fixture = await start();

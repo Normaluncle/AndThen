@@ -26,6 +26,15 @@ test('visibility changes and item removal require saving and invalidate confirma
   }
 });
 
+test('interview retry is available only after fallback with remaining question budget', () => {
+  const failed = {status:'active',mode:'manual',stopReason:'model_timeout',questionsAsked:1};
+  assert.equal(interviewActions(failed,[{role:'author'}]).retry,true);
+  for (const patch of [{status:'paused'},{mode:'ai'},{stopReason:null},{questionsAsked:5}]) {
+    assert.equal(interviewActions({...failed,...patch},[{role:'author'}]).retry,false);
+  }
+  assert.equal(interviewActions(failed,[{role:'ai'}]).retry,false);
+});
+
 test('interview waits for a question and disables answers after pause or finish', () => {
   assert.equal(interviewActions({status:'active',mode:'ai'},[]).waiting,true);
   assert.equal(interviewActions({status:'active',mode:'ai'},[{role:'ai'}]).answer,true);

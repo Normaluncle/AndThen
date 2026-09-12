@@ -14,6 +14,7 @@ export function interviewActions(session, messages) {
   const active = session?.status === 'active';
   const waiting = active && session.mode === 'ai' && messages.at(-1)?.role !== 'ai';
   return { waiting, answer: active && !waiting, pause: active,
+    retry: active && session.mode === 'manual' && !!session.stopReason && session.questionsAsked < Math.min(session.budgetMainQuestions ?? 5, 5) && messages.at(-1)?.role !== 'ai',
     resume: session?.status === 'paused', finish: active || session?.status === 'paused' };
 }
 

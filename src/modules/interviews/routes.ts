@@ -4,7 +4,7 @@ import type { ModuleRegistrar } from '../../shared/types.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
-import { getInterview, messageInput, saveMessage, startInterview, transitionInterview } from './service.js';
+import { getInterview, messageInput, saveMessage, startInterview, transitionInterview, retryInterview } from './service.js';
 import { createManualDraft } from '../followups/service.js';
 
 const params = z.object({ id: z.string().uuid() });
@@ -18,6 +18,10 @@ export const registerInterviewRoutes: ModuleRegistrar = (app, ctx) => {
     return reply.code(data.job_id ? 202 : 200).send(success(req.id, data));
   });
   api.get('/interviews/:id', { preHandler: [app.authenticate], schema: { ...base, summary: 'Read own interview and persisted messages' } }, async req => success(req.id, await getInterview(ctx.db, req.params.id, requireAuthContext(req))));
+  api.post('/interviews/:id/retry', { preHandler: [app.authenticate], schema: { ...base, response: { ...responses, 503: errorEnvelopeSchema }, summary: 'Retry failed AI questioning while preserving saved answers', body: z.object({ expected_version: z.number().int().positive() }).strict() } }, async (req, reply) => {
+    const data = await retryInterview(ctx, requireAuthContext(req), req.params.id, req.body.expected_version);
+    return reply.code(data.job_id ? 202 : 200).send(success(req.id, data));
+  });
   api.post('/interviews/:id/messages', { preHandler: [app.authenticate], schema: { ...base, summary: 'Persist an answer or skip and enqueue at most one next question', body: messageInput } }, async (req, reply) => {
     const data = await saveMessage(ctx, requireAuthContext(req), req.params.id, req.body);
     return reply.code(data.job_id ? 202 : 200).send(success(req.id, data));

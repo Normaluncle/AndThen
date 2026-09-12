@@ -135,3 +135,23 @@ export async function transitionInterview(ctx: ModuleContext, auth: AuthContext,
     return { session: updated!, job_id: jobId };
   });
 }
+
+export async function retryInterview(ctx: ModuleContext, auth: AuthContext, id: string, expectedVersion: number) {
+  return ctx.db.transaction(async tx => {
+    const initial = await getInterview(tx, id, auth);
+    const { source, caseRow } = await requireCaseAuthor(tx, initial.session.caseId, auth);
+    const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
+    if (!session) throw AppError.notFound();
+    requirePrivateFresh(session.updatedAt, ctx.now());
+    if (session.revision !== expectedVersion || session.status !== 'active' || session.mode !== 'manual' || !session.stopReason
+      || caseRow.status !== 'interviewing' || session.questionsAsked >= Math.min(session.budgetMainQuestions, 5)) throw AppError.conflict('Interview cannot retry AI in its current state');
+    if (!await hasActiveConsent(tx, source.id, 'private_interview', auth.userId)
+      || !await hasActiveConsent(tx, source.id, 'external_model_processing', auth.userId)) throw AppError.consentRequired();
+    if (!createLlmClient(ctx.env, ctx.logger).configured) throw AppError.serviceUnavailable('Interview model is not configured');
+    const [last] = await tx.select().from(interviewMessages).where(eq(interviewMessages.sessionId, id)).orderBy(desc(interviewMessages.sequence)).limit(1);
+    if (last?.role === 'ai') throw AppError.conflict('Answer the existing question before retrying');
+    await tx.execute(sql`update jobs set status='cancelled', finished_at=now(), lease_owner=null, lease_expires_at=null where status in ('queued','running') and payload->>'session_id'=${id}`);
+    const [updated] = await tx.update(interviewSessions).set({ mode: 'ai', stopReason: null, revision: session.revision + 1, updatedAt: ctx.now() }).where(eq(interviewSessions.id, id)).returning();
+    return { session: updated!, job_id: await enqueueNext(ctx, tx, updated!, source.id) };
+  });
+}
