@@ -25,6 +25,17 @@ describe('sources: public stories, interest, following and consent revocation', 
     await truncateAll(h.ctx.db);
   });
 
+  it('returns a real empty list with no records or only unlicensed material', async () => {
+    const empty = await h.app.inject({ url: '/api/stories' });
+    expect(empty.statusCode).toBe(200);
+    expect(empty.json().data.items).toEqual([]);
+    const author = await seedUser(h, 'author');
+    const story = await seedPublishedStory(h, { author: author.user, grantPublicConsent: false, permissionStatus: 'private_only' });
+    const hidden = await h.app.inject({ url: '/api/stories' });
+    expect(hidden.json().data.items).toEqual([]);
+    expect(hidden.body).not.toContain(story.snapshot.excerpt!);
+    expect((await h.app.inject({ url: `/api/stories/${story.source.id}` })).statusCode).toBe(404);
+  });
   it('projects only public fields of a licensed, published story', async () => {
     const author = await seedUser(h, 'author');
     const researcher = await seedUser(h, 'researcher');

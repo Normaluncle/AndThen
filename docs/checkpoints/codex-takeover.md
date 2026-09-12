@@ -147,3 +147,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Repeated skipped questions now compare Unicode-normalized text after punctuation/whitespace removal; the test uses an ASCII-vs-Chinese question mark and whitespace variation. This is deterministic duplicate detection, not semantic paraphrase equivalence.
 - Typecheck passed; interview suites passed 2 files / 13 tests. Provider responses remain explicitly simulated. Updated T10/T17 evidence in the acceptance matrix; process-crash-during-model and real-model qualitative evaluation are not inferred from these tests.
 - Next unresolved implementation/acceptance remains deletion scopes, injection/empty-state and other matrix gaps, then final Docker rebuild and documentation/export.
+
+## Injection and empty-state evidence continuation — 2026-09-12
+
+- Added real-PostgreSQL regressions for an injected source instruction requesting publication/admin access/invitations. Source text reaches the provider as evidence; request grants no tools/functions. A simulated hostile reply with a publish field/tool call fails validation and causes no case transition, confirmation, publication, invitation, outbox or notification write.
+- Added empty-public-list assertions for an empty database and for unlicensed-only material, including no private excerpt leakage and denied direct read.
+- Typecheck passed; affected suites passed 2 files / 14 tests. Updated T11/T19 evidence. These tests prove deterministic backend boundaries using simulated output, not real-model quality.
+- Goal remains active. Outstanding scope and final-runtime checks remain tracked in the acceptance matrix; no new Docker deployment or external model call occurred.
