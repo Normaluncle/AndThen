@@ -5,6 +5,7 @@ import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from 
 import { consents, followupCases, interviewMessages, interviewSessions } from '../../src/db/schema.js';
 import { runJob } from '../helpers/run-job.js';
 import { JobQueue } from '../../src/jobs/queue.js';
+import { seedMaintenance } from '../../src/modules/followups/maintenance.js';
 
 describe('AI-B with a simulated HTTP provider (not a real model evaluation)', () => {
   let h: Harness;
@@ -87,5 +88,28 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       expect(saved.json().data.session.stopReason).toBe('quota_exhausted');
       expect(saved.json().data.message.authorMessage).toBe('额度耗尽也不能丢失这条回答');
     } finally { h.moduleCtx.jobs = originalQueue; }
+  });
+  it('does not send expired interviews and discards an in-flight reply after retention cleanup', async () => {
+    const expired = await start();
+    const old = new Date(Date.now() - 31 * 86400000);
+    await h.ctx.db.update(interviewSessions).set({ updatedAt: old }).where(eq(interviewSessions.id, expired.session.id));
+    const before = calls;
+    await expect(runJob(h.moduleCtx, 'ai.interview.next')).rejects.toThrow();
+    expect(calls).toBe(before);
+    const fixture = await start();
+    hold = true;
+    const running = runJob(h.moduleCtx, 'ai.interview.next').then(() => null, err => err);
+    try {
+      const deadline = Date.now() + 5000;
+      while (!delayReply && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+      expect(delayReply).toBeTypeOf('function');
+      await h.ctx.db.update(interviewSessions).set({ updatedAt: old }).where(eq(interviewSessions.id, fixture.session.id));
+      await seedMaintenance(h.moduleCtx);
+      await runJob(h.moduleCtx, 'maintenance.consents');
+      delayReply!(); delayReply = undefined;
+      expect(await running).toBeInstanceOf(Error);
+      expect(await h.ctx.db.select().from(interviewSessions).where(eq(interviewSessions.id, fixture.session.id))).toHaveLength(0);
+      expect(await h.ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, fixture.session.id))).toHaveLength(0);
+    } finally { hold = false; delayReply?.(); delayReply = undefined; await running; }
   });
 });

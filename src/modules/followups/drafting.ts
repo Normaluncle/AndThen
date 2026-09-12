@@ -16,6 +16,7 @@ import { contentHash, validateStatements, type Evidence } from '../../ai/evidenc
 import { PROMPTS, PROMPT_VERSION } from '../../ai/prompts.js';
 import { createLlmClient } from '../../ai/client.js';
 import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
+import { requirePrivateFresh } from './retention.js';
 
 const payloadSchema = z.object({ source_id: z.string().uuid(), case_id: z.string().uuid(), session_id: z.string().uuid(), owner_user_id: z.string().uuid(), expected_version: z.number().int().nonnegative(), revision: z.number().int(), request_id: z.string() });
 const candidateSchema = z.object({ statements: z.array(draftStatementSchema).min(1).max(50), unresolved_items: z.array(z.string().max(2000)).max(50) }).strict();
@@ -47,6 +48,7 @@ async function readInput(tx: Transaction, p: z.infer<typeof payloadSchema>) {
   if (!await hasActiveConsent(tx, source.id, 'private_interview', p.owner_user_id) || !await hasActiveConsent(tx, source.id, 'external_model_processing', p.owner_user_id)) throw AppError.consentRequired();
   const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, p.session_id)).for('update');
   if (!session || session.caseId !== caseRow.id || session.ownerUserId !== p.owner_user_id || session.status !== 'finished' || session.revision !== p.revision) throw AppError.conflict('Interview must remain finished at the requested revision');
+  requirePrivateFresh(session.updatedAt);
   const [latest] = await tx.select().from(followupVersions).where(eq(followupVersions.caseId, caseRow.id)).orderBy(desc(followupVersions.version)).limit(1);
   if ((latest?.version ?? 0) !== p.expected_version) throw AppError.conflict('Draft version changed');
   const [snapshot] = session.snapshotId ? await tx.select().from(sourceSnapshots).where(eq(sourceSnapshots.id, session.snapshotId)) : [];

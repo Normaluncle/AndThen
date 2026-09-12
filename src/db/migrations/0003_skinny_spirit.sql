@@ -1,0 +1,2 @@
+ALTER TABLE "followup_versions" ADD COLUMN "private_purged_at" timestamp with time zone;--> statement-breakpoint
+ALTER TABLE "followup_versions" ADD COLUMN "content_purged_at" timestamp with time zone;

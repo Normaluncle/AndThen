@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { and, desc, eq } from 'drizzle-orm';
-import { notifications } from '../../db/schema.js';
+import { notifications, interviewSessions, followupVersions } from '../../db/schema.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleRegistrar } from '../../shared/types.js';
 import { requireAuthContext } from '../../http/auth.js';
@@ -8,6 +8,7 @@ import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
 import { draftStatementSchema } from '../../ai/tasks.js';
 import { confirmDraft, createManualDraft, editDraft, getDraft, publicFollowup, publishDraft, withdrawFollowup } from './service.js';
+import { requirePrivateFresh } from './retention.js';
 
 export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
@@ -29,6 +30,16 @@ export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
     const job = await ctx.jobs.getById(req.params.id);
     if (!job) throw AppError.notFound();
     if (job.payload.owner_user_id !== requireAuthContext(req).userId) throw AppError.forbidden();
+    if (typeof job.payload.session_id === 'string') {
+      const [session] = await ctx.db.select().from(interviewSessions).where(eq(interviewSessions.id, job.payload.session_id));
+      if (!session) throw AppError.withdrawn();
+      requirePrivateFresh(session.updatedAt, ctx.now());
+    }
+    if (typeof job.payload.draft_id === 'string') {
+      const [draft] = await ctx.db.select().from(followupVersions).where(eq(followupVersions.id, job.payload.draft_id));
+      if (!draft || draft.contentPurgedAt) throw AppError.withdrawn();
+      requirePrivateFresh(draft.updatedAt, ctx.now());
+    }
     return success(req.id, { job_id: job.id, status: job.status, result: job.result, attempts: job.attempts });
   });
   api.post('/interviews/:id/draft', { ...hooks, schema: { ...base, summary: 'Build an evidence-preserving manual draft from saved author answers' } }, async req => success(req.id, await createManualDraft(ctx, requireAuthContext(req), req.params.id)));

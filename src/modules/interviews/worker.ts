@@ -11,6 +11,7 @@ import { PROMPTS, PROMPT_VERSION } from '../../ai/prompts.js';
 import { hasActiveConsent } from '../sources/access.js';
 import { lockCase } from './service.js';
 import { AppError } from '../../http/errors.js';
+import { privateExpired, requirePrivateFresh } from '../followups/retention.js';
 
 const payloadSchema = z.object({ source_id: z.string().uuid(), case_id: z.string().uuid(), session_id: z.string().uuid(), owner_user_id: z.string().uuid(), revision: z.number().int() });
 const turnSchema = z.object({ question: z.string().trim().min(1).max(500), purpose: z.string().max(1000), basis_refs: z.array(z.string()).min(1).max(10) }).strict();
@@ -26,6 +27,7 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
     const { source, caseRow } = await lockCase(tx, p.case_id);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, p.session_id)).for('update');
     if (!session || session.ownerUserId !== p.owner_user_id || caseRow.sourceId !== p.source_id || session.revision !== p.revision || session.status !== 'active') throw AppError.conflict('Interview changed');
+    requirePrivateFresh(session.updatedAt, ctx.now());
     if (session.questionsAsked >= Math.min(5, session.budgetMainQuestions)) return null;
     if (!await hasActiveConsent(tx, source.id, 'private_interview', p.owner_user_id) || !await hasActiveConsent(tx, source.id, 'external_model_processing', p.owner_user_id)) return null;
     const [snapshot] = session.snapshotId ? await tx.select().from(sourceSnapshots).where(eq(sourceSnapshots.id, session.snapshotId)) : [];
@@ -63,7 +65,7 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
     await withJobFence(tx, { jobId: job.job.id, fencingToken: job.job.fencingToken }, async fenced => {
       const [source] = await fenced.select().from(sources).where(eq(sources.id, p.source_id));
       const [session] = await fenced.select().from(interviewSessions).where(eq(interviewSessions.id, p.session_id)).for('update');
-      if (!source || source.deletedAt || !session || session.status !== 'active' || session.revision !== p.revision || !await hasActiveConsent(fenced, p.source_id, 'external_model_processing', p.owner_user_id) || !await hasActiveConsent(fenced, p.source_id, 'private_interview', p.owner_user_id)) {
+      if (!source || source.deletedAt || !session || privateExpired(session.updatedAt, ctx.now()) || session.status !== 'active' || session.revision !== p.revision || !await hasActiveConsent(fenced, p.source_id, 'external_model_processing', p.owner_user_id) || !await hasActiveConsent(fenced, p.source_id, 'private_interview', p.owner_user_id)) {
         throw new JobLeaseLostError(job.job.id, 'authorization or interview changed');
       }
       await fenced.update(aiRuns).set({ status: failureCode ? 'failed' : 'succeeded', errorCode: failureCode, finishedAt: ctx.now(), inputTokens: completion?.usage.inputTokens ?? null, outputTokens: completion?.usage.outputTokens ?? null, latencyMs: completion?.latencyMs ?? null }).where(eq(aiRuns.id, runId));

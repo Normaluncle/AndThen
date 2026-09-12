@@ -1,0 +1,65 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
+import { aiRuns, followupVersions, interviewMessages, interviewSessions, jobs } from '../../src/db/schema.js';
+import { seedMaintenance } from '../../src/modules/followups/maintenance.js';
+import { runJob } from '../helpers/run-job.js';
+
+describe('private retention expiry', () => {
+  let h: Harness;
+  beforeAll(async () => { h = await createHarness(); });
+  afterAll(async () => { await h.close(); });
+  it('denies expired interviews and drafts before a sweep, removes derivatives, keeps authorized public text and never reuses version numbers', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    const old = new Date(Date.now() - 31 * 86400000);
+    const [session] = await h.ctx.db.insert(interviewSessions).values({ caseId: story.followupCase.id, ownerUserId: author.user.id, status: 'finished', mode: 'manual', snapshotId: story.snapshot.id, updatedAt: old }).returning();
+    await h.ctx.db.insert(interviewMessages).values({ sessionId: session!.id, role: 'author', sequence: 1, authorMessage: 'PRIVATE_INTERVIEW_SENTINEL', visibility: 'private', generatedBy: 'manual' });
+    const publicStatement = { id: 'public', text: '获授权的公开回访', kind: 'author_report', evidence_refs: ['author_edit:public'], visibility: 'public' };
+    const privateStatement = { id: 'private', text: 'PRIVATE_DRAFT_SENTINEL', kind: 'author_report', evidence_refs: ['author_edit:private'], visibility: 'private' };
+    await h.ctx.db.update(followupVersions).set({ statements: [publicStatement, privateStatement], interviewId: session!.id, unresolvedItems: ['PRIVATE_UNRESOLVED'], authorEdits: [privateStatement], updatedAt: old }).where(eq(followupVersions.id, story.versionId));
+    const [draft] = await h.ctx.db.insert(followupVersions).values({ caseId: story.followupCase.id, version: 2, statements: [privateStatement], contentHash: 'a'.repeat(64), updatedAt: old, createdByUserId: author.user.id }).returning();
+    const { job: pending } = await h.moduleCtx.jobs.enqueue({ kind: 'ai.interview_next', payload: { source_id: story.source.id, session_id: session!.id, owner_user_id: author.user.id } });
+    await h.ctx.db.insert(aiRuns).values({ task: 'ai_b_interview', status: 'running', sourceId: story.source.id, interviewSessionId: session!.id, jobId: pending.id, output: { text: 'PRIVATE_DERIVATIVE' } });
+    expect((await h.app.inject({ url: `/api/interviews/${session!.id}`, headers: auth(author.token) })).statusCode).toBe(410);
+    expect((await h.app.inject({ url: `/api/jobs/${pending.id}`, headers: auth(author.token) })).statusCode).toBe(410);
+    expect((await h.app.inject({ method: 'POST', url: `/api/interviews/${session!.id}/draft`, headers: auth(author.token) })).statusCode).toBe(410);
+    expect((await h.app.inject({ url: `/api/drafts/${draft!.id}`, headers: auth(author.token) })).statusCode).toBe(410);
+    const before = await h.app.inject({ url: `/api/drafts/${story.versionId}`, headers: auth(author.token) });
+    expect(before.statusCode, before.body).toBe(200);
+    expect(before.body).not.toContain('PRIVATE_');
+    expect(before.json().data.privatePurgedAt).toBeNull();
+    expect(before.json().data.privateContentExpired).toBe(true);
+    await seedMaintenance(h.moduleCtx);
+    const result = await runJob(h.moduleCtx, 'maintenance.consents');
+    expect(result?.data).toMatchObject({ purged_interviews: 1, purged_versions: 2 });
+    expect(await h.ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, session!.id))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(aiRuns).where(eq(aiRuns.jobId, pending.id))).toHaveLength(0);
+    const [cancelled] = await h.ctx.db.select().from(jobs).where(eq(jobs.id, pending.id));
+    expect(cancelled).toMatchObject({ status: 'cancelled', payload: {}, result: null });
+    const [purged] = await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.id, draft!.id));
+    expect(purged!.statements).toEqual([]);
+    expect(purged!.contentPurgedAt).toBeInstanceOf(Date);
+    const publicRead = await h.app.inject({ url: `/api/followups/${story.versionId}` });
+    expect(publicRead.statusCode, publicRead.body).toBe(200);
+    expect(publicRead.body).toContain(publicStatement.text);
+    expect(publicRead.body).not.toContain('PRIVATE_');
+    expect((await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.caseId, story.followupCase.id))).map(v => v.version).sort()).toEqual([1, 2]);
+  });
+  it('keeps recently edited private material, clears a draft without jobs/interviews and makes repeated sweeps harmless', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    const [session] = await h.ctx.db.insert(interviewSessions).values({ caseId: story.followupCase.id, ownerUserId: author.user.id, status: 'paused', mode: 'manual' }).returning();
+    await h.ctx.db.insert(interviewMessages).values({ sessionId: session!.id, role: 'author', sequence: 1, authorMessage: 'RECENT_PRIVATE', visibility: 'private' });
+    const [draft] = await h.ctx.db.insert(followupVersions).values({ caseId: story.followupCase.id, version: 2, statements: [{ text: 'EXPIRED_PRIVATE' }], contentHash: 'b'.repeat(64), updatedAt: new Date(Date.now() - 31 * 86400000), createdByUserId: author.user.id }).returning();
+    await seedMaintenance(h.moduleCtx);
+    expect((await runJob(h.moduleCtx, 'maintenance.consents'))?.data).toMatchObject({ purged_interviews: 0, purged_versions: 1 });
+    expect((await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.id, draft!.id)))[0]!.statements).toEqual([]);
+    const recent = await h.app.inject({ url: `/api/interviews/${session!.id}`, headers: auth(author.token) });
+    expect(recent.statusCode).toBe(200);
+    expect(recent.body).toContain('RECENT_PRIVATE');
+    await seedMaintenance(h.moduleCtx);
+    expect((await runJob(h.moduleCtx, 'maintenance.consents'))?.data).toMatchObject({ purged_interviews: 0, purged_versions: 0 });
+  });
+});
+

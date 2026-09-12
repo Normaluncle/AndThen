@@ -21,7 +21,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 1. Remaining AI behavior and full workflow acceptance, including review expectations for author-initiated publication. Case review/invitation gate and shared budgets now implemented; real provider evaluation remains unverified.
 2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
-4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
+4. User data-deletion endpoint and scope audit. Private interview/draft 30-day cleanup is implemented and tested (below). Managed backup rotation/restore is tested but requires an operator invocation; no daily host schedule or external model deletion API is available.
 5. Repeat Docker acceptance against final runtime commit after remaining changes. Containers now run `1f0f59e`; that revision passed build/migration/health, nonempty backup restore, restart/recreation persistence, manual HTTP closure and sampled performance.
 6. OpenAPI artifact, reproducible API demo, requirement/test matrix, final docs/commit.
 7. Real model credentials absent: use local `.env`, never claim simulated HTTP tests are real-model evaluation. P4 remains unverified until real configuration is provided.
@@ -31,7 +31,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 - Source snapshot import uses natural-key advisory locking; coordinate source-row lock with deletion, prevent a new snapshot being attached while deleting.
 - `getInterview`/`getDraft` should enforce synchronous deletion tombstone before returning private content (source APIs already do).
 - Notification reads contain metadata only; ensure revocation status reflects source availability even before cleanup.
-- Default public consent expiry and 90-day maintenance are implemented; private 30-day physical retention remains pending.
+- Default public consent expiry, 90-day maintenance and private 30-day cleanup are implemented. Public source snapshot retention remains separate from the private interview/draft TTL.
 - `draftEvidence` treats source snapshot as public after publication permission check. Author edits explicitly become author evidence; private-to-public edits must remain an explicit author action.
 - Interview job dedupe includes revision so a just-persisted question whose job completion is pending cannot swallow the next answer's generation.
 - Worker locks source before job fence to match revocation ordering; `withJobFence` supports an existing transaction/savepoint.
@@ -100,3 +100,13 @@ Automatic approval rejected a combined command containing demo cleanup, credenti
 Goal remains active: private 30-day physical cleanup, broader deletion scope/API compatibility and full acceptance matrix remain incomplete; rerun final Docker checks after runtime changes, and keep real model verification explicitly unverified without configuration.
 
 Final script refinement verification: a second full `demo.mjs` create → verify → cleanup invocation succeeded against Docker, including the new session logout calls. The prior note that these refinements need a second invocation is now resolved. Fixture state was replaced with a content-free deletion receipt.
+
+## Private retention continuation — 2026-09-12
+
+- Additive migration `0003_skinny_spirit` records physical private/all-content purge timestamps on draft versions.
+- Immediate 30-day deadline guards cover private interview/draft reads and mutations, job-result reads, manual/AI drafting and AI validation. Published owner projections omit expired private fields before the sweep without claiming physical cleanup already happened.
+- Maintenance now deletes expired interview sessions/messages and associated AI artifacts/result caches, cancels pending/running model jobs, and clears unpublished version content while preserving version sequence/hash receipts. Public version text remains readable under its separate consent check; private auxiliary fields are removed. Automatic consent expiration does not prolong interview retention.
+- Source-first locking and both preflight/writeback checks prevent a provider reply from recreating content after expiry or cleanup. Existing original WorkBuddy evidence is untouched.
+- Verified: typecheck; full real-PostgreSQL/unit suite **28 files / 144 tests passed**. New tests cover immediate denial, physical cleanup, preserved public text, retained recent private material, empty association lists, repeated sweeps, zero provider requests for expired input, and late reply rejection after physical cleanup. One first-pass migration test saw a transient database authentication failure; isolated rerun and final full run passed without modifying credentials or weakening tests.
+- Docker is still running runtime revision `1f0f59e`; this migration/runtime change has not yet been included in a new Docker image. Final rebuild, OpenAPI export and acceptance remain required after the remaining API work.
+- Next: implement PRD `POST /api/me/data-deletion`, audit core route and T01-T22 coverage, update delivery docs and run final Docker acceptance. Real provider P4 remains unverified without independent model configuration.

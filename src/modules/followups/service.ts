@@ -8,14 +8,22 @@ import { requireCaseAuthor } from '../interviews/service.js';
 import { draftStatementSchema } from '../../ai/tasks.js';
 import { contentHash, validateStatements, type Evidence, type Statement } from '../../ai/evidence.js';
 import { hasActiveConsent, isPubliclyVisible } from '../sources/access.js';
+import { privateExpired, publicStatements, requirePrivateFresh } from './retention.js';
 
 export async function getDraft(db: Executor, id: string, auth: AuthContext) {
+  const [initial] = await db.select().from(followupVersions).where(eq(followupVersions.id, id));
+  if (!initial) throw AppError.notFound();
+  const [caseRow] = await db.select().from(followupCases).where(eq(followupCases.id, initial.caseId));
+  if (!caseRow || caseRow.authorUserId !== auth.userId) throw AppError.forbidden();
+  const [source] = await db.select({ deletedAt: sources.deletedAt }).from(sources).where(eq(sources.id, caseRow.sourceId)).for('update');
+  if (!source || source.deletedAt) throw AppError.withdrawn();
   const [draft] = await db.select().from(followupVersions).where(eq(followupVersions.id, id));
   if (!draft) throw AppError.notFound();
-  const [caseRow] = await db.select().from(followupCases).where(eq(followupCases.id, draft.caseId));
-  if (!caseRow || caseRow.authorUserId !== auth.userId) throw AppError.forbidden();
-  const [source] = await db.select({ deletedAt: sources.deletedAt }).from(sources).where(eq(sources.id, caseRow.sourceId));
-  if (!source || source.deletedAt) throw AppError.withdrawn();
+  if (draft.contentPurgedAt) throw AppError.withdrawn('Private content has been purged');
+  if (privateExpired(draft.updatedAt) || draft.privatePurgedAt) {
+    if (draft.status !== 'published') throw AppError.withdrawn('Private content retention period expired');
+    return { ...draft, statements: publicStatements(draft.statements), authorEdits: [], unresolvedItems: [], authorConfirmations: [], privateContentExpired: true };
+  }
   return draft;
 }
 
@@ -26,7 +34,8 @@ export async function draftEvidence(db: Executor, draft: typeof followupVersions
     if (snapshot) evidence.push({ id: `snapshot:${snapshot.id}`, text: snapshot.body ?? snapshot.excerpt ?? '', visibility: 'public' });
   }
   if (draft.interviewId) {
-    const messages = await db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, draft.interviewId));
+    const [session] = await db.select().from(interviewSessions).where(eq(interviewSessions.id, draft.interviewId));
+    const messages = session && !privateExpired(session.updatedAt) ? await db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, draft.interviewId)) : [];
     for (const message of messages) if (message.role === 'author' && !message.skipped && message.authorMessage) {
       evidence.push({ id: `message:${message.id}`, text: message.authorMessage, visibility: message.visibility === 'public' ? 'public' : 'private' });
     }
@@ -40,12 +49,15 @@ export async function draftEvidence(db: Executor, draft: typeof followupVersions
 
 export async function createManualDraft(ctx: ModuleContext, auth: AuthContext, interviewId: string) {
   return ctx.db.transaction(async tx => {
+    const [initial] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, interviewId));
+    if (!initial) throw AppError.notFound();
+    await requireCaseAuthor(tx, initial.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, interviewId));
     if (!session) throw AppError.notFound();
-    await requireCaseAuthor(tx, session.caseId, auth);
+    requirePrivateFresh(session.updatedAt, ctx.now());
     if (session.status !== 'finished') throw AppError.conflict('Finish the interview first');
     const [existing] = await tx.select().from(followupVersions).where(eq(followupVersions.interviewId, interviewId)).orderBy(desc(followupVersions.version)).limit(1);
-    if (existing) return existing;
+    if (existing) return getDraft(tx, existing.id, auth);
     const messages = await tx.select().from(interviewMessages).where(eq(interviewMessages.sessionId, interviewId)).orderBy(asc(interviewMessages.sequence));
     const statements: Statement[] = messages.filter(m => m.role === 'author' && m.authorMessage && !m.skipped).map(m => ({ id: m.id, text: m.authorMessage!, kind: 'author_report', evidence_refs: [`message:${m.id}`], visibility: m.visibility === 'public' ? 'public' : 'private' }));
     if (!statements.length) throw AppError.sourceIncomplete('No author answers to draft');

@@ -7,6 +7,7 @@ import { AppError } from '../../http/errors.js';
 import { hasActiveConsent, isVerifiedAuthor } from '../sources/access.js';
 import { createLlmClient } from '../../ai/client.js';
 import { AI_JOB_KINDS, interviewGenerateDedupeKey } from '../../ai/tasks.js';
+import { requirePrivateFresh } from '../followups/retention.js';
 
 export const messageInput = z.object({
   message: z.string().trim().min(1).max(8000).optional(),
@@ -38,6 +39,7 @@ export async function getInterview(db: Executor, id: string, auth: AuthContext) 
   const [session] = await db.select().from(interviewSessions).where(eq(interviewSessions.id, id));
   if (!session) throw AppError.notFound();
   if (session.ownerUserId !== auth.userId) throw AppError.forbidden();
+  requirePrivateFresh(session.updatedAt);
   const [ownerSource] = await db.select({ deletedAt: sources.deletedAt }).from(followupCases).innerJoin(sources, eq(sources.id, followupCases.sourceId)).where(eq(followupCases.id, session.caseId));
   if (!ownerSource || ownerSource.deletedAt) throw AppError.withdrawn();
   const messages = await db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, id)).orderBy(asc(interviewMessages.sequence));
@@ -69,7 +71,10 @@ export async function startInterview(ctx: ModuleContext, auth: AuthContext, case
     if (!['accepted', 'interviewing', 'paused'].includes(caseRow.status)) throw AppError.conflict('Accept the case before interviewing');
     if (!await hasActiveConsent(tx, source.id, 'private_interview', auth.userId)) throw AppError.consentRequired();
     const [existing] = await tx.select().from(interviewSessions).where(and(eq(interviewSessions.caseId, caseId), sql`${interviewSessions.status} in ('active','paused')`));
-    if (existing) return { session: existing, job_id: null, deduped: true };
+    if (existing) {
+      requirePrivateFresh(existing.updatedAt, ctx.now());
+      return { session: existing, job_id: null, deduped: true };
+    }
     const [snapshot] = await tx.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, source.id)).orderBy(desc(sourceSnapshots.version)).limit(1);
     if (!snapshot) throw AppError.sourceIncomplete();
     const configured = createLlmClient(ctx.env, ctx.logger).configured;
@@ -89,6 +94,7 @@ export async function saveMessage(ctx: ModuleContext, auth: AuthContext, id: str
     const { source } = await requireCaseAuthor(tx, initial.session.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
     if (!session) throw AppError.notFound();
+    requirePrivateFresh(session.updatedAt, ctx.now());
     const [duplicate] = await tx.select().from(interviewMessages).where(and(eq(interviewMessages.sessionId, id), eq(interviewMessages.clientMessageId, input.client_message_id)));
     if (duplicate) {
       if (duplicate.authorMessage !== (input.message ?? null) || duplicate.skipped !== input.skip || duplicate.visibility !== input.visibility) throw AppError.conflict('Idempotency key reused with different content');
@@ -111,6 +117,7 @@ export async function transitionInterview(ctx: ModuleContext, auth: AuthContext,
     const { source } = await requireCaseAuthor(tx, initial.session.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
     if (!session || session.revision !== expectedVersion) throw AppError.conflict('Interview version changed');
+    requirePrivateFresh(session.updatedAt, ctx.now());
     if (action === 'resume' ? session.status !== 'paused' : !['active', 'paused'].includes(session.status)) throw AppError.conflict('Invalid interview transition');
     if (action === 'resume' && !await hasActiveConsent(tx, source.id, 'private_interview', auth.userId)) throw AppError.consentRequired();
     // Source lock serializes cancellation against model writeback. The handler also checks revision.

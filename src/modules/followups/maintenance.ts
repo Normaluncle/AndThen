@@ -3,6 +3,7 @@ import { consents, sources, notifications, followupCases, aiRuns, jobs } from '.
 import type { ModuleContext } from '../../shared/types.js';
 import type { JobHandlerRegistry } from '../../jobs/types.js';
 import { withJobFence } from '../../jobs/transaction.js';
+import { purgeExpiredPrivateContent } from './retention-worker.js';
 
 const INTERVAL_MS = 10 * 60 * 1000;
 
@@ -13,6 +14,7 @@ export async function seedMaintenance(ctx: ModuleContext, next = false) {
 
 export function registerMaintenanceJobs(ctx: ModuleContext, registry: JobHandlerRegistry) {
   registry.register('maintenance.consents', async job => {
+    const retention = await purgeExpiredPrivateContent(ctx, job);
     const candidates = await ctx.db.select({ id: sources.id }).from(sources).where(sql`exists (
       select 1 from consents c where c.source_id=${sources.id} and c.status='granted'
       and ((c.expires_at is not null and c.expires_at <= ${ctx.now()})
@@ -34,7 +36,7 @@ export function registerMaintenanceJobs(ctx: ModuleContext, registry: JobHandler
         expired += updated.length;
         if (updated.some(c => c.purpose === 'external_model_processing' || c.purpose === 'private_interview')) {
           await tx.execute(sql`update jobs set status='cancelled', finished_at=now(), lease_owner=null, lease_expires_at=null where kind like 'ai.%' and status in ('queued','running') and payload->>'source_id'=${source.id}`);
-          await tx.execute(sql`update interview_sessions set mode='manual', revision=revision+1, stop_reason='consent_expired', updated_at=now() where case_id in (select id from followup_cases where source_id=${source.id}) and status in ('active','paused')`);
+          await tx.execute(sql`update interview_sessions set mode='manual', revision=revision+1, stop_reason='consent_expired' where case_id in (select id from followup_cases where source_id=${source.id}) and status in ('active','paused')`);
           await tx.update(aiRuns).set({ status: 'cancelled', output: null, errorCode: 'consent_expired', finishedAt: ctx.now() }).where(and(eq(aiRuns.sourceId, source.id), sql`${aiRuns.status} in ('queued','running')`));
         }
         const activePublic = await tx.select({ id: consents.id }).from(consents).where(and(eq(consents.sourceId, source.id), eq(consents.purpose, 'demo_public_display'), eq(consents.status, 'granted'), sql`(${consents.expiresAt} is null or ${consents.expiresAt} > ${ctx.now()})`)).limit(1);
@@ -52,6 +54,6 @@ export function registerMaintenanceJobs(ctx: ModuleContext, registry: JobHandler
       )`));
     });
     await seedMaintenance(ctx, true);
-    return { data: { expired_consents: expired, checked_sources: candidates.length } };
+    return { data: { expired_consents: expired, checked_sources: candidates.length, ...retention } };
   });
 }

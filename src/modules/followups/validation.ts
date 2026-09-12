@@ -16,6 +16,7 @@ import { AI_JOB_KINDS, draftStatementSchema, validationResultSchema } from '../.
 import { PROMPTS, PROMPT_VERSION } from '../../ai/prompts.js';
 import { createLlmClient } from '../../ai/client.js';
 import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
+import { requirePrivateFresh } from './retention.js';
 
 export const registerValidationRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
@@ -50,6 +51,8 @@ export function registerValidationJobs(ctx: ModuleContext, registry: JobHandlerR
       const [draft] = await db.select().from(followupVersions).where(eq(followupVersions.id, p.draft_id));
       const [caseRow] = draft ? await db.select().from(followupCases).where(eq(followupCases.id, draft.caseId)) : [];
       if (!draft || caseRow?.sourceId !== source.id || caseRow.authorUserId !== p.owner_user_id || draft.contentHash !== p.content_hash || !['draft', 'confirmed'].includes(draft.status)) throw new JobLeaseLostError(job.job.id, 'draft changed');
+      requirePrivateFresh(draft.updatedAt, ctx.now());
+      if (draft.contentPurgedAt) throw new JobLeaseLostError(job.job.id, 'draft purged');
       const [latest] = await db.select().from(followupVersions).where(eq(followupVersions.caseId, draft.caseId)).orderBy(desc(followupVersions.version)).limit(1);
       if (latest?.id !== draft.id) throw new JobLeaseLostError(job.job.id, 'draft replaced');
       return draft;

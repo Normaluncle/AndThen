@@ -547,6 +547,8 @@ export const followupVersions = pgTable(
     authorConfirmations: jsonb('author_confirmations').$type<unknown[]>().notNull().default([]),
     contentHash: text('content_hash').notNull(),
     aiAssisted: boolean('ai_assisted').notNull().default(false),
+    privatePurgedAt: timestamp('private_purged_at', { withTimezone: true }),
+    contentPurgedAt: timestamp('content_purged_at', { withTimezone: true }),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, { onDelete: 'set null' }),
     confirmedAt: timestamp('confirmed_at', { withTimezone: true }),
     publishedAt: timestamp('published_at', { withTimezone: true }),
