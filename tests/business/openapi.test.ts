@@ -41,7 +41,8 @@ describe('business routes appear in the OpenAPI document', () => {
       expect(paths, `missing documented route ${expected}`).toContain(expected);
     }
 
-    // Not ours: the AI module owns the analyze route.
-    expect(paths).not.toContain('/api/sources/{id}/analyze');
+    // The integrated AI handlers now publish their contracts alongside business routes.
+    expect(paths).toContain('/api/sources/{id}/analyze');
+    expect(paths).toContain('/api/drafts/{id}/validate');
   });
 });

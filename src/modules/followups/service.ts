@@ -1,7 +1,7 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Executor } from '../../db/client.js';
-import { followupCases, followupVersions, interviewSessions, interviewMessages, sourceSnapshots, sources, interests, outbox, notifications } from '../../db/schema.js';
+import { jobs, aiRuns, followupCases, followupVersions, interviewSessions, interviewMessages, sourceSnapshots, sources, interests, outbox, notifications } from '../../db/schema.js';
 import type { ModuleContext, AuthContext } from '../../shared/types.js';
 import { AppError } from '../../http/errors.js';
 import { requireCaseAuthor } from '../interviews/service.js';
@@ -19,7 +19,7 @@ export async function getDraft(db: Executor, id: string, auth: AuthContext) {
   return draft;
 }
 
-async function draftEvidence(db: Executor, draft: typeof followupVersions.$inferSelect): Promise<Evidence[]> {
+export async function draftEvidence(db: Executor, draft: typeof followupVersions.$inferSelect): Promise<Evidence[]> {
   const evidence: Evidence[] = [];
   if (draft.snapshotId) {
     const [snapshot] = await db.select().from(sourceSnapshots).where(eq(sourceSnapshots.id, draft.snapshotId));
@@ -79,6 +79,7 @@ export async function confirmDraft(ctx: ModuleContext, auth: AuthContext, id: st
     const statements = z.array(draftStatementSchema).parse(draft.statements);
     const validation = validateStatements(statements, await draftEvidence(tx, draft));
     if (validation.blocking || validation.draft_content_hash !== hash) throw AppError.sourceIncomplete('Draft evidence validation failed');
+    await requireNoModelBlock(tx, id, hash);
     if (itemIds.length !== statements.length || new Set(itemIds).size !== itemIds.length || statements.some(s => !itemIds.includes(s.id))) throw AppError.validation('Confirm every statement exactly once');
     const [confirmed] = await tx.update(followupVersions).set({ status: 'confirmed', authorConfirmations: itemIds.map(statementId => ({ statement_id: statementId, content_hash: hash, user_id: auth.userId })), confirmedAt: ctx.now(), updatedAt: ctx.now() }).where(eq(followupVersions.id, id)).returning();
     return confirmed!;
@@ -99,6 +100,7 @@ export async function publishDraft(ctx: ModuleContext, auth: AuthContext, id: st
     if (!statements.some(s => s.visibility === 'public')) throw AppError.sourceIncomplete('No public statements');
     const validation = validateStatements(statements, await draftEvidence(tx, draft));
     if (validation.blocking || validation.draft_content_hash !== hash || draft.authorConfirmations.length !== statements.length) throw AppError.sourceIncomplete('Confirmation or evidence no longer valid');
+    await requireNoModelBlock(tx, id, hash);
     if (caseRow.publishedVersionId) await tx.update(followupVersions).set({ status: 'superseded', updatedAt: ctx.now() }).where(eq(followupVersions.id, caseRow.publishedVersionId));
     await tx.update(followupVersions).set({ status: 'published', publishedAt: ctx.now(), updatedAt: ctx.now() }).where(eq(followupVersions.id, id));
     await tx.update(followupCases).set({ status: 'published', publishedVersionId: id, updatedAt: ctx.now() }).where(eq(followupCases.id, draft.caseId));
@@ -107,6 +109,14 @@ export async function publishDraft(ctx: ModuleContext, auth: AuthContext, id: st
     await ctx.jobs.enqueue({ kind: 'followup.notify', dedupeKey: `notify:${id}`, payload: { source_id: source.id, case_id: draft.caseId, version_id: id } }, tx);
     return { version_id: id, deduped: false };
   });
+}
+
+async function requireNoModelBlock(db: Executor, draftId: string, hash: string) {
+  const [pending] = await db.select({ id: jobs.id }).from(jobs).where(and(eq(jobs.kind, 'ai.validate'), sql`${jobs.payload}->>'draft_id'=${draftId}`, sql`${jobs.status} in ('queued','running')`)).limit(1);
+  if (pending) throw AppError.conflict('Wait for the requested draft validation');
+  const [block] = await db.select({ id: aiRuns.id }).from(aiRuns).where(and(eq(aiRuns.task, 'ai_d_val'), eq(aiRuns.status, 'succeeded'),
+    sql`${aiRuns.output}->>'draft_id'=${draftId}`, sql`${aiRuns.output}->>'draft_content_hash'=${hash}`, sql`${aiRuns.output}->>'blocking'='true'`)).limit(1);
+  if (block) throw AppError.sourceIncomplete('Validation findings require a new author-edited draft');
 }
 
 export async function withdrawFollowup(ctx: ModuleContext, auth: AuthContext, id: string) {

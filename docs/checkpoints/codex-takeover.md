@@ -18,7 +18,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 
 ## Still required before goal completion
 
-1. AI-A analysis, AI-C optional structured drafting, AI-D validation routes/handlers and usage/input/output/concurrency quotas; case review transition. B implemented; prompts alone do not implement other stages.
+1. AI-C structured drafting, shared usage/input/output/concurrency quotas and case review transition. AI-A, B and D now have handlers and tests; real provider evaluation remains unverified.
 2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
 4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
@@ -46,3 +46,11 @@ The preceding turn made concrete progress (commit `af5adac`), not a wait or no-p
 Implemented `POST /api/research/events` with strict event allowlist, server-side identity/cohort/exclusion, source/public-version checks, concurrent replay deduplication and conflict detection. Implemented scoped aggregate `GET /api/research/export`, excluding test/author/prompted behavior, with explicit matching denominator and null missing rates. Export contains no raw participant IDs or content. Invitation figures use current outcome among records whose windows have completed, with an explicit limitation because reply timestamps are not stored.
 
 Read `skills/backend-contracts/SKILL.md` and `skills/git-delivery/SKILL.md`. Contract documentation: `docs/research-api.md`. Verification: bundled `pnpm.cmd typecheck` passed; `pnpm.cmd test` passed 22 files / 129 tests. Focused research suite covers concurrent event replay, forged cohort/business events, researcher scope isolation, exclusion and null denominator behavior. Goal remains active; remaining AI stages, retention, Docker final build/restore/performance and real model verification remain outstanding.
+
+## Continuation evidence — AI-A and AI-D
+
+Previous turn was progress (`f34a350`). Implemented source analysis routes/worker with source/consent/hash/risk gates, strict candidate/citation/time-basis validation, fenced writeback, truthful deterministic no-send risk result, and recorded provider usage. Added draft validation routes/worker with rule-only downgrade, current-version checks, per-draft persisted findings, pending validation gate and blocking-findings checks at confirmation/publication. Tests use a local simulated HTTP provider, never real author/model evidence. Read `skills/ai-evaluation/SKILL.md` in addition to previously read backend-contracts/git-delivery. See `docs/ai-api.md`.
+
+Outstanding review: stale/cancelled AI jobs should consistently close their audit run status without persisting a late output (currently some preflight/finalization rejection paths can leave a `running` audit row). AI-C, shared quotas, case review, retention and final Docker acceptance remain required.
+
+Verification for AI-A/D: typecheck passed. Initial full suite found an obsolete assertion that the analysis route must not exist; changed it to require the integrated analysis and validation OpenAPI paths. Rerun passed all 24 files / 132 tests. No real provider credentials were used. This continuation is concrete implementation/test progress, and the goal is still active.
