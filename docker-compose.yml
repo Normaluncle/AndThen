@@ -1,0 +1,102 @@
+name: andthen
+
+x-app-env: &app-env
+  NODE_ENV: production
+  LOG_LEVEL: info
+  DATABASE_URL: postgres://andthen:${POSTGRES_PASSWORD:-andthen}@db:5432/andthen
+  DB_POOL_MAX: "10"
+  PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://127.0.0.1:8080}
+  LLM_BASE_URL: ${LLM_BASE_URL:-}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-}
+  SESSION_TTL_SECONDS: "2592000"
+  LOGIN_TOKEN_TTL_SECONDS: "3600"
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: andthen
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-andthen}
+      POSTGRES_DB: andthen
+      # Pin PGDATA inside the mounted volume (stable across image layouts).
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - andthen-pgdata:/var/lib/postgresql/data
+    # Deliberately NO published ports: the database is not reachable from the
+    # LAN. docker-compose.test.yml adds a 127.0.0.1-only port for integration tests.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U andthen -d andthen"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
+    networks: [internal]
+    restart: unless-stopped
+
+  migrate:
+    build:
+      context: .
+      target: runtime
+    image: andthen-backend:local
+    command: ["node", "dist/db/migrate.js"]
+    environment: *app-env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks: [internal]
+    restart: "no"
+
+  api:
+    build:
+      context: .
+      target: runtime
+    image: andthen-backend:local
+    command: ["node", "dist/server.js"]
+    environment: *app-env
+    ports:
+      - "127.0.0.1:${API_PORT:-8080}:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8080/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks: [internal]
+    restart: unless-stopped
+
+  worker:
+    image: andthen-backend:local
+    build:
+      context: .
+      target: runtime
+    command: ["node", "dist/worker.js"]
+    environment:
+      <<: *app-env
+      WORKER_CONCURRENCY: "4"
+      JOB_LEASE_SECONDS: "60"
+      JOB_POLL_INTERVAL_MS: "1000"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    networks: [internal]
+    restart: unless-stopped
+
+volumes:
+  andthen-pgdata:
+    name: andthen-pgdata
+
+networks:
+  internal:
+    driver: bridge

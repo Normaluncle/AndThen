@@ -1,0 +1,4 @@
+# pnpm reads build-script allowlists from here (not package.json).
+# esbuild ships a platform binary; its postinstall only validates the install.
+allowBuilds:
+  esbuild: true

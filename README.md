@@ -1,3 +1,30 @@
+# AndThen（然后呢？）项目仓库
+
+本仓库包含两部分内容。
+
+## 1. 后端工程（当前主线）
+
+纯后端：Node 24 · TypeScript · Fastify 5 · Postgres 18 · Drizzle · Vitest ·
+OpenAPI。不依赖任何第三方平台 API，不做前端。
+
+| 文档 | 内容 |
+|---|---|
+| [BACKEND.md](BACKEND.md) | 入口：快速开始、脚本、环境变量、HTTP 路由、Docker、测试 |
+| [AGENTS.md](AGENTS.md) | 开发代理工作约定（必读）：模块契约、如何加路由/任务处理器 |
+| [docs/architecture.md](docs/architecture.md) | 架构：请求生命周期、认证、任务队列语义、数据模型 |
+| [docs/contracts.md](docs/contracts.md) | 冻结接口契约：响应封装、错误码、模块/任务/AI/数据库契约 |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | 实施计划、模块分工、PRD 需求与测试覆盖映射 |
+| [docs/checkpoints/foundation.md](docs/checkpoints/foundation.md) | 基础设施检查点：证据、导出签名、阻塞项 |
+| [skills/](skills/) | 五个项目技能：backend-contracts / database-migrations / ai-evaluation / docker-ops / git-delivery |
+
+当前状态：基础设施（identity + 数据库 + 任务队列）已完成并通过测试；
+业务模块 `sources` / `cases` / `interviews` / `followups` / `research` 为预留
+注册位，尚未实现。
+
+---
+
+## 附：Codex 调用 WorkBuddy 探针（历史验证记录，原文保留）
+
 # Codex 调用 WorkBuddy：实测结果与使用方法
 
 验证日期：2026-09-12。环境为 Windows、WorkBuddy AI 5.5.2，使用安装包内置 CodeBuddy CLI。请求参数和响应元数据中的模型均为 `deepseek-v4.1-flash`。

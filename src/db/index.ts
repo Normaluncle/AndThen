@@ -1,0 +1,28 @@
+export * from './client.js';
+export * as tables from './schema.js';
+export type {
+  AiRunRow,
+  AuditLogRow,
+  AuthorVerificationRow,
+  ConsentRow,
+  DeletionJobRow,
+  FollowupCaseRow,
+  FollowupVersionRow,
+  IdempotencyKeyRow,
+  InterestRow,
+  InterviewMessageRow,
+  InterviewSessionRow,
+  InvitationRow,
+  JobRow,
+  LoginTokenRow,
+  NewJobRow,
+  NewUserRow,
+  NotificationRow,
+  OutboxRow,
+  ResearchEventRow,
+  SessionRow,
+  SourceRow,
+  SourceSnapshotRow,
+  UserRow,
+  WorkerHeartbeatRow,
+} from './schema.js';
