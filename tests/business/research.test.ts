@@ -58,4 +58,28 @@ describe('research observations and scoped aggregate exports', () => {
     for (const value of [reader.user.id, author.user.id, story.snapshot.excerpt!]) expect(result.body).not.toContain(value);
     expect((await h.app.inject({ method: 'POST', url: '/api/research/events', headers: auth(reader.token), payload: { source_id: story.source.id, event_type: 'followup_view', client_event_id: 'wrong-followup', followup_version_id: crypto.randomUUID() } })).statusCode).toBe(404);
   });
+  it('exports the requested half-open window and cohort without identities or free-form properties', async () => {
+    const author = await seedUser(h, 'author', 'external');
+    const researcher = await seedUser(h, 'researcher', 'team');
+    const stranger = await seedUser(h, 'researcher', 'team');
+    const reader = await seedUser(h, 'reader', 'external');
+    const story = await seedPublishedStory(h, { author: author.user, researcher: researcher.user });
+    await h.ctx.db.update(sources).set({ provenance: 'real_authorized' }).where(eq(sources.id, story.source.id));
+    for (const [at, cohort] of [['2026-01-01T00:00:00Z', 'external'], ['2026-01-02T00:00:00Z', 'external'], ['2026-01-02T12:00:00Z', 'team'], ['2026-01-03T00:00:00Z', 'external']] as const) {
+      await h.ctx.db.insert(researchEvents).values({ sourceId: story.source.id, readerKey: reader.user.id, eventType: 'source_view', cohort, occurredAt: new Date(at), properties: { excluded: false, private_notes: 'DO_NOT_EXPORT_THIS', email: 'private@example.test' } });
+    }
+    const url = `/api/admin/research-export?source_id=${story.source.id}&from=2026-01-02T00:00:00Z&to=2026-01-03T00:00:00Z&cohort=external`;
+    expect((await h.app.inject({ url, headers: auth(stranger.token) })).statusCode).toBe(403);
+    const result = await h.app.inject({ url, headers: auth(researcher.token) });
+    expect(result.statusCode, result.body).toBe(200);
+    expect(result.json().data.events).toEqual([{ event_type: 'source_view', cohort: 'external', occurred_on: '2026-01-02', excluded: false, feedback: null }]);
+    expect(result.json().data.cohorts).toHaveLength(1);
+    expect(result.json().data.cohorts[0].unique_source_viewers).toBe(1);
+    expect(result.json().data.window).toMatchObject({ bounds: '[from,to)', follower_state: 'current_at_export' });
+    for (const secret of [reader.user.id, author.user.id, 'DO_NOT_EXPORT_THIS', 'private@example.test', story.snapshot.excerpt!]) expect(result.body).not.toContain(secret);
+    const reversed = url.replace('from=2026-01-02', 'from=2026-01-04');
+    expect((await h.app.inject({ url: reversed, headers: auth(researcher.token) })).statusCode).toBe(400);
+    const empty = url.replace('cohort=external', 'cohort=absent');
+    expect((await h.app.inject({ url: empty, headers: auth(researcher.token) })).json().data.events).toEqual([]);
+  });
 });

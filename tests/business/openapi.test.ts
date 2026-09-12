@@ -35,6 +35,7 @@ describe('business routes appear in the OpenAPI document', () => {
       '/api/me/following',
       '/api/me/notifications',
       '/api/me/data-deletion',
+      '/api/admin/research-export',
       '/api/interviews/{id}/finish',
       '/api/cases',
       '/api/cases/{id}',

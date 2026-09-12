@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleRegistrar } from '../../shared/types.js';
-import { researchEvents, sources, followupCases, followupVersions, interests, invitations, idempotencyKeys } from '../../db/schema.js';
+import { researchEvents, sources, followupCases, followupVersions, interests, invitations, idempotencyKeys, users } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { AppError, success } from '../../http/errors.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
@@ -21,6 +21,13 @@ const eventInput = z.object({
   if (input.event_type === 'followup_view' && !input.followup_version_id) ctx.addIssue({ code: 'custom', message: 'followup_view needs a published version' });
   if ((input.event_type === 'feedback') !== !!input.feedback) ctx.addIssue({ code: 'custom', message: 'feedback value is only required for feedback events' });
 });
+
+const exportQuery = z.object({
+  source_id: z.string().uuid(),
+  from: z.string().datetime({ offset: true }).optional(),
+  to: z.string().datetime({ offset: true }).optional(),
+  cohort: z.string().trim().min(1).max(80).optional(),
+}).strict().refine(q => !q.from || !q.to || Date.parse(q.from) < Date.parse(q.to), 'from must precede to');
 
 export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
@@ -59,7 +66,7 @@ export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
     return success(req.id, data);
   });
 
-  api.get('/research/export', { preHandler: [app.authenticate, app.requireRole('researcher', 'admin')], schema: { ...common, summary: 'Export per-source aggregate research metrics with explicit denominators; no raw identities or text', querystring: z.object({ source_id: z.string().uuid() }).strict(),
+  for (const path of ['/research/export', '/admin/research-export']) api.get(path, { preHandler: [app.authenticate, app.requireRole('researcher', 'admin')], schema: { ...common, summary: 'Export scoped deidentified events and cohort metrics within an optional half-open UTC window', querystring: exportQuery,
     response: { 200: envelopeSchema(z.record(z.unknown())), 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema } } }, async req => {
     const auth = requireAuthContext(req);
     const data = await ctx.db.transaction(async tx => {
@@ -67,10 +74,14 @@ export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
       if (!source || source.deletedAt) throw AppError.notFound();
       const access = await resolveSourceAccess(tx, source, auth);
       if (!access.isAdmin && !access.isImporter && !access.isAssignedResearcher) throw AppError.forbidden();
-      const events = await tx.select().from(researchEvents).where(eq(researchEvents.sourceId, source.id));
-      const follows = await tx.select().from(interests).where(eq(interests.sourceId, source.id));
+      const from = req.query.from ? new Date(req.query.from) : null;
+      const to = req.query.to ? new Date(req.query.to) : ctx.now();
+      if (from && from >= to) throw AppError.validation('from must precede to');
+      const events = await tx.select().from(researchEvents).where(and(eq(researchEvents.sourceId, source.id), from ? sql`${researchEvents.occurredAt} >= ${from}` : undefined, sql`${researchEvents.occurredAt} < ${to}`, req.query.cohort ? eq(researchEvents.cohort, req.query.cohort) : undefined)).orderBy(researchEvents.occurredAt, researchEvents.id).limit(10001);
+      if (events.length > 10000) throw AppError.validation('Export exceeds 10000 events; narrow the date window or cohort');
+      const follows = await tx.select().from(interests).where(and(eq(interests.sourceId, source.id), req.query.cohort ? eq(interests.cohort, req.query.cohort) : undefined));
       const cases = await tx.select().from(followupCases).where(eq(followupCases.sourceId, source.id));
-      const inviteRows = await tx.select({ invitation: invitations }).from(invitations).innerJoin(followupCases, eq(followupCases.id, invitations.caseId)).where(eq(followupCases.sourceId, source.id));
+      const inviteRows = await tx.select({ invitation: invitations, authorCohort: users.cohort }).from(invitations).innerJoin(followupCases, eq(followupCases.id, invitations.caseId)).leftJoin(users, eq(users.id, followupCases.authorUserId)).where(and(eq(followupCases.sourceId, source.id), from ? sql`${invitations.sentAt} >= ${from}` : undefined, sql`${invitations.sentAt} < ${to}`, req.query.cohort ? eq(users.cohort, req.query.cohort) : undefined));
       const authors = new Set(cases.map(c => c.authorUserId).filter(Boolean));
       if (source.sourceType === 'author_paste' && source.createdByUserId) authors.add(source.createdByUserId);
       const eligible = events.filter(e => e.properties.excluded === false && !isExcludedCohort(e.cohort) && e.readerKey && !authors.has(e.readerKey) && source.provenance === 'real_authorized');
@@ -86,11 +97,15 @@ export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
           excluded_event_count: events.filter(e => e.cohort === cohort).length - cohortEvents.length };
       });
       const mature = inviteRows.filter(({ invitation: i }) => i.observationDeadline && i.observationDeadline <= ctx.now());
-      const eligibleInvites = source.provenance === 'real_authorized' ? mature : [];
+      const eligibleInvites = source.provenance === 'real_authorized' ? mature.filter(row => !isExcludedCohort(row.authorCohort ?? 'unassigned')) : [];
       const accepted = eligibleInvites.filter(({ invitation: i }) => i.result === 'accepted').length;
+      const eligibleIds = new Set(eligible.map(e => e.id));
+      const allowedTypes = new Set(['source_view', 'followup_view', 'feedback', 'interest_changed', 'consent_revoked', 'case_created', 'invitation_recorded', 'accepted', 'contact_declined']);
       return { export_id: randomUUID(), generated_at: ctx.now().toISOString(), source_id: source.id, provenance: source.provenance, cohorts: groups,
+        window: { from: from?.toISOString() ?? null, to: to.toISOString(), bounds: '[from,to)', cohort: req.query.cohort ?? null, follower_state: 'current_at_export', invitation_cohort: 'bound_author_current_cohort' },
+        events: events.map(e => ({ event_type: allowedTypes.has(e.eventType) ? e.eventType : 'other', cohort: e.cohort, occurred_on: e.occurredAt.toISOString().slice(0, 10), excluded: !eligibleIds.has(e.id), feedback: ['useful', 'not_useful', 'uncertain'].includes(String(e.properties.feedback)) ? e.properties.feedback : null })),
         invitation_observations: { recorded: inviteRows.length, window_complete: mature.length, pending_or_unknown_window: inviteRows.length - mature.length, eligible_denominator: eligibleInvites.length, currently_accepted_completed_records: accepted, current_acceptance_ratio: eligibleInvites.length ? accepted / eligibleInvites.length : null },
-        limitations: ['Convenience sample; not a platform-wide conversion estimate', 'Exposure ratio uses distinct viewers matched to current active natural follows', 'No exposure denominator produces null, never a fabricated zero rate', 'Test, prompted and author behavior are excluded; feedback counts are observations, not unique people', 'Invitation acceptance reflects current status, not the unrecorded response time within a fixed observation window', 'No invitation sends or recruitment are performed by this API'] };
+        limitations: ['Convenience sample; not a platform-wide conversion estimate', 'Exposure ratio uses windowed distinct viewers matched to current active natural follows, not historical follow state', 'Event times are coarsened to UTC day; identities, free text and arbitrary event properties are omitted', 'Invitation date filters use sent_at; unknown send times are excluded when a date bound is supplied', 'Cohort filtering uses event cohort for events and current bound-author cohort for invitations; these denominators must not be pooled', 'No exposure denominator produces null, never a fabricated zero rate', 'Test, prompted and author behavior are excluded; feedback counts are observations, not unique people', 'Invitation acceptance reflects current status, not the unrecorded response time within a fixed observation window', 'No invitation sends or recruitment are performed by this API'] };
     });
     return success(req.id, data);
   });

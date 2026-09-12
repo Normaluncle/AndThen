@@ -125,3 +125,11 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Found and fixed two concrete chapter-16 gaps: `/api/me/notifications` now uses the existing owner-scoped notification handler; finish now returns an evidence-preserving draft and pending confirmation items. Repeated/concurrent finish requests reuse one draft. Skipped-only interviews return an explicit null draft rather than fabricated content.
 - Typecheck passed. Affected suites passed (4 files / 11 tests); after adding the skipped-only regression, the full manual workflow suite passed both tests. No Docker rebuild or OpenAPI artifact refresh yet.
 - Outstanding requirements are now centralized in the acceptance matrix: whole-account scope, research export path/date/cohort/event contract, specific AI adversarial/budget/failure cases, final runtime and delivery documentation.
+
+## Research export contract continuation — 2026-09-12
+
+- Added `/api/admin/research-export` and extended both export paths with source-scoped authorization, optional ISO timestamp bounds and exact cohort filtering. Event windows use `[from,to)` and report normalized bounds.
+- Added deidentified event details using an explicit field/type allowlist, UTC-day timestamps and no user/event IDs, arbitrary properties or content. More than 10,000 matching events produces an explicit narrowing error, never a silently partial export.
+- Current follower snapshots and current bound-author invitation cohorts are labeled as such; invitation cohort exclusions now remove internal/test/unassigned author cohorts. Fixed-window response-time acceptance remains unimplemented and explicitly unclaimed.
+- Typecheck and affected tests passed: 3 files / 6 tests. The new real-PostgreSQL test proves lower-bound inclusion, upper-bound exclusion, cohort filtering, denied unrelated researcher, empty selection and private-property omission. OpenAPI route registration is tested; static artifact/final Docker refresh remain pending.
+- Updated research API and acceptance matrix. Next unresolved work remains account/interview deletion scope, specific AI budget/injection/failure regressions, fixed-window invitation evidence, and final runtime/documentation delivery.
