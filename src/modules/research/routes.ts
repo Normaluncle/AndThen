@@ -9,6 +9,7 @@ import { AppError, success } from '../../http/errors.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { isExcludedCohort, isPubliclyVisible, resolveSourceAccess } from '../sources/access.js';
 import { contentHash } from '../../ai/evidence.js';
+import { invitationWindows } from './invitation-windows.js';
 
 const eventInput = z.object({
   source_id: z.string().uuid(),
@@ -105,7 +106,8 @@ export const registerResearchRoutes: ModuleRegistrar = (app, ctx) => {
         window: { from: from?.toISOString() ?? null, to: to.toISOString(), bounds: '[from,to)', cohort: req.query.cohort ?? null, follower_state: 'current_at_export', invitation_cohort: 'bound_author_current_cohort' },
         events: events.map(e => ({ event_type: allowedTypes.has(e.eventType) ? e.eventType : 'other', cohort: e.cohort, occurred_on: e.occurredAt.toISOString().slice(0, 10), excluded: !eligibleIds.has(e.id), feedback: ['useful', 'not_useful', 'uncertain'].includes(String(e.properties.feedback)) ? e.properties.feedback : null })),
         invitation_observations: { recorded: inviteRows.length, window_complete: mature.length, pending_or_unknown_window: inviteRows.length - mature.length, eligible_denominator: eligibleInvites.length, currently_accepted_completed_records: accepted, current_acceptance_ratio: eligibleInvites.length ? accepted / eligibleInvites.length : null },
-        limitations: ['Convenience sample; not a platform-wide conversion estimate', 'Exposure ratio uses windowed distinct viewers matched to current active natural follows, not historical follow state', 'Event times are coarsened to UTC day; identities, free text and arbitrary event properties are omitted', 'Invitation date filters use sent_at; unknown send times are excluded when a date bound is supplied', 'Cohort filtering uses event cohort for events and current bound-author cohort for invitations; these denominators must not be pooled', 'No exposure denominator produces null, never a fabricated zero rate', 'Test, prompted and author behavior are excluded; feedback counts are observations, not unique people', 'Invitation acceptance reflects current status, not the unrecorded response time within a fixed observation window', 'No invitation sends or recruitment are performed by this API'] };
+        fixed_invitation_windows: invitationWindows(inviteRows, source.provenance, ctx.now()),
+        limitations: ['Convenience sample; not a platform-wide conversion estimate', 'Exposure ratio uses windowed distinct viewers matched to current active natural follows, not historical follow state', 'Event times are coarsened to UTC day; identities, free text and arbitrary event properties are omitted', 'Invitation date filters use sent_at; unknown send times are excluded when a date bound is supplied', 'Cohort filtering uses event cohort for events and current bound-author cohort for invitations; these denominators must not be pooled', 'No exposure denominator produces null, never a fabricated zero rate', 'Test, prompted and author behavior are excluded; feedback counts are observations, not unique people', 'Legacy current_acceptance_ratio ignores response timing; fixed_invitation_windows excludes unknown timing and separates cohorts and durations', 'No invitation sends or recruitment are performed by this API'] };
     });
     return success(req.id, data);
   });

@@ -27,7 +27,7 @@ Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP provi
 | T17 failure / quota | `llm-client.test.ts` timeout/retry/invalid transport; `interview-ai.test.ts` answer survives daily cap; queue tests | Need explicit full interview-handler 429/malformed JSON fallback assertions beyond adapter tests |
 | T18 restart / redeploy | Live fixture survived DB/API/worker restart and API/worker recreation; nonempty backup restore | Passed for `1f0f59e`; final-runtime repetition pending |
 | T19 no authorized result | Public query checks permission, tombstone and current published version | Explicit empty-list regression still needed; no real pilot claim |
-| T20 mixed windows / cohorts | `research.test.ts` scoped aggregate cohorts, date-boundary/cohort filtering, deidentified event allowlist, null denominator and exclusions | Date/event export implemented; fixed-window response timestamps remain missing, so current invitation acceptance is explicitly not a fixed-window rate |
+| T20 mixed windows / cohorts | `research.test.ts` date/cohort filtering, deidentified fields, fixed-duration window groups, deadline/late/unknown timing; `cases.test.ts` server-recorded response time | Backend reporting covered for new timestamped records; legacy missing times excluded rather than guessed. No real participant study claimed |
 | T21 private/public isolation | Source, case, interview, draft, notification and job owner checks; public statement projection tests | Covered sampled API paths; final core route sweep remains required |
 | T22 copied vs Zhihu published | No copy endpoint or Zhihu publisher; Demo publication is local only | Not applicable under backend scope; no external-publication success claim |
 

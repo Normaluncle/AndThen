@@ -133,3 +133,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Current follower snapshots and current bound-author invitation cohorts are labeled as such; invitation cohort exclusions now remove internal/test/unassigned author cohorts. Fixed-window response-time acceptance remains unimplemented and explicitly unclaimed.
 - Typecheck and affected tests passed: 3 files / 6 tests. The new real-PostgreSQL test proves lower-bound inclusion, upper-bound exclusion, cohort filtering, denied unrelated researcher, empty selection and private-property omission. OpenAPI route registration is tested; static artifact/final Docker refresh remain pending.
 - Updated research API and acceptance matrix. Next unresolved work remains account/interview deletion scope, specific AI budget/injection/failure regressions, fixed-window invitation evidence, and final runtime/documentation delivery.
+
+## Fixed invitation window continuation — 2026-09-12
+
+- Migration 0004 adds nullable invitation response time without fabricating historical values. Bound-author final decisions timestamp pending/no-response/replied records; first final outcomes are not overwritten by unrelated later case transitions.
+- Research exports now include fixed-duration, per-author-cohort groups with eligible denominator, on-time accepts/declines, late replies, no response and unknown timing. Deadline equality is included; invalid windows and unknown historical responses are excluded from the fixed-window denominator. The old current-state ratio remains explicitly labeled separately.
+- Verified migration from empty and regressions (3 files / 20 tests before extending prior-status coverage), followed by typecheck and 2 files / 17 tests covering pending, no-response and replied decisions. Database-backed boundary fixtures distinguish 24/48-hour groups, late-by-one-second, legacy-null responses, no-response and invalid windows.
+- Docker and static OpenAPI remain at earlier evidence revisions pending final rebuild. Goal still requires deletion scope closure, remaining AI behavioral regressions and final delivery/acceptance.

@@ -219,8 +219,10 @@ describe('cases: create, invitation records and author decisions', () => {
     expect(researcherDecision.statusCode).toBe(404);
   });
 
-  it('accepts a decision only from the bound author', async () => {
+  it.each(['pending', 'no_response_in_window', 'replied'] as const)('records bound-author acceptance time after %s', async prior => {
     const setup = await setupBoundCase(h);
+    const [invitation] = await h.ctx.db.insert(invitations).values({ caseId: setup.caseId, result: prior }).returning();
+    const before = Date.now();
     const res = await h.app.inject({
       method: 'POST',
       url: `/api/cases/${setup.caseId}/decision`,
@@ -229,6 +231,9 @@ describe('cases: create, invitation records and author decisions', () => {
     });
     expect(res.statusCode).toBe(200);
     expect(res.json().data.case.status).toBe('accepted');
+    const [saved] = await h.ctx.db.select().from(invitations).where(eq(invitations.id, invitation!.id));
+    expect(saved!.respondedAt!.getTime()).toBeGreaterThanOrEqual(before);
+    expect(saved!.respondedAt!.getTime()).toBeLessThanOrEqual(Date.now());
   });
 
   it('blocks any further invitation after a decline, and never auto-reopens the case', async () => {

@@ -419,13 +419,13 @@ export async function recordDecision(
     if (declineFlag) {
       await tx
         .update(invitations)
-        .set({ result: 'declined' })
-        .where(and(eq(invitations.caseId, caseId), eq(invitations.result, 'pending')));
+        .set({ result: 'declined', respondedAt: now })
+        .where(and(eq(invitations.caseId, caseId), sql`${invitations.result} in ('pending', 'no_response_in_window', 'replied')`));
     } else {
       await tx
         .update(invitations)
-        .set({ result: 'accepted' })
-        .where(and(eq(invitations.caseId, caseId), eq(invitations.result, 'pending')));
+        .set({ result: 'accepted', respondedAt: now })
+        .where(and(eq(invitations.caseId, caseId), sql`${invitations.result} in ('pending', 'no_response_in_window', 'replied')`));
     }
 
     await writeAudit(tx, {

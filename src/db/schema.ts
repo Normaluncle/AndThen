@@ -449,6 +449,7 @@ export const invitations = pgTable(
     sentAt: timestamp('sent_at', { withTimezone: true }).notNull().defaultNow(),
     observationDeadline: timestamp('observation_deadline', { withTimezone: true }),
     result: invitationResultEnum('result').notNull().default('pending'),
+    respondedAt: timestamp('responded_at', { withTimezone: true }),
     consentVersion: text('consent_version'),
     notes: text('notes'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

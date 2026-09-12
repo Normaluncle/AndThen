@@ -82,4 +82,27 @@ describe('research observations and scoped aggregate exports', () => {
     const empty = url.replace('cohort=external', 'cohort=absent');
     expect((await h.app.inject({ url: empty, headers: auth(researcher.token) })).json().data.events).toEqual([]);
   });
+  it('separates fixed-duration windows, late acceptance, legacy unknown times and missing responses', async () => {
+    const author = await seedUser(h, 'author', 'external');
+    const researcher = await seedUser(h, 'researcher', 'team');
+    const story = await seedPublishedStory(h, { author: author.user, researcher: researcher.user });
+    await h.ctx.db.update(sources).set({ provenance: 'real_authorized' }).where(eq(sources.id, story.source.id));
+    const base = { caseId: story.followupCase.id, sentAt: new Date('2026-01-01T00:00:00Z'), observationDeadline: new Date('2026-01-02T00:00:00Z') };
+    await h.ctx.db.insert(invitations).values([
+      { ...base, result: 'accepted', respondedAt: new Date('2026-01-02T00:00:00Z') },
+      { ...base, result: 'accepted', respondedAt: new Date('2026-01-02T00:00:01Z') },
+      { ...base, result: 'accepted' },
+      { ...base, result: 'pending' },
+      { ...base, result: 'no_response_in_window' },
+      { ...base, result: 'declined', observationDeadline: new Date('2026-01-03T00:00:00Z'), respondedAt: new Date('2026-01-02T01:00:00Z') },
+      { ...base, observationDeadline: new Date('2025-12-31T00:00:00Z') },
+    ]);
+    const res = await h.app.inject({ url: `/api/admin/research-export?source_id=${story.source.id}`, headers: auth(researcher.token) });
+    expect(res.statusCode, res.body).toBe(200);
+    const windows = res.json().data.fixed_invitation_windows;
+    expect(windows.invalid_windows).toBe(1);
+    expect(windows.groups).toHaveLength(2);
+    expect(windows.groups[0]).toMatchObject({ duration_ms: 86400000, eligible_denominator: 4, accepted_in_window: 1, late_responses: 1, no_response: 2, unknown_response_time: 1, acceptance_ratio: 0.25 });
+    expect(windows.groups[1]).toMatchObject({ duration_ms: 172800000, eligible_denominator: 1, declined_in_window: 1, acceptance_ratio: 0 });
+  });
 });

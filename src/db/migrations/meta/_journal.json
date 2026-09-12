@@ -29,6 +29,13 @@
       "when": 1789209210362,
       "tag": "0003_skinny_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1789210476782,
+      "tag": "0004_skinny_punisher",
+      "breakpoints": true
     }
   ]
 }
