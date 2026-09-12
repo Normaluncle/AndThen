@@ -35,6 +35,7 @@ import type {
   SourceSnapshotRow,
 } from '../../db/schema.js';
 import { AppError } from '../../http/errors.js';
+import { invalidateAuthorMemory } from '../memory/service.js';
 import { sha256 } from '../identity/tokens.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
 import {
@@ -257,6 +258,8 @@ export async function importSource(
       .returning();
     const snapshot = insertedSnapshot[0];
     if (!snapshot) throw AppError.internal('Failed to create source snapshot');
+    const owners = await tx.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId, source.id), eq(authorVerifications.status, 'verified')));
+    for (const owner of owners) await invalidateAuthorMemory(ctx, tx, owner.userId);
 
     await writeAudit(tx, {
       actorUserId: auth.userId,
@@ -484,6 +487,7 @@ export async function revokeConsent(
 
   let cancelledJobs = 0;
   if (purpose === 'external_model_processing' || purpose === 'private_interview') {
+    for (const userId of new Set(revoked.map(c => c.userId))) await invalidateAuthorMemory(ctx, tx, userId);
     // Cancel queued/running jobs that carry this source. A running job's
     // `complete()` requires status='running', so its late result is rejected.
     const cancelled = await tx.execute(sql`

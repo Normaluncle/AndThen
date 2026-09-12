@@ -1,7 +1,7 @@
-import { asc, eq } from 'drizzle-orm';
+import { asc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import { aiRuns, interviewMessages, interviewSessions, sourceSnapshots, sources } from '../../db/schema.js';
+import { aiRuns, authorMemories, interviewMessages, interviewSessions, sourceSnapshots, sources } from '../../db/schema.js';
 import type { ModuleContext } from '../../shared/types.js';
 import type { JobHandlerContext, JobHandlerRegistry } from '../../jobs/types.js';
 import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
@@ -45,17 +45,17 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
   if (!input) return { data: { generated: false, reason: 'budget_permission_or_state' } };
   const memory = ctx.env.MEMORY_SERVICE_URL
     ? await recallMemory(ctx, p.owner_user_id, input.history.filter(m => m.role === 'author').at(-1)?.authorMessage ?? input.snapshot.excerpt ?? input.snapshot.body ?? '作者近况', job.signal)
-    : { status: 'unavailable', records: [] };
+    : { status: 'unavailable', generation: null, records: [] };
   const evidence = [
     { id: `snapshot:${input.snapshot.id}`, text: input.snapshot.body ?? input.snapshot.excerpt ?? '' },
     ...input.history.filter(m => m.role === 'author' && !m.skipped).map(m => ({ id: `message:${m.id}`, text: m.authorMessage ?? '' })),
-    ...memory.records.map(m => ({ id: `snapshot:${m.snapshotId}`, text: m.evidenceText })),
+    ...memory.records.map(m => ({ id: m.evidenceRef ?? `snapshot:${m.snapshotId}`, text: m.evidenceText })),
   ];
   let turn: z.infer<typeof turnSchema> | undefined;
   let completion: Awaited<ReturnType<ReturnType<typeof createLlmClient>['complete']>> | undefined;
   let failureCode: string | null = null;
   try {
-    const serialized = JSON.stringify({ evidence, author_memory: memory.records.map(m => ({ summary: m.content, preference: m.preference, basis_ref: `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
+    const serialized = JSON.stringify({ evidence, author_memory: memory.records.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
       history: input.history.map(m => ({ role: m.role, question: m.question, answer: m.authorMessage, skipped: m.skipped })) });
     if (serialized.length > 64000) throw AppError.sourceIncomplete('Authorized input exceeds the task budget');
     completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
@@ -67,8 +67,11 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
     failureCode = err instanceof AppError ? err.code : 'invalid_model_output';
   }
   await ctx.db.transaction(async tx => {
+    await tx.select({ id: sources.id }).from(sources).where(inArray(sources.id, [...new Set([p.source_id, ...memory.records.map(m => m.sourceId)])])).orderBy(asc(sources.id)).for('update');
     if (memory.records.length) {
-      const allowed = await authorizedMaterials(ctx, p.owner_user_id);
+      const [profile] = await tx.select().from(authorMemories).where(eq(authorMemories.userId, p.owner_user_id)).for('update');
+      if (!profile?.enabled || profile.generation !== memory.generation) throw AppError.conflict('Memory generation changed');
+      const allowed = await authorizedMaterials(ctx, p.owner_user_id, tx);
       if (memory.records.some(m => !allowed.some(a => a.snapshot.id === m.snapshotId))) throw AppError.conflict('Memory authorization changed');
     }
     await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, p.source_id)).for('update');

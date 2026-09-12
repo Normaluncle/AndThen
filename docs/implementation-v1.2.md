@@ -20,6 +20,14 @@
 
 OAuth App ID/App Key 尚未提供。任意作者全文不能由目前的官方搜索保证。现有 Access Secret 本人创作列表返回空，缺少本人全文/评论真实样本。
 
+Docker 构建在拉取 Python/Nginx 基础镜像时，Docker Hub auth token 网络请求超时；未修改系统网络，原容器保持运行。
+
+## Git 与验证检查点
+
+- `e4f3634`：第一阶段基础存档。类型检查通过；174 项 Vitest 测试通过；前端 build 通过；Python 3 项测试通过，含真实 embedding 批量/检索/删除测试。
+- 后续真实项目链路：`MEMORY_LIVE_TEST=1 pnpm exec vitest run tests/business/memory-live.test.ts` 通过。测试使用隔离 PostgreSQL、真实 Python memU 服务、真实 Qwen 整理和提问、真实 embedding；覆盖作者隔离及撤销后不可检索。测试资料明确为 fixture，未写入真实参与者内容。
+- 目标仍未完成：页面与双账号操作、更多生命周期行为以及官方适配剩余项继续执行。
+
 ## 运行
 
 本地配置保存在 Git 忽略的 `.env.local`。Compose 必须显式加载：

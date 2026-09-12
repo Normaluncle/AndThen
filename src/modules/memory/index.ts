@@ -39,6 +39,7 @@ export const memoryModule: ModuleDefinition = {
     })) } } }, async request => {
       const auth = requireAuthContext(request);
       const [row] = await ctx.db.select().from(authorMemories).where(eq(authorMemories.userId, auth.userId));
+      if (row?.enabled && ctx.now().getTime() - row.updatedAt.getTime() > 86400000) await requestRefresh(ctx, auth.userId);
       const allowed = row?.enabled ? await authorizedMaterials(ctx, auth.userId) : [];
       return success(request.id, { enabled: row?.enabled ?? false, status: row?.status ?? 'empty', updated_at: row?.updatedAt.toISOString() ?? null, error_code: row?.errorCode ?? null,
         records: (row?.records ?? []).filter(x => allowed.some(a => a.snapshot.id === x.snapshotId)).map(x => ({ name: x.name, content: x.content, source_id: x.sourceId, preference: x.preference })) });

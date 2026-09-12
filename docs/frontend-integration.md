@@ -1,6 +1,6 @@
 # 后端接入指南
 
-本项目只提供后端。默认本机地址为 `http://127.0.0.1:8080`；交互接口文档为 `/docs`，实时契约为 `/openapi.json`。`docs/openapi.json` 是从源码注册的路由生成的静态快照，不能证明当前运行容器已经升级。完整请求示例见 `scripts/demo.mjs`。
+v1.2 新增 `demo/` React 功能页面与官方/记忆适配，正在实施验收。API 默认本机地址为 `http://127.0.0.1:8080`；交互接口文档为 `/docs`，实时契约为 `/openapi.json`。`docs/openapi.json` 是静态快照，不能证明当前容器已升级。完整请求示例见 `scripts/demo.mjs`。本机前端使用 `pnpm --dir demo dev`，默认同源代理到 8080；可通过 API_PROXY_TARGET 指定隔离验证服务。
 
 ## 会话与响应
 

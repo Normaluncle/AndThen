@@ -94,6 +94,7 @@ export async function confirmDraft(ctx: ModuleContext, auth: AuthContext, id: st
     await requireNoModelBlock(tx, id, hash);
     if (itemIds.length !== statements.length || new Set(itemIds).size !== itemIds.length || statements.some(s => !itemIds.includes(s.id))) throw AppError.validation('Confirm every statement exactly once');
     const [confirmed] = await tx.update(followupVersions).set({ status: 'confirmed', authorConfirmations: itemIds.map(statementId => ({ statement_id: statementId, content_hash: hash, user_id: auth.userId })), confirmedAt: ctx.now(), updatedAt: ctx.now() }).where(eq(followupVersions.id, id)).returning();
+    await invalidateAuthorMemory(ctx, tx, auth.userId);
     return confirmed!;
   });
 }
@@ -159,3 +160,4 @@ export async function publicFollowup(db: Executor, id: string) {
   if (record.version.status !== 'published' || record.caseRow.publishedVersionId !== id || !await isPubliclyVisible(db, record.source)) throw AppError.withdrawn();
   return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind, section }) => ({ id, text, kind, ...(section ? { section } : {}) })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
 }
+import { invalidateAuthorMemory } from '../memory/service.js';

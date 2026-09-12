@@ -34,6 +34,11 @@ export const registerAccountDeletionRoutes: ModuleRegistrar = (app, ctx) => {
           }
           const [owner] = await tx.select().from(users).where(eq(users.id, auth.userId));
           if (!owner) throw AppError.unauthorized('Account unavailable');
+          const [memory] = await tx.select().from(authorMemories).where(eq(authorMemories.userId, auth.userId)).for('update');
+          if (memory) {
+            await tx.delete(authorMemories).where(eq(authorMemories.userId, auth.userId));
+            await ctx.jobs.enqueue({ kind: 'memory.delete', payload: { user_id: auth.userId, generation: memory.generation }, dedupeKey: `memory:delete:${memory.generation}` }, tx);
+          }
           const owned = await tx.select({ id: sources.id }).from(sources).where(sql`${sources.createdByUserId}=${auth.userId} or exists(select 1 from author_verifications v where v.source_id=${sources.id} and v.user_id=${auth.userId} and v.status='verified') or exists(select 1 from followup_cases c where c.source_id=${sources.id} and c.author_user_id=${auth.userId})`);
           const ids = owned.map(s => s.id);
           const cases = ids.length ? await tx.select({ id: followupCases.id }).from(followupCases).where(inArray(followupCases.sourceId, ids)) : [];
@@ -87,3 +92,4 @@ export const registerAccountDeletionRoutes: ModuleRegistrar = (app, ctx) => {
     return success(req.id, { deletion_id: receipt.id, status: receipt.status, steps: receipt.steps, finished_at: receipt.finishedAt });
   });
 };
+import { authorMemories } from '../../db/schema.js';

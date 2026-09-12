@@ -36,6 +36,8 @@ class MemoryTests(unittest.IsolatedAsyncioTestCase):
             await server.query(other, gen, server.Query(text='工作'), token)
         await server.delete(owner, gen, token)
         with self.assertRaises(Exception):
+            await server.rebuild(owner, gen, body, token)
+        with self.assertRaises(Exception):
             await server.query(owner, gen, server.Query(text='工作'), token)
 
     async def test_provider_failure_has_no_ready_marker(self):

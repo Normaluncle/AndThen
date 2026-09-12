@@ -7,6 +7,7 @@ import { requireAuthContext } from '../../http/auth.js';
 import { AppError, success } from '../../http/errors.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { requireCaseAuthor } from '../interviews/service.js';
+import { invalidateAuthorMemory } from '../memory/service.js';
 
 export const registerInterviewDeletionRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
@@ -25,6 +26,7 @@ export const registerInterviewDeletionRoutes: ModuleRegistrar = (app, ctx) => {
       if (!initial) { const done = await replay(); if (done) return done; throw AppError.notFound(); }
       if (initial.ownerUserId !== auth.userId) throw AppError.notFound();
       const { caseRow } = await requireCaseAuthor(tx, initial.caseId, auth);
+      await invalidateAuthorMemory(ctx, tx, auth.userId);
       const completed = await replay();
       if (completed) return completed;
       const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, initial.id)).for('update');

@@ -9,6 +9,8 @@ import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
 import { resolveSourceAccess } from '../sources/access.js';
 import { withJobFence } from '../../jobs/transaction.js';
+import { invalidateAuthorMemory } from '../memory/service.js';
+import { authorVerifications } from '../../db/schema.js';
 
 export const registerDeletionRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
@@ -23,6 +25,8 @@ export const registerDeletionRoutes: ModuleRegistrar = (app, ctx) => {
       const [existing] = await tx.select().from(deletionJobs).where(and(eq(deletionJobs.scope, 'source'), eq(deletionJobs.subjectId, source.id)));
       if (existing) return existing;
       await tx.update(sources).set({ deletedAt: ctx.now(), permissionStatus: 'revoked', updatedAt: ctx.now() }).where(eq(sources.id, source.id));
+      const owners = await tx.select().from(authorVerifications).where(eq(authorVerifications.sourceId, source.id));
+      for (const owner of owners) await invalidateAuthorMemory(ctx, tx, owner.userId);
       await tx.update(consents).set({ status: 'revoked', revokedAt: ctx.now() }).where(eq(consents.sourceId, source.id));
       const cases = await tx.select({ id: followupCases.id }).from(followupCases).where(eq(followupCases.sourceId, source.id));
       const ids = cases.map(c => c.id);

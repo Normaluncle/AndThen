@@ -47,6 +47,8 @@ export interface AuthorMemoryRecord {
   contentHash: string;
   preference: boolean;
   evidenceText: string;
+  evidenceRef?: string;
+  confirmedVersionId?: string;
 }
 
 export const authorMemories = pgTable('author_memories', {
