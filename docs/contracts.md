@@ -295,6 +295,8 @@ Private memU HTTP service uses a server-only token and UUID-scoped generation pa
 `memory.refresh` 新索引激活采用来源→作者记忆→任务租约的事务检查，并将旧索引清理入队。同意切换与相关任务入队同事务提交。成功/复用/过时结果保存在 job.result，包含不带正文的模型调用量、token 和时延；向量 token 未知，不推算。工作台超过 24 小时触发去重刷新。
 # v1.2 official candidate interest and preparation
 
+Verified owners granting `private_interview` for a pending source move it to `private_only`, never `public_approved`. Review of a `third_party_link` requires the case's verified owner and active interview consent in addition to the existing snapshot/revision and permission checks. Operator case creation resolves any already verified owner from the database; callers do not supply ownership. Author verification, conflict checks and case binding commit under the source row lock.
+
 All paths below use `/api`. Authentication is required. `GET /discovery/feed` returns up to 50 recently stored official candidates; `GET /discovery/following` returns up to 100 candidates followed by the caller. Candidate fields include `candidate_id`, nullable `linked_source_id`, `interested`, and the official summary fields. Search and exact link resolution persist server-observed candidates without running memory extraction.
 
 `PUT /discovery/candidates/:id/interest` accepts only `{ "active": boolean }`. Identity comes from the session. The server loads the official material, records an interest, and on first interest enqueues `memory.prepare` for the source snapshot. It returns `{ active, source_id }` in the standard envelope. Unknown candidates return 404; deleted/revoked sources cannot be followed. Candidate interests are excluded from historical organic research metrics.

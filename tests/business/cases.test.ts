@@ -71,6 +71,40 @@ describe('cases: create, invitation records and author decisions', () => {
     await truncateAll(h.ctx.db);
   });
 
+  it('binds an operator-created case to the already verified owner from database state',async()=>{
+    const reader=await seedUser(h,'reader'),admin=await seedUser(h,'admin'),author=await seedUser(h,'author');
+    const imported=await importSource(h,reader.token,{source_type:'third_party_link',original_url:'https://example.test/verified-before-case',material_level:'api_summary',body:'测试摘要。'});
+    await h.app.inject({method:'POST',url:`/api/sources/${imported.sourceId}/author-verifications`,headers:auth(admin.token),payload:{subject_user_id:author.user.id,method:'manual',approve:true,evidence_ref:'fixture://owner-before-case'}});
+    const opened=await h.app.inject({method:'POST',url:'/api/cases',headers:auth(admin.token),payload:{source_id:imported.sourceId,launch_type:'reader_initiated'}});
+    expect(opened.statusCode).toBe(200);expect(opened.json().data.case.author_user_id).toBe(author.user.id);
+    const workbench=await h.app.inject({url:'/api/me/workbench',headers:auth(author.token)});
+    expect(workbench.json().data.items.map((x:{id:string})=>x.id)).toContain(opened.json().data.case.id);
+  });
+
+  it('lets a reader-imported link proceed after verified ownership and private consent without making it public',async()=>{
+    const reader=await seedUser(h,'reader'),admin=await seedUser(h,'admin'),author=await seedUser(h,'author');
+    const imported=await importSource(h,reader.token,{source_type:'third_party_link',original_url:'https://example.test/reader-followup',material_level:'api_summary',body:'测试摘要：当年计划半年转行。'});
+    const opened=await h.app.inject({method:'POST',url:'/api/cases',headers:auth(admin.token),payload:{source_id:imported.sourceId,launch_type:'reader_initiated'}});
+    const caseId=opened.json().data.case.id;
+    expect(opened.json().data.case.status).toBe('hold');
+    const review=async()=>{
+      const [current]=await h.ctx.db.select().from(followupCases).where(eq(followupCases.id,caseId));
+      const [snapshot]=await h.ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId,imported.sourceId));
+      return h.app.inject({method:'POST',url:`/api/cases/${caseId}/review`,headers:auth(admin.token),payload:{expected_version:current!.updatedAt.toISOString(),snapshot_hash:snapshot!.contentHash,decision:'eligible',reason_code:'source_checked',evidence_ref:'fixture://review',confirms_source_and_safety_review:true}});
+    };
+    expect((await review()).statusCode).toBe(422);
+    expect((await h.app.inject({method:'POST',url:`/api/sources/${imported.sourceId}/consents`,headers:auth(author.token),payload:{purpose:'private_interview'}})).statusCode).toBe(403);
+    const verified=await h.app.inject({method:'POST',url:`/api/sources/${imported.sourceId}/author-verifications`,headers:auth(admin.token),payload:{subject_user_id:author.user.id,method:'manual',approve:true,evidence_ref:'fixture://owner'}});
+    expect(verified.statusCode).toBe(200);expect((await review()).statusCode).toBe(422);
+    const consent=await h.app.inject({method:'POST',url:`/api/sources/${imported.sourceId}/consents`,headers:auth(author.token),payload:{purpose:'private_interview'}});
+    expect(consent.statusCode).toBe(200);expect(consent.json().data.source_permission_status).toBe('private_only');
+    const reviewed=await review();expect(reviewed.statusCode,reviewed.body).toBe(200);
+    expect((await h.app.inject({url:`/api/stories/${imported.sourceId}`})).statusCode).not.toBe(200);
+    expect((await h.app.inject({method:'POST',url:`/api/cases/${caseId}/decision`,headers:auth(author.token),payload:{decision:'accept'}})).statusCode).toBe(200);
+    const interview=await h.app.inject({method:'POST',url:`/api/cases/${caseId}/interviews`,headers:auth(author.token),payload:{mode:'manual',confirms_own_content:true,confirms_old_state:true}});
+    expect(interview.statusCode,interview.body).toBe(200);
+  });
+
   it('creates one case per source and returns it on repeats', async () => {
     const author = await seedUser(h, 'author');
     const imported = await importSource(h, author.token, {

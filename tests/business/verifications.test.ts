@@ -15,6 +15,15 @@ describe('sources: author verification (weak evidence never auto-passes)', () =>
     await truncateAll(h.ctx.db);
   });
 
+  it('serializes competing approvals so only one account can own a source',async()=>{
+    const admin=await seedUser(h,'admin'),a=await seedUser(h,'author'),b=await seedUser(h,'author');
+    const imported=await importSource(h,admin.token,{source_type:'researcher_import',original_url:'https://example.test/verification-race',material_level:'api_summary',body:'测试资料。'});
+    const results=await Promise.all([a,b].map(person=>h.app.inject({method:'POST',url:`/api/sources/${imported.sourceId}/author-verifications`,headers:auth(admin.token),payload:{subject_user_id:person.user.id,method:'manual',approve:true,evidence_ref:'fixture://controlled-evidence'}})));
+    expect(results.map(r=>r.statusCode).sort()).toEqual([200,409]);
+    const list=await h.app.inject({url:`/api/sources/${imported.sourceId}/author-verifications`,headers:auth(admin.token)});
+    expect(list.json().data.items.filter((x:{status:string})=>x.status==='verified')).toHaveLength(1);
+  });
+
   it('records a manual verification as pending by default', async () => {
     const researcher = await seedUser(h, 'researcher');
     const author = await seedUser(h, 'author');

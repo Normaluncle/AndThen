@@ -396,6 +396,10 @@ export async function grantConsent(
   if (!consent) throw AppError.internal('Failed to record consent');
 
   let sourcePermissionStatus = source.permissionStatus;
+  if (purpose === 'private_interview' && source.permissionStatus === 'pending' && await isVerifiedAuthor(tx,source.id,auth.userId)) {
+    await tx.update(sources).set({permissionStatus:'private_only',updatedAt:now}).where(eq(sources.id,sourceId));
+    sourcePermissionStatus='private_only';
+  }
   if (purpose === 'demo_public_display' && access.isVerifiedAuthor) {
     const updated = await tx
       .update(sources)
@@ -563,7 +567,9 @@ export async function recordAuthorVerification(
   sourceId: string,
   input: RecordVerificationInput,
 ): Promise<AuthorVerificationRow> {
-  const source = await findSourceById(ctx.db, sourceId);
+  return ctx.db.transaction(async tx => {
+  await tx.select({id:sources.id}).from(sources).where(eq(sources.id,sourceId)).for('update');
+  const source = await findSourceById(tx, sourceId);
   if (!source) throw AppError.notFound('Source not found');
 
   if (auth.role !== 'researcher' && auth.role !== 'admin') {
@@ -581,7 +587,7 @@ export async function recordAuthorVerification(
     throw AppError.forbidden('A researcher cannot approve weak (manual) evidence; an admin must');
   }
 
-  const subjectExists = await ctx.db
+  const subjectExists = await tx
     .select({ id: users.id })
     .from(users)
     .where(eq(users.id, input.subjectUserId))
@@ -589,7 +595,7 @@ export async function recordAuthorVerification(
   if (subjectExists.length === 0) throw AppError.notFound('Subject user not found');
 
   if (input.approve) {
-    const conflicting = await ctx.db
+    const conflicting = await tx
       .select({ userId: authorVerifications.userId })
       .from(authorVerifications)
       .where(
@@ -606,7 +612,7 @@ export async function recordAuthorVerification(
   }
 
   const now = ctx.now();
-  const inserted = await ctx.db
+  const inserted = await tx
     .insert(authorVerifications)
     .values({
       userId: input.subjectUserId,
@@ -625,7 +631,7 @@ export async function recordAuthorVerification(
 
   if (input.approve) {
     // Binding follows verification: an open case adopts the verified author.
-    await ctx.db
+    await tx
       .update(followupCases)
       .set({ authorUserId: input.subjectUserId, updatedAt: now })
       .where(
@@ -643,7 +649,7 @@ export async function recordAuthorVerification(
       );
   }
 
-  await writeAudit(ctx.db, {
+  await writeAudit(tx, {
     actorUserId: auth.userId,
     action: input.approve ? 'author_verification.verified' : 'author_verification.recorded',
     subjectType: 'source',
@@ -657,6 +663,7 @@ export async function recordAuthorVerification(
   });
 
   return verification;
+  });
 }
 
 export async function listAuthorVerifications(

@@ -16,7 +16,7 @@ import { requestPreparation } from '../memory/preparation.js';
  */
 import { and, desc, eq, sql } from 'drizzle-orm';
 import type { Executor } from '../../db/client.js';
-import { followupCases, invitations, sources } from '../../db/schema.js';
+import { authorVerifications, followupCases, invitations, sources } from '../../db/schema.js';
 import type { FollowupCaseRow, InvitationRow, SourceRow } from '../../db/schema.js';
 import { AppError } from '../../http/errors.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
@@ -118,7 +118,9 @@ export async function createCase(
     }
 
     const access = await resolveSourceAccess(tx, source, auth);
-    const authorUserId = access.isAuthor ? auth.userId : null;
+    const [verifiedOwner] = await tx.select({userId:authorVerifications.userId}).from(authorVerifications)
+      .where(and(eq(authorVerifications.sourceId,source.id),eq(authorVerifications.status,'verified'))).limit(1);
+    const authorUserId = access.isAuthor ? auth.userId : verifiedOwner?.userId ?? null;
 
     const inserted = await tx
       .insert(followupCases)

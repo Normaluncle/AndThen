@@ -10,6 +10,7 @@ import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { lockCase } from '../interviews/service.js';
 import { latestSnapshot } from '../sources/service.js';
 import { sourceRisk } from '../sources/analysis.js';
+import { hasActiveConsent, isVerifiedAuthor } from '../sources/access.js';
 
 export async function requireCurrentReview(db: Executor, caseId: string, snapshotHash: string) {
   const [review] = await db.select().from(auditLogs).where(and(eq(auditLogs.action, 'case.reviewed'), eq(auditLogs.caseId, caseId))).orderBy(desc(auditLogs.createdAt), desc(auditLogs.id)).limit(1);
@@ -37,7 +38,10 @@ export const registerReviewRoutes: ModuleRegistrar = (app, ctx) => {
       const snapshot = await latestSnapshot(tx, source.id);
       if (!snapshot || snapshot.contentHash !== req.body.snapshot_hash) throw AppError.conflict('Snapshot changed');
       if (req.body.decision === 'eligible') {
-        if (!['private_only', 'public_approved'].includes(source.permissionStatus) || source.sourceType === 'third_party_link') throw AppError.consentRequired();
+        if (!['private_only', 'public_approved'].includes(source.permissionStatus)) throw AppError.consentRequired();
+        if (source.sourceType === 'third_party_link' && (!caseRow.authorUserId
+          || !await isVerifiedAuthor(tx,source.id,caseRow.authorUserId)
+          || !await hasActiveConsent(tx,source.id,'private_interview',caseRow.authorUserId))) throw AppError.consentRequired('Imported links require verified authorship and interview consent before review');
         if (!(snapshot.body ?? snapshot.excerpt)?.trim()) throw AppError.sourceIncomplete();
         if (req.body.reason_code !== 'source_checked') throw AppError.validation('Eligibility requires an affirmative source review');
         if (sourceRisk(snapshot.body ?? snapshot.excerpt ?? '').length && auth.role !== 'admin') throw AppError.forbidden('Sensitive material requires administrator review');
