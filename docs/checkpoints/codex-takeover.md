@@ -140,3 +140,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Research exports now include fixed-duration, per-author-cohort groups with eligible denominator, on-time accepts/declines, late replies, no response and unknown timing. Deadline equality is included; invalid windows and unknown historical responses are excluded from the fixed-window denominator. The old current-state ratio remains explicitly labeled separately.
 - Verified migration from empty and regressions (3 files / 20 tests before extending prior-status coverage), followed by typecheck and 2 files / 17 tests covering pending, no-response and replied decisions. Database-backed boundary fixtures distinguish 24/48-hour groups, late-by-one-second, legacy-null responses, no-response and invalid windows.
 - Docker and static OpenAPI remain at earlier evidence revisions pending final rebuild. Goal still requires deletion scope closure, remaining AI behavioral regressions and final delivery/acceptance.
+
+## Interview budget and failure continuation — 2026-09-12
+
+- Added actual handler/HTTP/real-PostgreSQL regressions for five questions including skips, no sixth model request, pause/resume retaining the already generated question, 429 and malformed model JSON preserving saved answers and switching to manual mode without exposing provider error text.
+- Repeated skipped questions now compare Unicode-normalized text after punctuation/whitespace removal; the test uses an ASCII-vs-Chinese question mark and whitespace variation. This is deterministic duplicate detection, not semantic paraphrase equivalence.
+- Typecheck passed; interview suites passed 2 files / 13 tests. Provider responses remain explicitly simulated. Updated T10/T17 evidence in the acceptance matrix; process-crash-during-model and real-model qualitative evaluation are not inferred from these tests.
+- Next unresolved implementation/acceptance remains deletion scopes, injection/empty-state and other matrix gaps, then final Docker rebuild and documentation/export.

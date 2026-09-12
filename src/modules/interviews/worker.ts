@@ -15,6 +15,7 @@ import { privateExpired, requirePrivateFresh } from '../followups/retention.js';
 
 const payloadSchema = z.object({ source_id: z.string().uuid(), case_id: z.string().uuid(), session_id: z.string().uuid(), owner_user_id: z.string().uuid(), revision: z.number().int() });
 const turnSchema = z.object({ question: z.string().trim().min(1).max(500), purpose: z.string().max(1000), basis_refs: z.array(z.string()).min(1).max(10) }).strict();
+const questionKey = (question: string) => question.normalize('NFKC').toLowerCase().replace(/[\p{P}\p{Z}\s]/gu, '');
 
 export function registerInterviewJobs(ctx: ModuleContext, registry: JobHandlerRegistry) {
   registry.register(AI_JOB_KINDS.interviewNext, async job => generateNext(ctx, job));
@@ -55,7 +56,7 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
     completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
     turn = turnSchema.parse(JSON.parse(completion.content));
     if (turn.basis_refs.some(ref => !evidence.some(e => e.id === ref))) throw AppError.sourceIncomplete('Unsupported interview reference');
-    if ((turn.question.match(/[?？]/g) ?? []).length > 1 || input.history.some(m => m.question === turn!.question)) throw AppError.conflict('Repeated or multiple questions');
+    if ((turn.question.match(/[?？]/g) ?? []).length > 1 || input.history.some(m => m.question && questionKey(m.question) === questionKey(turn!.question))) throw AppError.conflict('Repeated or multiple questions');
   } catch (err) {
     if (job.signal.aborted) throw err;
     failureCode = err instanceof AppError ? err.code : 'invalid_model_output';
