@@ -2,7 +2,8 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleDefinition } from '../../shared/types.js';
-import { authorMemories, authorVerifications, followupCases, followupVersions, interviewSessions, sources } from '../../db/schema.js';
+import { zhihuAccounts, authorMemories, authorVerifications, followupCases, followupVersions, interviewSessions, sources } from '../../db/schema.js';
+import {queueOAuthSync} from '../zhihu/oauth-sync.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema } from '../../http/envelope.js';
 import { requestRefresh } from '../memory/service.js';
@@ -16,6 +17,8 @@ export const workbenchModule: ModuleDefinition = {
     const r = app.withTypeProvider<ZodTypeProvider>();
     r.get('/me/workbench', { preHandler: [app.authenticate], schema: { tags: ['workbench'], response: { 200: envelopeSchema(z.object({ items: z.array(z.object({ id: z.string(), source_id: z.string(), title: z.string().nullable(), status: z.string(), interview_id: z.string().nullable(), draft_id: z.string().nullable() })) })) } } }, async request => {
       const auth = requireAuthContext(request);
+      const [account]=await ctx.db.select().from(zhihuAccounts).where(eq(zhihuAccounts.userId,auth.userId));
+      if(account?.syncConsentAt&&!account.revokedAt&&account.expiresAt>ctx.now())await queueOAuthSync(ctx,auth.userId);
       const [memory]=await ctx.db.select().from(authorMemories).where(eq(authorMemories.userId,auth.userId));
       if(memory?.enabled&&ctx.now().getTime()-memory.updatedAt.getTime()>86400000)await requestRefresh(ctx,auth.userId);
       const rows = await ctx.db.select({ c: followupCases, title: sources.title }).from(followupCases)

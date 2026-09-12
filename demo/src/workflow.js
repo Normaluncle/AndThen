@@ -46,3 +46,4 @@ export function poll(load, apply, failed, delay = 2000) {
   timer = setTimeout(tick, delay);
   return () => { stopped = true; clearTimeout(timer); };
 }
+export function canDeleteSource(sourceId,confirmed,busy){return Boolean(sourceId)&&confirmed===true&&!busy;}

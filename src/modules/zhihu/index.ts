@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { oauthReady, registerOAuthRoutes } from './oauth-routes.js';
+import {syncOAuthAuthor} from './oauth-sync.js';
 import { eq } from 'drizzle-orm';
 import { sources, zhihuCommentSyncs } from '../../db/schema.js';
 import { storeCandidates,candidateFeed,followCandidate } from './discovery.js';
@@ -17,11 +19,12 @@ import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js
 const candidate = z.object({ candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
 export const zhihuModule: ModuleDefinition = {
   name: 'zhihu',
-  registerJobHandlers(ctx,registry) { registry.register('zhihu.comments.sync',job=>syncCommentPage(ctx,job)); },
+  registerJobHandlers(ctx,registry) { registry.register('zhihu.comments.sync',job=>syncCommentPage(ctx,job)); registry.register('zhihu.author.sync',job=>syncOAuthAuthor(ctx,job)); },
   async registerRoutes(app, ctx) {
+    await registerOAuthRoutes(app, ctx);
     const r = app.withTypeProvider<ZodTypeProvider>();
-    r.get('/integrations/zhihu/capabilities', { schema: { tags: ['zhihu'], response: { 200: envelopeSchema(z.object({ search: z.boolean(), creator_account_reads: z.boolean(), comment_sync_scope: z.literal('access_secret_owner_only'), oauth: z.literal(false), oauth_reason: z.string(), arbitrary_fulltext: z.literal(false), comments: z.literal('selected_search_comments') })) } } }, async request => success(request.id, {
-      search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: false, oauth_reason: ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
+    r.get('/integrations/zhihu/capabilities', { schema: { tags: ['zhihu'], response: { 200: envelopeSchema(z.object({ search: z.boolean(), creator_account_reads: z.boolean(), comment_sync_scope: z.literal('access_secret_owner_only'), oauth: z.boolean(), oauth_reason: z.string(), arbitrary_fulltext: z.literal(false), comments: z.literal('selected_search_comments') })) } } }, async request => success(request.id, {
+      search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: oauthReady(ctx), oauth_reason: oauthReady(ctx) ? 'available' : ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
     }));
     r.get('/discovery/search', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q)) }));
     r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request))}));

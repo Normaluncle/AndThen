@@ -28,7 +28,7 @@ export async function requireModelSource(db: Executor, sourceId: string, hash: s
   if (!source || source.deletedAt) throw AppError.withdrawn();
   const snapshot = await latestSnapshot(db, sourceId);
   if (!snapshot || snapshot.contentHash !== hash) throw AppError.conflict('Source snapshot changed');
-  if (source.sourceType === 'third_party_link' || ['pending', 'rejected'].includes(source.permissionStatus)) throw AppError.consentRequired();
+  if (['pending', 'rejected','revoked'].includes(source.permissionStatus)) throw AppError.consentRequired();
   const [verification] = await db.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId, sourceId), eq(authorVerifications.status, 'verified'))).limit(1);
   const owner = verification?.userId ?? (source.sourceType === 'author_paste' ? source.createdByUserId : null);
   if (!owner || !await hasActiveConsent(db, sourceId, 'external_model_processing', owner)) throw AppError.consentRequired();

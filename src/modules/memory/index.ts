@@ -4,7 +4,7 @@ import { eq, and } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleDefinition } from '../../shared/types.js';
-import { authorMemories } from '../../db/schema.js';
+import { authorMemories,zhihuAccounts } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { success } from '../../http/errors.js';
 import { envelopeSchema } from '../../http/envelope.js';
@@ -54,6 +54,7 @@ export const memoryModule: ModuleDefinition = {
     r.put('/me/memory/consent', { ...guard, schema: { tags: ['memory'], body: z.object({ enabled: z.boolean() }).strict(), response: { 200: envelopeSchema(z.object({ enabled: z.boolean() })) } } }, async request => {
       const userId = requireAuthContext(request).userId;
       await ctx.db.transaction(async tx=>{
+        if(!request.body.enabled)await tx.update(zhihuAccounts).set({syncConsentAt:null,updatedAt:ctx.now()}).where(eq(zhihuAccounts.userId,userId));
         await tx.insert(authorMemories).values({userId}).onConflictDoNothing();
         const [old]=await tx.select().from(authorMemories).where(eq(authorMemories.userId,userId)).for('update');
         if(old!.enabled===request.body.enabled)return;

@@ -4,7 +4,7 @@ import { fenceOf, withJobFence } from '../../jobs/transaction.js';
 import type { JobHandlerContext } from '../../jobs/types.js';
 import type { Executor } from '../../db/client.js';
 import { z } from 'zod';
-import { sourcePreparations, authorMemories, authorVerifications, followupCases, followupVersions, sourceSnapshots, sources, type AuthorMemoryRecord } from '../../db/schema.js';
+import { zhihuAccounts, sourcePreparations, authorMemories, authorVerifications, followupCases, followupVersions, sourceSnapshots, sources, type AuthorMemoryRecord } from '../../db/schema.js';
 import { privateExpired } from '../followups/retention.js';
 import type { ModuleContext } from '../../shared/types.js';
 import { hasActiveConsent } from '../sources/access.js';
@@ -28,6 +28,11 @@ export async function authorizedMaterials(ctx: ModuleContext, userId: string, db
     .where(isNull(sources.deletedAt)).orderBy(desc(sources.updatedAt), asc(sources.id));
   const result = [];
   for (const { source } of rows) {
+    const verifications=await db.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId,source.id),eq(authorVerifications.userId,userId),eq(authorVerifications.status,'verified')));
+    if(verifications.every(v=>v.method==='oauth')) {
+      const [account]=await db.select().from(zhihuAccounts).where(eq(zhihuAccounts.userId,userId));
+      if(!account?.syncConsentAt||account.revokedAt||account.expiresAt<=ctx.now())continue;
+    }
     if (!await hasActiveConsent(db, source.id, 'external_model_processing', userId)
       || !await hasActiveConsent(db, source.id, 'private_interview', userId)) continue;
     const [snapshot] = await db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, source.id)).orderBy(desc(sourceSnapshots.version)).limit(1);

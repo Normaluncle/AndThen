@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { beforeAll, afterAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
-import { consents, aiRuns, followupCases, followupVersions, invitations, outbox, notifications } from '../../src/db/schema.js';
+import { sources, consents, aiRuns, followupCases, followupVersions, invitations, outbox, notifications } from '../../src/db/schema.js';
 import { runJob } from '../helpers/run-job.js';
 
 describe('AI-A source analysis with simulated HTTP provider', () => {
@@ -61,6 +61,8 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
     expect((await h.app.inject({ method: 'POST', url, headers: auth(author.token), payload })).statusCode).toBe(422);
     expect(calls).toBe(before);
     await h.ctx.db.insert(consents).values({ userId: author.user.id, sourceId: story.source.id, purpose: 'external_model_processing' });
+    // Verified reader-imported material with consent is eligible too.
+    await h.ctx.db.update(sources).set({sourceType:'third_party_link'}).where(eq(sources.id,story.source.id));
     expect((await h.app.inject({ method: 'POST', url, headers: auth(outsider.token), payload })).statusCode).toBe(404);
     expect((await h.app.inject({ method: 'POST', url, headers: auth(author.token), payload: { snapshot_hash: 'stale' } })).statusCode).toBe(409);
     const accepted = await h.app.inject({ method: 'POST', url, headers: auth(author.token), payload });

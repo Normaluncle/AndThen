@@ -81,3 +81,11 @@ test('AI task reads fetch only a successful generated draft and keep validation 
   assert.deepEqual(await readAiTask(async()=>({status:'succeeded',result:{validation}}),'test','validation'),{status:'succeeded',validation});
   assert.deepEqual(await readAiTask(async()=>({status:'running'}),'test','draft'),{status:'running'});
 });
+
+test('source deletion requires explicit confirmation for a selected source and cannot repeat while pending', async()=>{
+ const {canDeleteSource}=await import('./workflow.js');
+ assert.equal(canDeleteSource('source',false,false),false);
+ assert.equal(canDeleteSource('',true,false),false);
+ assert.equal(canDeleteSource('source',true,true),false);
+ assert.equal(canDeleteSource('source',true,false),true);
+});

@@ -324,3 +324,17 @@ The HTTP start route remains unavailable; this helper does not implement a persi
 Subsequent persistence checkpoint: additive migration 0009 introduces zhihu_oauth_attempts. oauth-attempts.ts starts a ten-minute attempt bound to a server-resolved session, storing only state/browser-proof hashes. Starting again invalidates that session's older attempts. Consumption requires both random values, an unexpired unused attempt, an active session and enabled user; a database transaction permits exactly one concurrent consumer. Consumption precedes provider exchange, so a later failure requires a fresh start. The service returns identity only from the session join; it does not promote roles or grant consent. Expired-row cleanup is provided as an internal function; route/cookie/cleanup scheduling and final account binding remain to be wired. Token persistence is not part of this table.
 
 Source replacement authorization: after snapshot dedupe and before a new version is appended, require administrator, verified owner, assigned researcher, or original importer while no verified owner exists. Unrelated callers and former importers after ownership verification receive 403; no snapshot or memory invalidation is committed. Internal official_api-to-official_api refresh remains allowed from the official adapter; HTTP source import provenance excludes official_api. Identical content still deduplicates without changing material. SourceMaterials frontend uses existing import/read/consent contracts; it does not create verification or publication side effects.
+
+## v1.2 集中补齐：OAuth 与管理接口
+
+POST /api/auth/zhihu/start（站内登录，严格空对象）创建一次性请求，返回 authorization_url/expires_at，并设置十分钟 HttpOnly Secure SameSite=Lax Cookie。GET /api/auth/zhihu/callback 接收 state 和 authorization_code（兼容 code）；同时核验 Cookie 与一次性请求，在服务端换令牌和读取官方 UID，完成唯一绑定后返回无令牌的结果。缺少应用配置、HTTPS 回调或 ZHIHU_OAUTH_STATE_VERIFIED 时拒绝启动。GET 的旧 start 路径仅保留不可用提示；页面改用 POST。回调页完成后返回原账号页刷新，站内 session 不进入 URL。
+
+GET /api/me/zhihu 返回授权状态、UID、显示名、过期时间、资料处理同意与最近同步时间；无令牌或密文。DELETE /api/me/zhihu 删除本地密文，取消待回调请求、撤销 OAuth 材料处理同意/核验并使相关记忆失效。身份保留以防转绑冲突；不声称调用了官方未提供的远程撤销接口。
+
+POST /api/me/zhihu/sync 要求 {accept_material_processing:true}：明确同意官方本人摘要用于私有采访、模型处理和记忆。按账号去重入队，后台最多读取首批 20 条回答/文章摘要，依据官方本人列表核验归属，给未绑定回访关联作者，按来源记录两项同意；不授予公开展示。已有不同核验归属则拒绝。读者账号仅在取得本人内容后由服务端升为作者。重新进入账号页/作者工作台超过 24 小时才后台检查。令牌/同意/版本改变或账户失效时旧结果不落库；关闭记忆同时停止自动资料同步。
+
+新增迁移 0010（zhihu_accounts 加密令牌与 UID 唯一约束）和 0011（资料同意、同步时间）。旧迁移保持原样；用户删除时凭证表通过外键级联清除。令牌过期后不能读取本人数据，只有 OAuth 依据的材料不能继续用于记忆。
+
+POST /api/operator/jobs/:id/retry（管理员）要求 expected_updated_at，复制失败任务到新任务并关闭旧失败项；原处理器重新执行当前权限/版本/同意校验，不直接重放业务副作用。响应仅新 job_id/deduped。任务变更或重复提交返回 409。采访业务已降级但任务本身成功时，仍由作者采访重试接口处理。
+
+返回账号登录补充：迁移 0012 为授权请求增加 completed_user_id/completed_at/delivered_at。回调以经过官方 /user 核验的 UID 找到既有账号，不能把它重新绑定到发起的新临时读者。POST /api/auth/zhihu/finish 要求原发起会话与 attempt_id，在有效期内一次性交付 ready/session_token/user；未完成 ready=false，其他会话/重复领取/失效请求拒绝。站内 token 仅此响应返回一次，数据库仍只存哈希。原页点击“我已完成知乎授权”接收并进入账号，回调页不含站内令牌。

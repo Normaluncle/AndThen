@@ -50,6 +50,9 @@ export function buildLoggerOptions(env: Env): LoggerOptions {
     level: env.LOG_LEVEL,
     redact: { paths: REDACT_PATHS, censor: '[redacted]' },
     base: { service: 'andthen', env: env.NODE_ENV },
+    serializers: { req: (req: { method?: string; url?: string; hostname?: string }) => ({
+      method: req.method, url: req.url?.split('?')[0], hostname: req.hostname,
+    }) },
   };
 
   if (env.NODE_ENV === 'development' && env.LOG_PRETTY) {

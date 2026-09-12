@@ -138,3 +138,11 @@ Observed: migrations exited successfully; API, worker, database and memory healt
 2026-09-13 Docker browser follow-up: updated backend/demo images preserved the isolated database. Operator created a test author in the UI; the author submitted explicitly fictional material and consents, operator verified/reviewed/recorded test invitation, author accepted and enabled memory. Real Qwen/memU memory became ready, two AI-B questions completed, a private answer persisted as private, and the interview was paused. Source and session IDs plus call metrics are in implementation-v1.2.md. Reader follow/publish/notification/withdrawal on this stack remains pending.
 
 Docker two-account browser acceptance completed for the explicitly fictional source on 2026-09-13: author resumed interview, saved public response alongside private response, edited v2, separately enabled public display; reader discovered and followed the source; author confirmed and published; reader received notification and saw only the public statement; author withdrew and the reader's old notification returned withdrawn without body. Full IDs and real model usage appear in implementation-v1.2.md. This closes the local Docker fixture business loop, not real OAuth or a real-author pilot.
+
+## 2026-09-13 集中交付更新
+
+最终 backend/demo 镜像重新构建，迁移 0010–0012 已应用到独立 v1.2 数据库，API/worker/db/memory 健康，前端运行在 5174。原 8080 栈、55432 测试入口和全部原卷未重置。更新版 OpenAPI 已导出。
+
+新页面浏览器补测：OAuth 缺配置时禁用真实入口；资料新增 v2、撤销模型同意后不显示旧记忆；手动降级测试采访保存回答后重试，真实 Qwen 自动生成下一问；管理页失败任务重试成功、真实 AI-A 结果可读。完整逐项结果见 goal-audit-v1.2.md。
+
+OAuth 部署新增 ZHIHU_REDIRECT_URI、ZHIHU_TOKEN_ENCRYPTION_KEY（32 字节十六进制）、ZHIHU_OAUTH_STATE_VERIFIED。空配置不会破坏本地启动；没有官方验证和 HTTPS 回调时保持 false。加密密钥需安全备份并随服务重启保留，不提交到 Git。回调访问日志不记录含授权码的请求字符串。

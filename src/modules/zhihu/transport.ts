@@ -16,7 +16,7 @@ export async function officialGet<T>(secret: string | undefined, path: string, p
   if (url.origin !== 'https://developer.zhihu.com' || !url.pathname.startsWith('/api/v1/')) throw AppError.validation('Invalid official endpoint');
   for (const [key, value] of Object.entries(params)) url.searchParams.set(key, value);
   try {
-    const response = await transport(url, { method: 'GET', headers: {
+    const response = await transport(url, { method: 'GET', redirect: 'error', headers: {
       Authorization: `Bearer ${secret}`, 'X-Request-Timestamp': String(Math.floor(Date.now() / 1000)),
       'Content-Type': 'application/json', ...(oauthToken ? { 'X-OAuth-Token': oauthToken } : {}),
     }, signal: AbortSignal.timeout(20000) });

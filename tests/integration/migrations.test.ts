@@ -34,6 +34,7 @@ const EXPECTED_TABLES = [
   'sources',
   'users',
   'worker_heartbeats',
+  'zhihu_accounts',
   'zhihu_comment_syncs',
   'zhihu_oauth_attempts',
 ];

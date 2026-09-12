@@ -4,7 +4,7 @@ import { sessions, users, zhihuOAuthAttempts } from '../../db/schema.js';
 import { AppError } from '../../http/errors.js';
 import { generateOpaqueToken, hashToken } from '../identity/tokens.js';
 
-async function activeSession(db: Executor, sessionId: string, now: Date) {
+export async function activeOAuthSession(db: Executor, sessionId: string, now: Date) {
   const [row] = await db.select({ userId: users.id }).from(sessions)
     .innerJoin(users, eq(users.id, sessions.userId))
     .where(and(eq(sessions.id, sessionId), isNull(sessions.revokedAt), gt(sessions.expiresAt, now), isNull(users.disabledAt)))
@@ -16,13 +16,13 @@ async function activeSession(db: Executor, sessionId: string, now: Date) {
 /** sessionId must come from request.auth; this function does not accept a user/role. */
 export async function createOAuthAttempt(db: Database, sessionId: string, now = new Date()) {
   return db.transaction(async tx => {
-    await activeSession(tx, sessionId, now);
+    await activeOAuthSession(tx, sessionId, now);
     // A new attempt invalidates earlier tabs for this session, including their cookies.
     await tx.delete(zhihuOAuthAttempts).where(eq(zhihuOAuthAttempts.sessionId, sessionId));
     const state = generateOpaqueToken(), browser = generateOpaqueToken();
     const expiresAt = new Date(now.getTime() + 10 * 60 * 1000);
-    await tx.insert(zhihuOAuthAttempts).values({ sessionId, stateHash: state.tokenHash, browserHash: browser.tokenHash, expiresAt });
-    return { state: state.token, browserProof: browser.token, expiresAt };
+    const [row]=await tx.insert(zhihuOAuthAttempts).values({ sessionId, stateHash: state.tokenHash, browserHash: browser.tokenHash, expiresAt }).returning({id:zhihuOAuthAttempts.id});
+    return { attemptId:row!.id, state: state.token, browserProof: browser.token, expiresAt };
   });
 }
 
@@ -35,7 +35,7 @@ export async function consumeOAuthAttempt(db: Database, state: string, browserPr
     // Read session first and lock it before the attempt, matching start/logout ordering.
     const [candidate] = await tx.select().from(zhihuOAuthAttempts).where(criteria);
     if (!candidate) throw AppError.forbidden('OAuth callback expired or already used');
-    const session = await activeSession(tx, candidate.sessionId, now);
+    const session = await activeOAuthSession(tx, candidate.sessionId, now);
     const [claimed] = await tx.update(zhihuOAuthAttempts).set({ consumedAt: now }).where(criteria).returning({ id: zhihuOAuthAttempts.id });
     if (!claimed) throw AppError.forbidden('OAuth callback expired or already used');
     return { attemptId: claimed.id, sessionId: candidate.sessionId, userId: session.userId };

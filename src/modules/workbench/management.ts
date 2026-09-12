@@ -5,11 +5,24 @@ import type { ModuleRegistrar } from '../../shared/types.js';
 import { followupCases, jobs, sourcePreparations, sources } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
-import { success } from '../../http/errors.js';
+import { success, AppError } from '../../http/errors.js';
 
 export const registerManagementRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
   const querystring = z.object({ offset: z.coerce.number().int().min(0).default(0) }).strict();
+  api.post('/operator/jobs/:id/retry', { preHandler:[app.authenticate,app.requireRole('admin')],schema:{tags:['workbench'],
+    params:z.object({id:z.string().uuid()}),body:z.object({expected_updated_at:z.string().datetime()}).strict(),
+    response:{200:envelopeSchema(z.object({job_id:z.string().uuid(),deduped:z.boolean()})),401:errorEnvelopeSchema,403:errorEnvelopeSchema,409:errorEnvelopeSchema}}},async request=>{
+    const result=await ctx.db.transaction(async tx=>{
+      const [old]=await tx.select().from(jobs).where(eq(jobs.id,request.params.id)).for('update');
+      if(!old||old.status!=='failed'||old.updatedAt.toISOString()!==request.body.expected_updated_at)throw AppError.conflict('Failed task changed');
+      // A fresh task invokes the original handler, including its current permission/version checks.
+      const next=await ctx.jobs.enqueue({kind:old.kind,payload:old.payload,dedupeKey:old.dedupeKey??`operator-retry:${old.id}`,maxAttempts:old.maxAttempts},tx);
+      await tx.update(jobs).set({status:'cancelled',updatedAt:ctx.now()}).where(eq(jobs.id,old.id));
+      return {job_id:next.job.id,deduped:next.deduped};
+    });
+    return success(request.id,result);
+  });
   api.get('/operator/sources', {
     preHandler: [app.authenticate, app.requireRole('researcher', 'admin')],
     schema: {

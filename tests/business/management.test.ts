@@ -33,4 +33,11 @@ it('shows only safe failed-task metadata to admins',async()=>{
   expect(list.statusCode).toBe(200);expect(list.json().data.items).toHaveLength(1);
   expect(list.json().data.items[0]).toMatchObject({id:job.id,kind:'test_fixture.failure',status:'failed'});
   expect(list.body).not.toContain('DO_NOT_EXPOSE');
+  const row=list.json().data.items[0];
+  const retry={method:'POST' as const,url:`/api/operator/jobs/${job.id}/retry`,payload:{expected_updated_at:row.updated_at}};
+  expect((await h.app.inject({...retry,headers:auth(researcher.token)})).statusCode).toBe(403);
+  const restarted=await h.app.inject({...retry,headers:auth(admin.token)});
+  expect(restarted.statusCode).toBe(200);expect(restarted.body).not.toContain('DO_NOT_EXPOSE');
+  expect(restarted.json().data.job_id).not.toBe(job.id);
+  expect((await h.app.inject({...retry,headers:auth(admin.token)})).statusCode).toBe(409);
 });

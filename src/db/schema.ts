@@ -903,9 +903,25 @@ export const zhihuOAuthAttempts = pgTable('zhihu_oauth_attempts', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
   consumedAt: timestamp('consumed_at', { withTimezone: true }),
+  completedUserId: uuid('completed_user_id').references(() => users.id, { onDelete: 'cascade' }),
+  completedAt: timestamp('completed_at', { withTimezone: true }),
+  deliveredAt: timestamp('delivered_at', { withTimezone: true }),
 }, t => [index('zhihu_oauth_attempts_expiry_idx').on(t.expiresAt)]);
 
+export const zhihuAccounts = pgTable('zhihu_accounts', {
+  userId: uuid('user_id').primaryKey().references(() => users.id, { onDelete: 'cascade' }),
+  uid: text('uid').notNull().unique(),
+  displayName: text('display_name'),
+  tokenCiphertext: text('token_ciphertext'),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  syncConsentAt: timestamp('sync_consent_at', { withTimezone: true }),
+  lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
+});
+
 export const schema = {
+  zhihuAccounts,
   zhihuOAuthAttempts,
   users,
   sessions,

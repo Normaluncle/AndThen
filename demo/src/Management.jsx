@@ -7,6 +7,7 @@ export function Management({role}) {
   const [subject,setSubject]=useState(''),[evidence,setEvidence]=useState(''),[checked,setChecked]=useState(false);
   const [name,setName]=useState(''),[issued,setIssued]=useState(null),[failures,setFailures]=useState(null);
   const [showCredential,setShowCredential]=useState(false);
+  const [analysis,setAnalysis]=useState(null);
   const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
   async function run(action,message='') {
     setBusy(true);setError('');setNotice('');
@@ -17,7 +18,7 @@ export function Management({role}) {
     setRows(data.items);setNext(data.next_offset);
   }
   async function open(row) {
-    setSelected(row);setDetail(null);setCaseData(null);setChecked(false);setEvidence('');
+    setSelected(row);setAnalysis(null);setDetail(null);setCaseData(null);setChecked(false);setEvidence('');
     const [source,verifications,permissions,visit]=await Promise.all([
       api('/sources/'+row.source_id),api(`/sources/${row.source_id}/author-verifications`),
       api(`/sources/${row.source_id}/consents`),row.case_id?api('/cases/'+row.case_id):null,
@@ -47,7 +48,9 @@ export function Management({role}) {
     {detail&&<article><h2>当前来源：{detail.source.title||'未命名'}</h2>
       <p>编号：{detail.source.id}</p><p>真实性标记：{detail.source.provenance} · 资料许可：{detail.source.permission_status}</p>
       {detail.source.original_url&&<a href={detail.source.original_url} target="_blank" rel="noreferrer">查看原链接</a>}
-      <h3>材料版本</h3>{detail.snapshots.map(snapshot=><details key={snapshot.id} open={snapshot===detail.snapshots[0]}>
+      <button disabled={busy||!detail.snapshots.length} onClick={()=>run(async()=>{await api(`/sources/${detail.source.id}/analyze`,'POST',{snapshot_hash:detail.snapshots[0].content_hash});},'AI 分析已入队，请稍后读取结果。')}>分析回访价值</button>
+      <button disabled={busy} onClick={()=>run(async()=>{const d=await api(`/sources/${detail.source.id}/analysis`);setAnalysis(d.analysis||{status:'当前材料尚无有效分析结果。'});})}>读取分析结果</button>
+      {analysis&&<pre className="body">{JSON.stringify(analysis,null,2)}</pre>}<h3>材料版本</h3>{detail.snapshots.map(snapshot=><details key={snapshot.id} open={snapshot===detail.snapshots[0]}>
         <summary>版本 {snapshot.version} · {snapshot.material_level}</summary>
         <p className="body">{snapshot.excerpt||snapshot.body||'尚未取得正文'}</p><small>快照：{snapshot.id}</small>
       </details>)}
@@ -88,9 +91,9 @@ export function Management({role}) {
       },'测试账号已创建，尚未核验任何来源。')}>创建测试账号</button>
       {issued&&<div><p>账号编号：{issued.user.id}</p><label>一次性登录凭证<input type={showCredential?'text':'password'} readOnly value={issued.login_token}/></label><button onClick={()=>setShowCredential(v=>!v)}>{showCredential?'隐藏凭证':'显示凭证'}</button><p>过期时间：{issued.expires_at}</p><button onClick={()=>{setIssued(null);setShowCredential(false);}}>隐藏并清除本页凭证</button></div>}
       <h2>失败任务</h2><button disabled={busy} onClick={()=>run(async()=>setFailures(await api('/operator/jobs')))}>查看失败任务</button>
-      {failures?.items.length===0&&<p>没有失败任务。</p>}{failures?.items.map(job=><article key={job.id}><p>{job.kind} · {job.status} · 尝试 {job.attempts} 次</p><small>任务编号：{job.id} · {job.updated_at}</small></article>)}
+      {failures?.items.length===0&&<p>没有失败任务。</p>}{failures?.items.map(job=><article key={job.id}><p>{job.kind} · {job.status} · 尝试 {job.attempts} 次</p><small>任务编号：{job.id} · {job.updated_at}</small><button disabled={busy} onClick={()=>run(async()=>{await api(`/operator/jobs/${job.id}/retry`,"POST",{expected_updated_at:job.updated_at});setFailures(await api("/operator/jobs"));},"已重新入队，仍需通过当前权限和资料版本检查。")}>重新执行失败任务</button></article>)}
       {failures?.next_offset!==null&&failures?.next_offset!==undefined&&<button disabled={busy} onClick={()=>run(async()=>setFailures(await api('/operator/jobs?offset='+failures.next_offset)))}>下一页失败任务</button>}
-      <p>失败不表示业务已完成。当前请在对应采访、记忆或评论页面检查条件后重新发起；批量重试尚未开放。</p>
+      <p>失败不表示业务已完成。重试不会跳过当前资料、同意或版本检查；采访已转为手动模式时，作者应使用采访页重试按钮。</p>
     </>}
   </section>;
 }

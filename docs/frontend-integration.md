@@ -58,3 +58,11 @@ Withdrawal additionally permits admins and the researcher assigned by case
 creation. Send POST `/api/followups/:id/withdraw` with an optional `{reason}`;
 no body remains supported for existing clients. This does not allow operators
 to read private interviews or drafts.
+
+## 当前功能页面与 OAuth 对接
+
+账号页已提供知乎授权状态、准备授权、打开官方授权页、同步处理同意、断开和站内身份刷新。OAuth 需要公开 HTTPS；本地 HTTP 下真实入口保持不可用。使用同源 Cookie，不在 localStorage/sessionStorage 放凭证；账号回调在新页完成，原页内存会话保留。
+
+回访管理包含 AI-A 分析/结果读取、当前版本审核和失败任务重试。草稿保留 AI-C/D 及逐项依据；作者采访保留失败重试。页面导航在主请求期间禁用，避免较慢旧请求把另一页的列表覆盖。官方候选提供已关联的本站后续入口，未公开来源仍由服务端拒绝展示。
+
+前端继续美化时保留同意、范围、错误和等待状态；不要把授权成功当作公开许可，不要把 OAuth 本人摘要标为全文，不要替作者自动确认发布。
