@@ -204,3 +204,19 @@ Skills applied: backend-contracts, database-migrations, ai-evaluation, docker-op
 git-delivery (read earlier in takeover). No real-provider quality claim.
 Contract changes are recorded in docs/contracts.md section 11. Final container
 rebuild and runtime acceptance follows this commit.
+
+## Local engineering delivery completed — 2026-09-12 19:48 CST
+
+Runtime commit 65bcb27 is built and healthy in local Docker. Complete fixture
+flow, restart/recreation persistence, nonempty backup restore, cleanup and
+50-path static/live OpenAPI comparison passed. Final write p95 138.08 ms and
+async deletion acknowledgment p95 80.20 ms (10-session warm fixture sample).
+All 167 application tests and 38 scheduler tests passed. Detailed evidence,
+image and backup hashes are recorded in docs/docker-acceptance.md.
+
+No independent model credentials or real-author sample supplied: P4 and real
+pilot remain unverified. WorkBuddy live three-process scale/full-1M recall were
+not completed after HTTP429 / code6004 quota; original sessions/worktrees remain
+preserved. Operator-invoked backup rotation and external provider retention
+limits are documented. These are explicit delivery boundaries, not claimed
+passes. The authorized local-engineering Goal can now be marked complete.

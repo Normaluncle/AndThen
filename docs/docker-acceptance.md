@@ -1,6 +1,6 @@
 # Local Docker acceptance — 2026-09-12
 
-**Current deployed runtime: `5f43604`**, image manifest list `sha256:b9552270fcbee1bd4ac425fbcf9767cbf0c8379481d7c19cbfccbea72c1e4fed`. Current-run evidence is in the final sections below; earlier measurements are retained as history.
+**Current deployed runtime: `65bcb27`**, image manifest list `sha256:4639c80fc025ad49b72a98a05c84e61725fb60e40f03ccd86b81f831b45a8b34`. Current-run evidence is in the final sections below; earlier measurements are retained as history.
 
 ## Earlier foundation/runtime evidence
 
@@ -69,3 +69,46 @@ This run discovered bootstrap `--out` still printed its token. Commit `5f43604` 
 The subsequent `5f43604` image build also succeeded and was deployed with API/worker forced recreation. Manifest list: `sha256:b9552270fcbee1bd4ac425fbcf9767cbf0c8379481d7c19cbfccbea72c1e4fed`. All three persistent services are healthy. The fixture survived recreation; an immediate pre-readiness request had a socket failure, then verification passed after readiness became healthy. Only bootstrap output changed from the measured business runtime, so the earlier current-run business performance sample remains applicable to that unchanged code.
 
 In the running container, bootstrap `--out --json` with silent logging produced no stdout. Its test credential was consumed through the session API and that session logged out. The saved demonstration was then withdrawn and physically deleted; cleanup receipt `dd9836d7-fdc6-43f0-b225-4f656f1160cc` succeeded. Local demo state now contains only the deletion receipt. Backups still follow their documented rotation policy; no raw credential or fixture body is included in this report.
+
+## Final local engineering acceptance — runtime 65bcb27
+
+Observed 2026-09-12 19:47–19:48 CST. Build from committed runtime `65bcb27`:
+manifest list `sha256:4639c80fc025ad49b72a98a05c84e61725fb60e40f03ccd86b81f831b45a8b34`,
+image config `sha256:2af9ef13f583ba13e3e5a233db068cf8183195aae982febfc0c03e6030bfff81`.
+Later documentation-only commits do not change this runtime.
+
+Executed `docker compose -f docker-compose.yml -f docker-compose.test.yml build api`
+and `up -d --no-build --wait`; one-shot migration completed and all three
+long-running services healthy. Host test DB port remains bound only to
+127.0.0.1:55432; default Compose has no DB host port. API is 127.0.0.1:8080.
+
+A fresh file-issued, one-time admin token was consumed by the demo script;
+bootstrap stdout contained no credential. Manual fixture chain completed:
+source `7b3259f5-c325-4507-8c6a-5a0f04b34b39`,
+draft `e5d9c84c-9aab-438d-8df2-ca1f2c2e0784`.
+`node scripts/demo.mjs --verify` passed after restarting DB/API/worker and again
+after forced API/worker recreation. Source, follow, saved answer and draft were
+retained. The original named PostgreSQL volume was preserved.
+
+`node scripts/performance.mjs`: 10 concurrent sessions, 200 non-model interest
+writes p95 **138.08 ms**, max 426.83 ms; 10 asynchronous deletion admissions
+p95/max **80.20 ms**, all deletion workers completed. This is a local warm-run
+sample on Windows / Node v24.19.0, not model latency or production capacity.
+
+Nonempty backup `andthen-20260912T114748Z-cc1304eaa1794a8b86139dfa8981956a.dump`:
+SHA-256 `0F30C917D446253CE4937FB46273E24569B63F37C2A30A67B6223A572F14D870`.
+Hash-checked isolated restore succeeded: 1 source, 1 snapshot, 11 interests,
+1 interview, 1 message, 1 draft. The isolated restore database was removed by
+the restore-check script; the main database was not overwritten.
+
+Final fixture withdrawal/deletion completed with receipt
+`3b7264b0-f8e8-4266-a18d-d929cf71ebdf`; author/reader demo sessions logged out and
+local demo state replaced by the content-free receipt. The consumed bootstrap
+file remains Git-ignored. Final `docker compose ps`: api/db/worker healthy.
+Live `/openapi.json` exactly matched the committed static file (50 paths).
+
+Final code verification: typecheck clean; Vitest 35 files / 167 tests passed;
+scheduler node:test 38 passed. The new tests cover actual worker process death,
+structured section/hash compatibility, knowledge-only invite override,
+operator withdrawal and private-route isolation. Runtime provider quality and
+full-1M recall are not inferred from these engineering results.
