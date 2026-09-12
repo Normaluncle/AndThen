@@ -45,6 +45,14 @@ describe('durable manual interview flow', () => {
     expect((await h.app.inject({ method: 'POST', url: `${draftUrl}/publish`, headers: auth(author.token), payload: publish })).statusCode).toBe(409);
     const confirmed = await h.app.inject({ method: 'POST', url: `${draftUrl}/confirm`, headers: auth(author.token), payload: { content_hash: draft.contentHash, statement_ids: draft.statements.map((s: { id: string }) => s.id) } });
     expect(confirmed.statusCode, confirmed.body).toBe(200);
+    const [awaitingReview] = await h.ctx.db.update(followupCases).set({ reviewerRequired: true }).where(eq(followupCases.id, story.followupCase.id)).returning();
+    expect((await h.app.inject({ method: 'POST', url: `${draftUrl}/publish`, headers: auth(author.token), payload: publish })).statusCode).toBe(409);
+    const reviewer = await seedUser(h, 'admin', 'test_fixture');
+    const review = await h.app.inject({ method: 'POST', url: `/api/cases/${story.followupCase.id}/review`, headers: auth(reviewer.token), payload: {
+      expected_version: awaitingReview!.updatedAt.toISOString(), snapshot_hash: story.snapshot.contentHash, decision: 'eligible', reason_code: 'source_checked', evidence_ref: 'evidence://test_fixture/author-case-review', confirms_source_and_safety_review: true,
+    } });
+    expect(review.statusCode, review.body).toBe(200);
+    expect(review.json().data.status).toBe('draft');
     const reader = await seedUser(h, 'reader', 'test_fixture');
     const cancelledReader = await seedUser(h, 'reader', 'test_fixture');
     const lateReader = await seedUser(h, 'reader', 'test_fixture');

@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { invitations } from '../../src/db/schema.js';
+import { invitations, followupCases, sourceSnapshots } from '../../src/db/schema.js';
 import { truncateAll } from '../helpers/testdb.js';
 import { auth, createHarness, importSource, seedUser, type Harness } from './helpers.js';
 
@@ -14,7 +14,7 @@ interface CaseSetup {
 }
 
 /** Researcher-owned case on a controlled source, later bound to `author`. */
-async function setupBoundCase(h: Harness): Promise<CaseSetup> {
+async function setupBoundCase(h: Harness, reviewed = true): Promise<CaseSetup> {
   const researcher = await seedUser(h, 'researcher');
   const admin = await seedUser(h, 'admin');
   const author = await seedUser(h, 'author');
@@ -47,6 +47,14 @@ async function setupBoundCase(h: Harness): Promise<CaseSetup> {
     },
   });
 
+  if (reviewed) {
+    const [current] = await h.ctx.db.select().from(followupCases).where(eq(followupCases.id, caseId));
+    const [snapshot] = await h.ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, imported.sourceId));
+    const review = await h.app.inject({ method: 'POST', url: `/api/cases/${caseId}/review`, headers: auth(researcher.token), payload: {
+      expected_version: current!.updatedAt.toISOString(), snapshot_hash: snapshot!.contentHash, decision: 'eligible', reason_code: 'source_checked', evidence_ref: 'evidence://test_fixture/review', confirms_source_and_safety_review: true,
+    } });
+    if (review.statusCode !== 200) throw new Error(review.body);
+  }
   return { researcher, admin, author, other, sourceId: imported.sourceId, caseId };
 }
 
@@ -151,6 +159,29 @@ describe('cases: create, invitation records and author decisions', () => {
       .from(invitations)
       .where(eq(invitations.caseId, setup.caseId));
     expect(rows).toHaveLength(1);
+  });
+
+  it('requires authorized current-snapshot human review and rejects stale concurrent reviews', async () => {
+    const setup = await setupBoundCase(h, false);
+    const invite = () => h.app.inject({ method: 'POST', url: `/api/cases/${setup.caseId}/invitations`, headers: auth(setup.researcher.token), payload: { channel: 'manual' } });
+    expect((await invite()).statusCode).toBe(409);
+    const [current] = await h.ctx.db.select().from(followupCases).where(eq(followupCases.id, setup.caseId));
+    const [snapshot] = await h.ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, setup.sourceId));
+    const payload = { expected_version: current!.updatedAt.toISOString(), snapshot_hash: snapshot!.contentHash, decision: 'eligible', reason_code: 'source_checked', evidence_ref: 'evidence://test_fixture/review', confirms_source_and_safety_review: true };
+    const reviewUrl = `/api/cases/${setup.caseId}/review`;
+    expect((await h.app.inject({ method: 'POST', url: reviewUrl, headers: auth(setup.author.token), payload })).statusCode).toBe(403);
+    const stranger = await seedUser(h, 'researcher');
+    expect((await h.app.inject({ method: 'POST', url: reviewUrl, headers: auth(stranger.token), payload })).statusCode).toBe(403);
+    const reviews = await Promise.all(Array.from({ length: 2 }, () => h.app.inject({ method: 'POST', url: reviewUrl, headers: auth(setup.researcher.token), payload })));
+    expect(reviews.map(r => r.statusCode).sort()).toEqual([200, 409]);
+    await h.ctx.db.insert(sourceSnapshots).values({ sourceId: setup.sourceId, version: 2, materialLevel: 'api_summary', body: '新的测试材料', contentHash: 'changed_fixture_hash' });
+    expect((await invite()).statusCode).toBe(409);
+    const [revised] = await h.ctx.db.select().from(followupCases).where(eq(followupCases.id, setup.caseId));
+    const reviewed = await h.app.inject({ method: 'POST', url: reviewUrl, headers: auth(setup.researcher.token), payload: { ...payload, expected_version: revised!.updatedAt.toISOString(), snapshot_hash: 'changed_fixture_hash' } });
+    expect(reviewed.statusCode, reviewed.body).toBe(200);
+    expect((await invite()).statusCode).toBe(200);
+    expect((await h.app.inject({ method: 'POST', url: `/api/cases/${setup.caseId}/decision`, headers: auth(setup.author.token), payload: { decision: 'decline' } })).statusCode).toBe(200);
+    expect((await h.app.inject({ method: 'POST', url: reviewUrl, headers: auth(setup.researcher.token), payload: { ...payload, expected_version: reviewed.json().data.version, snapshot_hash: 'changed_fixture_hash' } })).statusCode).toBe(409);
   });
 
   it('only lets the responsible researcher record an invitation', async () => {

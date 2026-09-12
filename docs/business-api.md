@@ -135,3 +135,23 @@ only when `sources.permission_status = 'public_approved'` **and** no
 hide another user's private resource), `conflict` (409 — declined/re-invite,
 state conflicts), `source_incomplete` (422), `consent_required` (422, reserved
 for the publish path), `author_unverified` (422, reserved for the publish path).
+# Human review gate
+
+`POST /api/cases/:id/review` is available only to the case's assigned researcher or an administrator. Body:
+
+```json
+{
+  "expected_version": "<case.updated_at ISO timestamp>",
+  "snapshot_hash": "<current source snapshot hash>",
+  "decision": "eligible",
+  "reason_code": "source_checked",
+  "evidence_ref": "<controlled review evidence reference>",
+  "confirms_source_and_safety_review": true
+}
+```
+
+Decisions: `eligible`, `hold`, `excluded`. Reason codes: `source_checked`, `missing_material`, `sensitive_material`, `not_suitable`, `permission_missing`. Eligibility requires affirmative source review, available material and source permission; the deterministic sensitive-material screen requires admin review. Evidence references are controlled references, not uploaded evidence bodies or external fetch instructions.
+
+The expected version is the server-issued `updated_at` timestamp, not a client role or identity. Stale concurrent requests return 409. Candidate/hold/eligible cases can change review state. Accepted/interviewing/paused/draft/confirmed author cases may receive an affirmative review without resetting their workflow state. Closed cases and decline/do-not-contact flags cannot be reopened. The audit stores the reviewed snapshot hash and decision. The endpoint sends no invitation.
+
+Invitation recording now requires `eligible` plus an eligible human review matching the current source snapshot. A new source snapshot invalidates the invitation prerequisite until reviewed again. Source-first locking serializes invitation/author-decision mutations with review and deletion. Publication also checks reviewer_required. Author-initiated cases can be reviewed while a draft exists; an affirmative review clears this gate without replacing the draft or granting publication consent.

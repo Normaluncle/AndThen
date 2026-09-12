@@ -90,6 +90,7 @@ export async function publishDraft(ctx: ModuleContext, auth: AuthContext, id: st
   return ctx.db.transaction(async tx => {
     const initial = await getDraft(tx, id, auth);
     const { source, caseRow } = await requireCaseAuthor(tx, initial.caseId, auth);
+    if (caseRow.reviewerRequired) throw AppError.conflict('Human case review is required before publication');
     const [draft] = await tx.select().from(followupVersions).where(eq(followupVersions.id, id)).for('update');
     if (!draft || draft.contentHash !== hash) throw AppError.conflict('Content hash changed');
     if (!await hasActiveConsent(tx, source.id, 'demo_public_display', auth.userId) || !await isPubliclyVisible(tx, source)) throw AppError.consentRequired();

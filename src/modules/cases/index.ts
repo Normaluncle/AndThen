@@ -1,5 +1,6 @@
 import type { ModuleDefinition } from '../../shared/types.js';
 import { registerCasesRoutes } from './routes.js';
+import { registerReviewRoutes } from './review.js';
 
 /**
  * Cases module (PRD §9, §10, §13; FR-07..FR-11).
@@ -10,5 +11,5 @@ import { registerCasesRoutes } from './routes.js';
  */
 export const casesModule: ModuleDefinition = {
   name: 'cases',
-  registerRoutes: registerCasesRoutes,
+  registerRoutes: async (app, ctx) => { await registerCasesRoutes(app, ctx); await registerReviewRoutes(app, ctx); },
 };

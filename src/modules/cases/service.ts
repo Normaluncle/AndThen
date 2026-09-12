@@ -21,6 +21,8 @@ import { AppError } from '../../http/errors.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
 import { resolveSourceAccess, isVerifiedAuthor } from '../sources/access.js';
 import { writeAudit, writeResearchEvent } from '../sources/service.js';
+import { latestSnapshot } from '../sources/service.js';
+import { requireCurrentReview } from './review.js';
 
 export type CaseStatus = FollowupCaseRow['status'];
 export type LaunchType = FollowupCaseRow['launchType'];
@@ -48,7 +50,7 @@ const DECIDABLE_STATUSES: ReadonlySet<CaseStatus> = new Set([
 ]);
 
 /** Statuses an invitation may be recorded from (PRD §13.1: hold does not invite). */
-const INVITABLE_STATUSES: ReadonlySet<CaseStatus> = new Set(['candidate', 'eligible']);
+const INVITABLE_STATUSES: ReadonlySet<CaseStatus> = new Set(['eligible']);
 
 /**
  * A source is authorized enough to open a workable case once it is private or
@@ -63,7 +65,7 @@ function isSourceAuthorizedForCase(permissionStatus: SourceRow['permissionStatus
 async function requireSource(db: Executor, sourceId: string): Promise<SourceRow> {
   const rows = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
   const source = rows[0];
-  if (!source) throw AppError.notFound('Source not found');
+  if (!source || source.deletedAt) throw AppError.notFound('Source not found');
   return source;
 }
 
@@ -126,6 +128,7 @@ export async function createCase(
         // eligible for contact (PRD FR-07 gate 1).
         status: isSourceAuthorizedForCase(source.permissionStatus) ? 'candidate' : 'hold',
         launchType: input.launchType,
+        reviewerRequired: true,
         createdByUserId: auth.userId,
       })
       .returning();
@@ -267,6 +270,7 @@ export async function recordInvitation(
 ): Promise<RecordInvitationResult> {
   const now = ctx.now();
   return ctx.db.transaction(async (tx) => {
+    await tx.execute(sql`select id from sources where id = (select source_id from followup_cases where id = ${caseId}) for update`);
     await tx.execute(sql`select id from followup_cases where id = ${caseId} for update`);
     const rows = await tx.select().from(followupCases).where(eq(followupCases.id, caseId)).limit(1);
     const followupCase = rows[0];
@@ -302,6 +306,9 @@ export async function recordInvitation(
       );
     }
     const source = await requireSource(tx, followupCase.sourceId);
+    const snapshot = await latestSnapshot(tx, source.id);
+    if (!snapshot) throw AppError.sourceIncomplete();
+    await requireCurrentReview(tx, caseId, snapshot.contentHash);
     if (!isSourceAuthorizedForCase(source.permissionStatus)) {
       throw AppError.conflict(
         'Source authorization is insufficient to invite; the case stays on hold',
@@ -370,6 +377,7 @@ export async function recordDecision(
 ): Promise<DecisionResult> {
   const now = ctx.now();
   return ctx.db.transaction(async (tx) => {
+    await tx.execute(sql`select id from sources where id = (select source_id from followup_cases where id = ${caseId}) for update`);
     await tx.execute(sql`select id from followup_cases where id = ${caseId} for update`);
     const rows = await tx.select().from(followupCases).where(eq(followupCases.id, caseId)).limit(1);
     const followupCase = rows[0];
