@@ -344,6 +344,7 @@ export async function grantConsent(
   sourceId: string,
   purpose: ConsentPurpose,
   version: string,
+  requestedExpiry?: Date,
 ): Promise<GrantConsentResult> {
   return ctx.db.transaction(async (tx) => {
     await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, sourceId)).for('update');
@@ -356,6 +357,18 @@ export async function grantConsent(
   }
 
   const now = ctx.now();
+  if (requestedExpiry && requestedExpiry <= now) throw AppError.validation('Consent expiry must be in the future');
+  const publicDeadline = new Date(now.getTime() + 90 * 86400000);
+  const expiresAt = purpose === 'demo_public_display'
+    ? new Date(Math.min(requestedExpiry?.getTime() ?? publicDeadline.getTime(), publicDeadline.getTime()))
+    : requestedExpiry ?? null;
+  const [existing] = await tx.select().from(consents).where(and(eq(consents.sourceId, sourceId), eq(consents.userId, auth.userId), eq(consents.purpose, purpose), eq(consents.version, version)));
+  if (existing) {
+    if (existing.status !== 'granted' || (existing.expiresAt && existing.expiresAt <= now) || (purpose === 'demo_public_display' && !existing.expiresAt && existing.grantedAt.getTime() + 90 * 86400000 <= now.getTime())) throw AppError.conflict('Renew consent with a new version');
+    const replayExpiry = requestedExpiry ? (purpose === 'demo_public_display' ? Math.min(requestedExpiry.getTime(), existing.grantedAt.getTime() + 90 * 86400000) : requestedExpiry.getTime()) : undefined;
+    if (replayExpiry !== undefined && existing.expiresAt?.getTime() !== replayExpiry) throw AppError.conflict('Changing consent expiry requires a new version');
+    return { consent: existing, sourcePermissionStatus: source.permissionStatus };
+  }
   await tx.update(consents).set({ status: 'expired' }).where(and(eq(consents.sourceId, sourceId), eq(consents.userId, auth.userId), eq(consents.purpose, purpose), eq(consents.status, 'granted')));
   const rows = await tx
     .insert(consents)
@@ -366,11 +379,12 @@ export async function grantConsent(
       status: 'granted',
       version,
       grantedAt: now,
+      expiresAt,
       revokedAt: null,
     })
     .onConflictDoUpdate({
       target: [consents.userId, consents.sourceId, consents.purpose, consents.version],
-      set: { status: 'granted', grantedAt: now, revokedAt: null },
+      set: { status: 'granted', grantedAt: now, revokedAt: null, expiresAt },
     })
     .returning();
   const consent = rows[0];
@@ -792,7 +806,7 @@ export async function listPublicStories(
         eq(consents.sourceId, sources.id),
         eq(consents.purpose, 'demo_public_display'),
         eq(consents.status, 'granted'),
-        sql`(${consents.expiresAt} is null or ${consents.expiresAt} > now())`,
+        sql`((${consents.expiresAt} is null and ${consents.grantedAt} > now() - interval '90 days') or ${consents.expiresAt} > now())`,
       ),
     );
   const where = and(

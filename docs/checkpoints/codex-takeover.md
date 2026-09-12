@@ -31,7 +31,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 - Source snapshot import uses natural-key advisory locking; coordinate source-row lock with deletion, prevent a new snapshot being attached while deleting.
 - `getInterview`/`getDraft` should enforce synchronous deletion tombstone before returning private content (source APIs already do).
 - Notification reads contain metadata only; ensure revocation status reflects source availability even before cleanup.
-- Default public consent expiry is not yet assigned at grant. Private 30-day retention sweep and public 90-day review need implementation.
+- Default public consent expiry and 90-day maintenance are implemented; private 30-day physical retention remains pending.
 - `draftEvidence` treats source snapshot as public after publication permission check. Author edits explicitly become author evidence; private-to-public edits must remain an explicit author action.
 - Interview job dedupe includes revision so a just-persisted question whose job completion is pending cannot swallow the next answer's generation.
 - Worker locks source before job fence to match revocation ordering; `withJobFence` supports an existing transaction/savepoint.
@@ -78,3 +78,11 @@ Previous turn was progress (`9daac47`). Added an assigned-researcher/admin revie
 The case test harness now explicitly performs human review rather than seeding an implicit eligible path. Tests exercise unreviewed invitation denial, author/unassigned-reviewer denial, concurrent stale review conflict, changed snapshot re-review, and declined case protection. Project backend-contracts and git-delivery skills remain applied; docs/business-api.md describes the new contract. Goal remains active; review expectations for author-initiated publication still need complete-path scrutiny, and retention/Docker/final evidence work remains.
 
 Follow-up within this milestone: publication now blocks reviewer_required cases. Affirmative human review is allowed for accepted/interviewing/paused/draft/confirmed author workflows while preserving that workflow status, so an author need not restart an existing interview/draft. The manual closure integration test proves a confirmed draft is blocked until admin review, then proceeds through publish/withdraw/delete. Verification: full suite passed 26 files / 139 tests before this last gate refinement; after it, typecheck and the affected case/interview suites passed 12 tests. No external invitation was sent. The final full-path audit and retention/runtime work remain required.
+
+## Continuation evidence — consent expiration and maintenance
+
+Previous turn was progress (`6429b56`). Public consent grants default to 90-day expiry with optional shorter requested deadline; same-version replay does not extend the deadline, and revoked/expired/changed-deadline renewals require a new version. Public read/list rejects expiry immediately, including legacy null expiry beyond 90 days. A recurring fenced maintenance job starts with the worker, processes expiry, withdraws notification metadata, cancels expired model/private-purpose work, and reconciles orphan running AI audit metadata. Next sweep is durably queued at a ten-minute boundary.
+
+Tests cover deadline/replay/renewal, immediate denial, legacy expiry, notification withdrawal, audit cleanup and recurrence. Typecheck and focused suites passed. `docs/retention.md` explicitly distinguishes permission expiry from still-pending private 30-day physical cleanup and backup rotation. No Docker volumes removed; final Docker build and retention/backup acceptance remain required. Goal stays active.
+
+Final milestone verification: `pnpm.cmd test` passed 27 files / 141 tests and `pnpm.cmd typecheck` passed. The recurring job is implemented and tested locally but not yet deployed into the currently running old worker image.

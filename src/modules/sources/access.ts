@@ -11,7 +11,7 @@
  *    it (importer or creator of a case on it) — never every source.
  *  - Consent is separate from login: it lives in `consents`, per purpose.
  */
-import { and, eq, or, isNull, gt } from 'drizzle-orm';
+import { and, eq, or, isNull, gt, sql } from 'drizzle-orm';
 import type { Executor } from '../../db/client.js';
 import { authorVerifications, consents, followupCases } from '../../db/schema.js';
 import type { ConsentRow, SourceRow } from '../../db/schema.js';
@@ -138,6 +138,7 @@ export async function hasActiveConsent(
         eq(consents.purpose, purpose),
         eq(consents.status, 'granted'),
         or(isNull(consents.expiresAt), gt(consents.expiresAt, new Date())),
+        purpose === 'demo_public_display' ? sql`(${consents.expiresAt} is not null or ${consents.grantedAt} > now() - interval '90 days')` : undefined,
         userId ? eq(consents.userId, userId) : undefined,
       ),
     )
@@ -167,9 +168,8 @@ export async function hasRevokedConsent(
 
 /**
  * A source is publicly visible only when its own permission status is
- * `public_approved` AND no `demo_public_display` consent has been revoked.
- * The second check makes a revocation effective immediately, without waiting
- * for the publish module to touch `permission_status`.
+ * `public_approved` AND an active, unexpired display consent exists.
+ * Historical revoked versions do not invalidate a later explicit renewal.
  */
 export async function isPubliclyVisible(db: Executor, source: SourceRow): Promise<boolean> {
   if (source.deletedAt || source.permissionStatus !== 'public_approved') return false;

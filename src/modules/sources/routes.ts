@@ -127,6 +127,7 @@ const consentSchema = z.object({
   status: z.enum(['granted', 'revoked', 'expired']),
   version: z.string(),
   granted_at: z.string(),
+  expires_at: nullableDateTime,
   revoked_at: nullableDateTime,
 });
 
@@ -357,6 +358,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
           status: c.status,
           version: c.version,
           granted_at: c.grantedAt.toISOString(),
+          expires_at: c.expiresAt?.toISOString() ?? null,
           revoked_at: c.revokedAt?.toISOString() ?? null,
         })),
       });
@@ -372,7 +374,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         summary: 'Grant a per-purpose consent (author only)',
         security: [{ bearerAuth: [] }],
         params: idParams,
-        body: z.object({ purpose: consentPurposeSchema, version: z.string().min(1).max(64).default('v1') }).strict(),
+        body: z.object({ purpose: consentPurposeSchema, version: z.string().min(1).max(64).default('v1'), expires_at: z.string().datetime({ offset: true }).optional() }).strict(),
         response: {
           200: envelopeSchema(
             z.object({ consent: consentSchema, source_permission_status: permissionStatusSchema }),
@@ -390,6 +392,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         request.params.id,
         request.body.purpose,
         request.body.version,
+        request.body.expires_at ? new Date(request.body.expires_at) : undefined,
       );
       return success(request.id, {
         consent: {
@@ -398,6 +401,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
           status: consent.status,
           version: consent.version,
           granted_at: consent.grantedAt.toISOString(),
+          expires_at: consent.expiresAt?.toISOString() ?? null,
           revoked_at: consent.revokedAt?.toISOString() ?? null,
         },
         source_permission_status: sourcePermissionStatus,
@@ -443,6 +447,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
           status: consent.status,
           version: consent.version,
           granted_at: consent.grantedAt.toISOString(),
+          expires_at: consent.expiresAt?.toISOString() ?? null,
           revoked_at: consent.revokedAt?.toISOString() ?? null,
         },
         source_permission_status: sourcePermissionStatus,

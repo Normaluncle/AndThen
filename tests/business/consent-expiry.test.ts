@@ -1,0 +1,50 @@
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { and, eq } from 'drizzle-orm';
+import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
+import { aiRuns, consents, jobs, notifications } from '../../src/db/schema.js';
+import { runJob } from '../helpers/run-job.js';
+import { seedMaintenance } from '../../src/modules/followups/maintenance.js';
+
+describe('consent deadlines and recurring maintenance', () => {
+  let h: Harness;
+  beforeAll(async () => { h = await createHarness(); });
+  afterAll(async () => { await h.close(); });
+  it('defaults public grants to 90 days, never extends a replay, and requires a new version to renew', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    const grant = (version: string, expires_at?: string) => h.app.inject({ method: 'POST', url: `/api/sources/${story.source.id}/consents`, headers: auth(author.token), payload: { purpose: 'demo_public_display', version, ...(expires_at ? { expires_at } : {}) } });
+    const before = Date.now();
+    const response = await grant('v2');
+    expect(response.statusCode, response.body).toBe(200);
+    const consent = response.json().data.consent;
+    expect(Date.parse(consent.expires_at) - before).toBeGreaterThanOrEqual(90 * 86400000);
+    expect((await grant('v2')).json().data.consent.expires_at).toBe(consent.expires_at);
+    expect((await grant('v2', new Date(Date.now() + 3600000).toISOString())).statusCode).toBe(409);
+    await h.ctx.db.update(consents).set({ expiresAt: new Date(Date.now() - 1000) }).where(eq(consents.id, consent.id));
+    expect((await h.app.inject({ method: 'GET', url: `/api/stories/${story.source.id}` })).statusCode).toBe(404);
+    expect((await grant('v2')).statusCode).toBe(409);
+    const shorter = new Date(Date.now() + 3600000).toISOString();
+    expect((await grant('v3', shorter)).json().data.consent.expires_at).toBe(shorter);
+    expect((await h.app.inject({ method: 'GET', url: `/api/stories/${story.source.id}` })).statusCode).toBe(200);
+  });
+  it('expires legacy null public deadlines, withdraws notification metadata, closes orphaned AI audits and schedules another sweep', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const reader = await seedUser(h, 'reader', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    await h.ctx.db.update(consents).set({ grantedAt: new Date(Date.now() - 91 * 86400000) }).where(eq(consents.sourceId, story.source.id));
+    await h.ctx.db.insert(notifications).values({ readerKey: reader.user.id, caseId: story.followupCase.id, followupVersionId: story.versionId });
+    const { job } = await h.moduleCtx.jobs.enqueue({ kind: 'ai.test_fixture' });
+    await h.ctx.db.update(jobs).set({ status: 'failed' }).where(eq(jobs.id, job.id));
+    await h.ctx.db.insert(aiRuns).values({ task: 'ai_b_interview', status: 'running', jobId: job.id, sourceId: story.source.id });
+    expect((await h.app.inject({ method: 'GET', url: `/api/stories/${story.source.id}` })).statusCode).toBe(404);
+    await seedMaintenance(h.moduleCtx);
+    const sweep = await runJob(h.moduleCtx, 'maintenance.consents');
+    expect(sweep?.data?.expired_consents).toBeGreaterThan(0);
+    expect((await h.ctx.db.select().from(consents).where(eq(consents.sourceId, story.source.id)))[0]?.status).toBe('expired');
+    expect((await h.ctx.db.select().from(notifications).where(eq(notifications.caseId, story.followupCase.id)))[0]?.status).toBe('withdrawn');
+    expect((await h.ctx.db.select().from(aiRuns).where(eq(aiRuns.jobId, job.id)))[0]?.status).toBe('cancelled');
+    const pending = await h.ctx.db.select().from(jobs).where(and(eq(jobs.kind, 'maintenance.consents'), eq(jobs.status, 'queued')));
+    expect(pending.length).toBeGreaterThan(0);
+    expect(pending[0]!.runAt.getTime()).toBeGreaterThan(Date.now());
+  });
+});

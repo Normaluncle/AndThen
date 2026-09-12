@@ -4,6 +4,7 @@ import { registerFollowupJobs } from './worker.js';
 import { registerDeletionRoutes, registerDeletionJobs } from './deletion.js';
 import { registerValidationRoutes, registerValidationJobs } from './validation.js';
 import { registerDraftingRoutes, registerDraftingJobs } from './drafting.js';
+import { seedMaintenance, registerMaintenanceJobs } from './maintenance.js';
 
 /**
  * RESERVED MODULE — no routes or handlers are registered in the foundation
@@ -21,5 +22,6 @@ import { registerDraftingRoutes, registerDraftingJobs } from './drafting.js';
 export const followupsModule: ModuleDefinition = {
   name: 'followups',
   registerRoutes: async (app, ctx) => { await registerFollowupRoutes(app, ctx); await registerDeletionRoutes(app, ctx); await registerValidationRoutes(app, ctx); await registerDraftingRoutes(app, ctx); },
-  registerJobHandlers: (ctx, registry) => { registerFollowupJobs(ctx, registry); registerDeletionJobs(ctx, registry); registerValidationJobs(ctx, registry); registerDraftingJobs(ctx, registry); },
+  registerJobHandlers: (ctx, registry) => { registerFollowupJobs(ctx, registry); registerDeletionJobs(ctx, registry); registerValidationJobs(ctx, registry); registerDraftingJobs(ctx, registry); registerMaintenanceJobs(ctx, registry); },
+  onWorkerStart: async ctx => { await seedMaintenance(ctx); },
 };
