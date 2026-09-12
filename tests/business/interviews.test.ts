@@ -1,3 +1,4 @@
+import { authorMemories } from '../../src/db/schema.js';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
@@ -50,8 +51,14 @@ describe('durable manual interview flow', () => {
     const draftUrl = `/api/drafts/${draft.id}`;
     const publish = { content_hash: draft.contentHash, confirms_publication: true };
     expect((await h.app.inject({ method: 'POST', url: `${draftUrl}/publish`, headers: auth(author.token), payload: publish })).statusCode).toBe(409);
+    await h.ctx.db.insert(authorMemories).values({userId:author.user.id,enabled:false});
     const confirmed = await h.app.inject({ method: 'POST', url: `${draftUrl}/confirm`, headers: auth(author.token), payload: { content_hash: draft.contentHash, statement_ids: draft.statements.map((s: { id: string }) => s.id) } });
     expect(confirmed.statusCode, confirmed.body).toBe(200);
+    const [memoryBeforeReplay]=await h.ctx.db.select().from(authorMemories).where(eq(authorMemories.userId,author.user.id));
+    const replay=await h.app.inject({method:'POST',url:`${draftUrl}/confirm`,headers:auth(author.token),payload:{content_hash:draft.contentHash,statement_ids:draft.statements.map((s:{id:string})=>s.id)}});
+    expect(replay.statusCode).toBe(200);
+    const [memoryAfterReplay]=await h.ctx.db.select().from(authorMemories).where(eq(authorMemories.userId,author.user.id));
+    expect(memoryAfterReplay!.generation).toBe(memoryBeforeReplay!.generation);
     const [awaitingReview] = await h.ctx.db.update(followupCases).set({ reviewerRequired: true }).where(eq(followupCases.id, story.followupCase.id)).returning();
     expect((await h.app.inject({ method: 'POST', url: `${draftUrl}/publish`, headers: auth(author.token), payload: publish })).statusCode).toBe(409);
     const reviewer = await seedUser(h, 'admin', 'test_fixture');

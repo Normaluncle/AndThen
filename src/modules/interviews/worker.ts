@@ -12,7 +12,7 @@ import { hasActiveConsent } from '../sources/access.js';
 import { lockCase } from './service.js';
 import { AppError } from '../../http/errors.js';
 import { privateExpired, requirePrivateFresh } from '../followups/retention.js';
-import { recallMemory, authorizedMaterials } from '../memory/service.js';
+import { recallMemory, validMemoryRecords } from '../memory/service.js';
 
 const payloadSchema = z.object({ source_id: z.string().uuid(), case_id: z.string().uuid(), session_id: z.string().uuid(), owner_user_id: z.string().uuid(), revision: z.number().int() });
 const turnSchema = z.object({ question: z.string().trim().min(1).max(500), purpose: z.string().max(1000), basis_refs: z.array(z.string()).min(1).max(10) }).strict();
@@ -45,17 +45,18 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
   if (!input) return { data: { generated: false, reason: 'budget_permission_or_state' } };
   const memory = ctx.env.MEMORY_SERVICE_URL
     ? await recallMemory(ctx, p.owner_user_id, input.history.filter(m => m.role === 'author').at(-1)?.authorMessage ?? input.snapshot.excerpt ?? input.snapshot.body ?? '作者近况', job.signal)
-    : { status: 'unavailable', generation: null, records: [] };
+    : { status: 'unavailable', generation: null, records: [], preferences: [] };
+  const memoryRecords=[...memory.preferences,...memory.records];
   const evidence = [
     { id: `snapshot:${input.snapshot.id}`, text: input.snapshot.body ?? input.snapshot.excerpt ?? '' },
     ...input.history.filter(m => m.role === 'author' && !m.skipped).map(m => ({ id: `message:${m.id}`, text: m.authorMessage ?? '' })),
-    ...memory.records.map(m => ({ id: m.evidenceRef ?? `snapshot:${m.snapshotId}`, text: m.evidenceText })),
+    ...memoryRecords.map(m => ({ id: m.evidenceRef ?? `snapshot:${m.snapshotId}`, text: m.evidenceText })),
   ];
   let turn: z.infer<typeof turnSchema> | undefined;
   let completion: Awaited<ReturnType<ReturnType<typeof createLlmClient>['complete']>> | undefined;
   let failureCode: string | null = null;
   try {
-    const serialized = JSON.stringify({ evidence, author_memory: memory.records.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
+    const serialized = JSON.stringify({ evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
       history: input.history.map(m => ({ role: m.role, question: m.question, answer: m.authorMessage, skipped: m.skipped })) });
     if (serialized.length > 64000) throw AppError.sourceIncomplete('Authorized input exceeds the task budget');
     completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
@@ -67,12 +68,12 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
     failureCode = err instanceof AppError ? err.code : 'invalid_model_output';
   }
   await ctx.db.transaction(async tx => {
-    await tx.select({ id: sources.id }).from(sources).where(inArray(sources.id, [...new Set([p.source_id, ...memory.records.map(m => m.sourceId)])])).orderBy(asc(sources.id)).for('update');
-    if (memory.records.length) {
+    await tx.select({ id: sources.id }).from(sources).where(inArray(sources.id, [...new Set([p.source_id, ...memoryRecords.map(m => m.sourceId)])])).orderBy(asc(sources.id)).for('update');
+    if (memoryRecords.length) {
       const [profile] = await tx.select().from(authorMemories).where(eq(authorMemories.userId, p.owner_user_id)).for('update');
       if (!profile?.enabled || profile.generation !== memory.generation) throw AppError.conflict('Memory generation changed');
-      const allowed = await authorizedMaterials(ctx, p.owner_user_id, tx);
-      if (memory.records.some(m => !allowed.some(a => a.snapshot.id === m.snapshotId))) throw AppError.conflict('Memory authorization changed');
+      const valid=await validMemoryRecords(ctx,p.owner_user_id,memoryRecords,tx);
+      if (valid.length!==memoryRecords.length) throw AppError.conflict('Memory authorization changed');
     }
     await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, p.source_id)).for('update');
     await withJobFence(tx, { jobId: job.job.id, fencingToken: job.job.fencingToken }, async fenced => {

@@ -2,6 +2,7 @@ import { and, eq, inArray, sql } from 'drizzle-orm';
 import { sources, interviewSessions, followupVersions, aiRuns, jobs, idempotencyKeys, auditLogs } from '../../db/schema.js';
 import type { ModuleContext } from '../../shared/types.js';
 import type { JobHandlerContext } from '../../jobs/types.js';
+import { invalidateAuthorMemory } from '../memory/service.js';
 import { withJobFence } from '../../jobs/transaction.js';
 import { PRIVATE_RETENTION_MS, publicStatements } from './retention.js';
 
@@ -45,6 +46,7 @@ export async function purgeExpiredPrivateContent(ctx: ModuleContext, job: JobHan
         }
         if (sessionIds.length) await fenced.delete(interviewSessions).where(inArray(interviewSessions.id, sessionIds));
         const ownerIds = [...new Set([...expiredSessions.map(s => s.ownerUserId), ...expiredVersions.map(v => v.createdByUserId)].filter((id): id is string => !!id))];
+        for(const ownerId of ownerIds.sort())await invalidateAuthorMemory(ctx,fenced,ownerId);
         if (ownerIds.length) await fenced.delete(idempotencyKeys).where(inArray(idempotencyKeys.userId, ownerIds));
         await fenced.insert(auditLogs).values({ action: 'retention.private_purged', subjectType: 'source', subjectId: source.id, properties: { interviews: sessionIds.length, versions: versionIds.length, cutoff: cutoff.toISOString() } });
         interviews += sessionIds.length;

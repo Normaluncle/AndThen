@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { parse } from 'dotenv';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { createHarness, seedUser, seedPublishedStory, auth, type Harness } from './helpers.js';
-import { authorMemories, consents, followupCases } from '../../src/db/schema.js';
+import { authorMemories, consents, followupCases, jobs } from '../../src/db/schema.js';
 import { runJob } from '../helpers/run-job.js';
 import { recallMemory } from '../../src/modules/memory/service.js';
 
@@ -15,7 +15,10 @@ describe.skipIf(process.env.MEMORY_LIVE_TEST !== '1')('real Qwen -> memU -> inte
     for (const k of ['LLM_BASE_URL', 'LLM_API_KEY', 'LLM_MODEL', 'MEMORY_SERVICE_URL', 'MEMORY_SERVICE_TOKEN'] as const) h.ctx.env[k] = cfg[k];
     h.ctx.env.LLM_TIMEOUT_MS = 60000;
   });
-  afterAll(async () => { await h?.close(); });
+  afterAll(async () => {
+    if(h){const pending=await h.ctx.db.select().from(jobs).where(and(eq(jobs.kind,'memory.delete'),eq(jobs.status,'queued')));for(const _ of pending)await runJob(h.moduleCtx,'memory.delete');}
+    await h?.close();
+  });
   it('builds authorized memories, retrieves them, generates a grounded question and invalidates on revocation', async () => {
     const a = await seedUser(h, 'author');
     const b = await seedUser(h, 'author');
@@ -24,7 +27,10 @@ describe.skipIf(process.env.MEMORY_LIVE_TEST !== '1')('real Qwen -> memU -> inte
     await h.ctx.db.insert(consents).values(['private_interview', 'external_model_processing'].map(purpose => ({ userId: a.user.id, sourceId: story.source.id, purpose: purpose as 'private_interview' | 'external_model_processing', status: 'granted' as const })));
     const enable = await h.app.inject({ method: 'PUT', url: '/api/me/memory/consent', headers: auth(a.token), payload: { enabled: true } });
     expect(enable.statusCode).toBe(200);
-    await runJob(h.moduleCtx, 'memory.refresh');
+    const refresh=await runJob(h.moduleCtx, 'memory.refresh');
+    expect(refresh?.data?.llm_calls).toBeGreaterThan(0);
+    expect(refresh?.data?.index_writes).toBe(1);
+    console.info('memory-live usage',JSON.stringify(refresh?.data));
     const [ready] = await h.ctx.db.select().from(authorMemories).where(eq(authorMemories.userId, a.user.id));
     expect(ready?.status).toBe('ready');
     expect(ready!.records.length).toBeGreaterThan(0);

@@ -287,3 +287,9 @@ Private memU HTTP service uses a server-only token and UUID-scoped generation pa
 游标按官方 NextOffset 原样回传并作 Int64 校验，不按页长度猜测。游标缺失或不递增时显式标记；每页事务写入，按精确评论 ID 更新。末页下次从原末页继续获取增量；缺失评论不推断为上游删除。最多缓存 2000 条，达到上限不部分提交。删除来源时缓存级联清理，来源失效/任务失去租约后不能回写。
 
 新增表 `zhihu_comment_syncs`；新增迁移 0007，旧迁移保持原样。能力状态新增 `creator_account_reads` 与 `comment_sync_scope=access_secret_owner_only`，不表示任意 OAuth 作者可调用全文/评论。
+
+## v1.2 作者记忆回写与内部返回
+
+`recallMemory` 内部返回分为 `preferences`（全部有效明确拒谈边界）与 `records`（最多五条、总计约两千字的相关经历）。两组都必须通过当前来源权限、版本校验，不把检索排名当作边界过滤器。记忆页面复用相同有效性检查。外部 HTTP 响应保持兼容。
+
+`memory.refresh` 新索引激活采用来源→作者记忆→任务租约的事务检查，并将旧索引清理入队。同意切换与相关任务入队同事务提交。成功/复用/过时结果保存在 job.result，包含不带正文的模型调用量、token 和时延；向量 token 未知，不推算。工作台超过 24 小时触发去重刷新。

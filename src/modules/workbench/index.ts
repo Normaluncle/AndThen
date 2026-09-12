@@ -2,9 +2,10 @@ import { and, desc, eq, isNull, or } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleDefinition } from '../../shared/types.js';
-import { authorVerifications, followupCases, followupVersions, interviewSessions, sources } from '../../db/schema.js';
+import { authorMemories, authorVerifications, followupCases, followupVersions, interviewSessions, sources } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema } from '../../http/envelope.js';
+import { requestRefresh } from '../memory/service.js';
 import { success } from '../../http/errors.js';
 
 export const workbenchModule: ModuleDefinition = {
@@ -13,6 +14,8 @@ export const workbenchModule: ModuleDefinition = {
     const r = app.withTypeProvider<ZodTypeProvider>();
     r.get('/me/workbench', { preHandler: [app.authenticate], schema: { tags: ['workbench'], response: { 200: envelopeSchema(z.object({ items: z.array(z.object({ id: z.string(), source_id: z.string(), title: z.string().nullable(), status: z.string(), interview_id: z.string().nullable(), draft_id: z.string().nullable() })) })) } } }, async request => {
       const auth = requireAuthContext(request);
+      const [memory]=await ctx.db.select().from(authorMemories).where(eq(authorMemories.userId,auth.userId));
+      if(memory?.enabled&&ctx.now().getTime()-memory.updatedAt.getTime()>86400000)await requestRefresh(ctx,auth.userId);
       const rows = await ctx.db.select({ c: followupCases, title: sources.title }).from(followupCases)
         .innerJoin(sources, eq(sources.id, followupCases.sourceId))
         .innerJoin(authorVerifications, and(eq(authorVerifications.sourceId, sources.id), eq(authorVerifications.userId, auth.userId), eq(authorVerifications.status, 'verified')))

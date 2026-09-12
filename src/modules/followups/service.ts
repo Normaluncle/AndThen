@@ -93,6 +93,7 @@ export async function confirmDraft(ctx: ModuleContext, auth: AuthContext, id: st
     if (validation.blocking || validation.draft_content_hash !== hash) throw AppError.sourceIncomplete('Draft evidence validation failed');
     await requireNoModelBlock(tx, id, hash);
     if (itemIds.length !== statements.length || new Set(itemIds).size !== itemIds.length || statements.some(s => !itemIds.includes(s.id))) throw AppError.validation('Confirm every statement exactly once');
+    if (draft.status === 'confirmed') return draft; // Same hash and statement set: no new memory generation.
     const [confirmed] = await tx.update(followupVersions).set({ status: 'confirmed', authorConfirmations: itemIds.map(statementId => ({ statement_id: statementId, content_hash: hash, user_id: auth.userId })), confirmedAt: ctx.now(), updatedAt: ctx.now() }).where(eq(followupVersions.id, id)).returning();
     await invalidateAuthorMemory(ctx, tx, auth.userId);
     return confirmed!;

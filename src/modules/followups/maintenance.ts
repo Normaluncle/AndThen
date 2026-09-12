@@ -2,6 +2,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { consents, sources, notifications, followupCases, aiRuns, jobs } from '../../db/schema.js';
 import type { ModuleContext } from '../../shared/types.js';
 import type { JobHandlerRegistry } from '../../jobs/types.js';
+import { invalidateAuthorMemory } from '../memory/service.js';
 import { withJobFence } from '../../jobs/transaction.js';
 import { purgeExpiredPrivateContent } from './retention-worker.js';
 
@@ -32,8 +33,9 @@ export function registerMaintenanceJobs(ctx: ModuleContext, registry: JobHandler
         const updated = await tx.update(consents).set({ status: 'expired' }).where(and(eq(consents.sourceId, source.id), eq(consents.status, 'granted'), sql`(
           (${consents.expiresAt} is not null and ${consents.expiresAt} <= ${ctx.now()}) or
           (${consents.purpose}='demo_public_display' and ${consents.expiresAt} is null and ${consents.grantedAt} <= ${new Date(ctx.now().getTime() - 90 * 86400000)})
-        )`)).returning({ id: consents.id, purpose: consents.purpose });
+        )`)).returning({ id: consents.id, purpose: consents.purpose, userId: consents.userId });
         expired += updated.length;
+        for(const ownerId of new Set(updated.filter(c=>c.purpose==='external_model_processing'||c.purpose==='private_interview').map(c=>c.userId))){if(ownerId)await invalidateAuthorMemory(ctx,tx,ownerId);}
         if (updated.some(c => c.purpose === 'external_model_processing' || c.purpose === 'private_interview')) {
           await tx.execute(sql`update jobs set status='cancelled', finished_at=now(), lease_owner=null, lease_expires_at=null where kind like 'ai.%' and status in ('queued','running') and payload->>'source_id'=${source.id}`);
           await tx.execute(sql`update interview_sessions set mode='manual', revision=revision+1, stop_reason='consent_expired' where case_id in (select id from followup_cases where source_id=${source.id}) and status in ('active','paused')`);
