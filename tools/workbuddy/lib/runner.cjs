@@ -388,25 +388,23 @@ async function runTask({ config, store, locks, task, emit = () => {} }) {
     return result;
   } catch (err) {
     const orch = err instanceof OrchError ? err : new OrchError(codes.INTERNAL, err.message);
-    if (rt.violation) {
-      result.status = 'failed';
-    } else if (orch.code === codes.RESUME_FAILED || orch.code === codes.NO_SESSION) {
-      result.status = 'failed';
-    } else if (orch.code === codes.LOCKED) {
-      result.status = 'failed';
-    } else if (orch.code === codes.TIMEOUT || orch.code === codes.DISCONNECT) {
-      result.status = 'failed';
-    } else {
-      result.status = 'failed';
-    }
-    result.error = { code: orch.code, message: redactString(orch.message) };
+    // A violation terminates the child, which can surface as a transport error
+    // (E_DISCONNECT). The reported code must always be the violation, not the
+    // side effect of cancelling it.
+    const code = rt.violation ? codes.VIOLATION : orch.code;
+    const exitCode = rt.violation ? EXIT.VIOLATION : orch.exitCode;
+    const message = rt.violation
+      ? `runtime violation: ${rt.violation.type} (${rt.violation.detail})`
+      : orch.message;
+    result.status = 'failed';
+    result.error = { code, message: redactString(message) };
     result.outcome = result.outcome || null;
     persist({ status: result.status, error: result.error, violation: rt.violation || undefined });
-    store.appendAudit(agentName, { type: 'error', code: orch.code, message: result.error.message });
-    log(`ERROR ${agentName} ${orch.code}: ${result.error.message}`);
+    store.appendAudit(agentName, { type: 'error', code, message: result.error.message });
+    log(`ERROR ${agentName} ${code}: ${result.error.message}`);
     result.checkpoint = writeCheckpoint(store, agentName, taskId, result, rt);
     persist({ status: result.status, checkpoint: result.checkpoint });
-    const wrapped = new OrchError(orch.code, orch.message, { exitCode: orch.exitCode, details: { result } });
+    const wrapped = new OrchError(code, message, { exitCode, details: { result } });
     wrapped.result = result;
     throw wrapped;
   } finally {

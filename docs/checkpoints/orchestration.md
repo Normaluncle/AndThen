@@ -12,9 +12,11 @@ Command: `node --test tests/orchestrator/*.test.cjs`
 
 Result at implementation commit: **34 tests, 34 pass, 0 fail** (Node v24.19.0).
 
-Stability: 5 consecutive clean runs after hardening test-only timeouts to 10s.
-One earlier run under parallel load flaked on a 2s request timeout; the timeout
-was raised in the test helper (not a production code change).
+Stability: after hardening test-only timeouts to 10s and fixing a
+violation/transport error-code race, the suite passed 6/6 consecutive full runs
+(34/34) plus 8/8 isolated `acp-guards` stress runs. Two earlier flakes (a 2s
+request timeout under parallel load, and the error-code race) were fixed; both
+were test-harness or determinism issues, not relaxed assertions.
 
 Covered behaviours:
 
@@ -57,6 +59,11 @@ Covered behaviours:
 - `--max-concurrency 3` requires explicit verification; values > 3 are capped.
 - Cross-process waiting uses `fs.watch` on the locks dir with a slow fallback
   heartbeat (no fixed long poll).
+- A runtime violation terminates the child, which can surface as a transport
+  error (`E_DISCONNECT`). The runner normalizes the reported error code to
+  `E_VIOLATION`, so cancellation timing cannot change the outcome. This was a
+  real race found by repeated test runs and is now covered by the stress runs
+  below.
 
 ## Unverified boundaries
 
