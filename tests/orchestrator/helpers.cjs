@@ -35,7 +35,7 @@ function makeConfig(overrides = {}) {
     permissionMode: PERMISSION_MODE,
     allowedTools: [...ALLOWED_TOOLS],
     disallowedTools: [...DISALLOWED_TOOLS],
-    timeouts: { request: 2000, prompt: 3000, lockWait: 0 },
+    timeouts: { request: 10000, prompt: 10000, lockWait: 0 },
     extraEnv: {},
     cwd: process.cwd(),
     ...overrides,

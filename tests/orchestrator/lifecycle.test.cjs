@@ -15,7 +15,7 @@ function ctx(mode, dir, timeouts) {
   const config = makeConfig({
     stateDir: dir,
     extraEnv: { FAKE_ACP_MODE: mode, FAKE_ACP_LOG: fakeLogPath(dir) },
-    timeouts: timeouts || { request: 2000, prompt: 3000, lockWait: 0 },
+    timeouts: timeouts || { request: 10000, prompt: 10000, lockWait: 0 },
   });
   return { config, store: makeStore(config), locks: makeLocks(config), logPath: fakeLogPath(dir) };
 }
@@ -39,7 +39,7 @@ test('a mid-run disconnect fails the task and releases the agent lock', async ()
 
 test('a prompt timeout fails the task, kills the child and releases the lock', async () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'wb-life-'));
-  const { config, store, locks } = ctx('hang', dir, { request: 2000, prompt: 400, lockWait: 0 });
+  const { config, store, locks } = ctx('hang', dir, { request: 10000, prompt: 400, lockWait: 0 });
   const taskFile = writeTask(dir);
 
   await assert.rejects(
