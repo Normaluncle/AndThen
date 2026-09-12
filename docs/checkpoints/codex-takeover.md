@@ -110,3 +110,11 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Verified: typecheck; full real-PostgreSQL/unit suite **28 files / 144 tests passed**. New tests cover immediate denial, physical cleanup, preserved public text, retained recent private material, empty association lists, repeated sweeps, zero provider requests for expired input, and late reply rejection after physical cleanup. One first-pass migration test saw a transient database authentication failure; isolated rerun and final full run passed without modifying credentials or weakening tests.
 - Docker is still running runtime revision `1f0f59e`; this migration/runtime change has not yet been included in a new Docker image. Final rebuild, OpenAPI export and acceptance remain required after the remaining API work.
 - Next: implement PRD `POST /api/me/data-deletion`, audit core route and T01-T22 coverage, update delivery docs and run final Docker acceptance. Real provider P4 remains unverified without independent model configuration.
+
+## Reader activity deletion continuation — 2026-09-12
+
+- Added PRD-named `POST /api/me/data-deletion` with explicit `reader_activity` scope, reader authentication, confirmation and caller-scoped hashed replay key.
+- Transactionally removes own prior activity and frozen outbox recipient membership, preserving other users, author material and subsequent interactions. Replies HTTP 200 with a completed content-free receipt; existing `GET /api/deletions/:id` enforces requester ownership.
+- This is scoped activity erasure, not account closure. Identity/login deletion and standalone case/interview scopes remain unimplemented and are explicitly documented in `docs/deletion-api.md`; do not claim whole-account deletion is complete.
+- Typecheck and affected regression suites passed: 5 files / 9 tests (reader deletion, research, full manual workflow, OpenAPI, registry). Source deletion remains asynchronous via its existing endpoint. The final Docker image/OpenAPI artifact still need refreshing after remaining work.
+- Next: finish deletion scope audit, full PRD interface/acceptance matrix and final Docker delivery. Previous goal turn was concrete progress (retention code, migration, tests, commit); this turn adds actual API behavior and independently executed tests.

@@ -1,0 +1,52 @@
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
+import { interests, notifications, researchEvents, outbox } from '../../src/db/schema.js';
+import { runJob } from '../helpers/run-job.js';
+
+describe('own reader activity deletion', () => {
+  let h: Harness;
+  beforeAll(async () => { h = await createHarness(); });
+  afterAll(async () => { await h.close(); });
+  it('erases only the requester, blocks old outbox replay, preserves subsequent activity and deduplicates concurrent requests', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const reader = await seedUser(h, 'reader', 'test_fixture');
+    const other = await seedUser(h, 'reader', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    await h.ctx.db.insert(interests).values([reader, other].map(r => ({ readerKey: r.user.id, sourceId: story.source.id })));
+    await h.ctx.db.insert(researchEvents).values([reader, other].map(r => ({ readerKey: r.user.id, sourceId: story.source.id, eventType: 'source_view', properties: { test_fixture: true } })));
+    await h.ctx.db.insert(notifications).values({ readerKey: reader.user.id, caseId: story.followupCase.id, followupVersionId: story.versionId });
+    await h.ctx.db.insert(outbox).values({ topic: 'followup.published', dedupeKey: story.versionId, payload: { source_id: story.source.id, case_id: story.followupCase.id, version_id: story.versionId }, recipients: [reader, other].map(r => ({ readerKey: r.user.id, cohort: 'test_fixture' })) });
+    const remove = (key: string) => h.app.inject({ method: 'POST', url: '/api/me/data-deletion', headers: auth(reader.token), payload: { scope: 'reader_activity', confirms_deletion: true, idempotency_key: key } });
+    const responses = await Promise.all([remove('erase1'), remove('erase1')]);
+    for (const r of responses) expect(r.statusCode, r.body).toBe(200);
+    const id = responses[0]!.json().data.deletion_id;
+    expect(responses[1]!.json().data.deletion_id).toBe(id);
+    expect(await h.ctx.db.select().from(interests).where(eq(interests.readerKey, reader.user.id))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(researchEvents).where(eq(researchEvents.readerKey, reader.user.id))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(researchEvents).where(eq(researchEvents.readerKey, other.user.id))).toHaveLength(1);
+    expect((await h.app.inject({ url: `/api/deletions/${id}`, headers: auth(other.token) })).statusCode).toBe(404);
+    expect((await h.app.inject({ url: `/api/deletions/${id}`, headers: auth(reader.token) })).json().data.status).toBe('succeeded');
+    expect((await h.app.inject({ url: '/api/me', headers: auth(reader.token) })).statusCode).toBe(200);
+    const follow = await h.app.inject({ method: 'PUT', url: `/api/stories/${story.source.id}/interest`, headers: auth(reader.token), payload: { active: true } });
+    expect(follow.statusCode, follow.body).toBe(200);
+    expect((await remove('erase1')).json().data.deletion_id).toBe(id);
+    expect(await h.ctx.db.select().from(interests).where(eq(interests.readerKey, reader.user.id))).toHaveLength(1);
+    await h.moduleCtx.jobs.enqueue({ kind: 'followup.notify', payload: { source_id: story.source.id, case_id: story.followupCase.id, version_id: story.versionId } });
+    await runJob(h.moduleCtx, 'followup.notify');
+    expect(await h.ctx.db.select().from(notifications).where(eq(notifications.readerKey, reader.user.id))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(notifications).where(eq(notifications.readerKey, other.user.id))).toHaveLength(1);
+    expect((await remove('erase2')).json().data.deletion_id).not.toBe(id);
+    expect(await h.ctx.db.select().from(interests).where(eq(interests.readerKey, reader.user.id))).toHaveLength(0);
+    expect((await h.app.inject({ url: `/api/stories/${story.source.id}` })).statusCode).toBe(200);
+  });
+  it('requires a reader session, explicit confirmation and a supported scope', async () => {
+    const reader = await seedUser(h, 'reader');
+    const author = await seedUser(h, 'author');
+    const payload = { scope: 'reader_activity', confirms_deletion: true, idempotency_key: 'confirmed' };
+    expect((await h.app.inject({ method: 'POST', url: '/api/me/data-deletion', payload })).statusCode).toBe(401);
+    expect((await h.app.inject({ method: 'POST', url: '/api/me/data-deletion', headers: auth(author.token), payload })).statusCode).toBe(403);
+    expect((await h.app.inject({ method: 'POST', url: '/api/me/data-deletion', headers: auth(reader.token), payload: { ...payload, confirms_deletion: false } })).statusCode).toBe(400);
+    expect((await h.app.inject({ method: 'POST', url: '/api/me/data-deletion', headers: auth(reader.token), payload: { ...payload, scope: 'account' } })).statusCode).toBe(400);
+  });
+});
