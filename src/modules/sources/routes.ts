@@ -123,7 +123,7 @@ const publicStorySchema = z.object({
 
 const consentSchema = z.object({
   id: z.string().uuid(),
-  purpose: consentPurposeSchema,
+  purpose: z.union([consentPurposeSchema, z.literal('reader_session')]),
   status: z.enum(['granted', 'revoked', 'expired']),
   version: z.string(),
   granted_at: z.string(),

@@ -15,6 +15,13 @@
       "when": 1789202376710,
       "tag": "0001_thin_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1789204285989,
+      "tag": "0002_striped_cargill",
+      "breakpoints": true
     }
   ]
 }

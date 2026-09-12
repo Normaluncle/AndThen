@@ -41,7 +41,7 @@ export class JobLeaseLostError extends Error {
  * business write that accompanies it.
  */
 export async function withJobFence<T>(
-  db: Database,
+  db: Database | Transaction,
   fence: JobFence,
   fn: (tx: Transaction) => Promise<T>,
 ): Promise<T> {

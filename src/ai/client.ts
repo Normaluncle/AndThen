@@ -70,10 +70,6 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
     }
 
     const started = Date.now();
-    const timeoutSignal = AbortSignal.timeout(env.LLM_TIMEOUT_MS);
-    const signal = request.signal
-      ? AbortSignal.any([request.signal, timeoutSignal])
-      : timeoutSignal;
 
     const body: Record<string, unknown> = {
       model: request.model ?? model,
@@ -84,7 +80,13 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
     if (request.json) body.response_format = { type: 'json_object' };
 
     let lastError: unknown;
-    for (let attempt = 0; attempt <= env.LLM_MAX_RETRIES; attempt += 1) {
+    const maxRetries = Math.min(env.LLM_MAX_RETRIES, 1);
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      request.signal?.throwIfAborted();
+      const timeoutSignal = AbortSignal.timeout(env.LLM_TIMEOUT_MS);
+      const signal = request.signal
+        ? AbortSignal.any([request.signal, timeoutSignal])
+        : timeoutSignal;
       try {
         const response = await fetchImpl(`${baseUrl}/chat/completions`, {
           method: 'POST',
@@ -97,13 +99,13 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
         });
 
         if (!response.ok) {
-          const text = await response.text().catch(() => '');
+          await response.body?.cancel();
           // Provider error text may echo request content; keep only the status.
           logger.warn(
-            { status: response.status, attempt, providerMessage: text.slice(0, 200) },
+            { status: response.status, attempt },
             'llm request failed',
           );
-          if (response.status === 429) throw AppError.conflict('LLM quota exhausted');
+          if (response.status === 429) throw new AppError({ code: 'quota_exhausted', message: 'LLM quota exhausted' });
           if (response.status >= 500) {
             throw AppError.serviceUnavailable(`LLM provider error (${response.status})`);
           }
@@ -112,6 +114,9 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
 
         const payload = (await response.json()) as OpenAiChatResponse;
         const choice = payload.choices?.[0];
+        if (typeof choice?.message?.content !== 'string' || !choice.message.content.trim()) {
+          throw AppError.serviceUnavailable('LLM returned no usable content');
+        }
         return {
           content: choice?.message?.content ?? '',
           model: payload.model ?? request.model ?? model ?? 'unknown',
@@ -123,10 +128,11 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
           latencyMs: Date.now() - started,
         };
       } catch (err: unknown) {
-        lastError = err;
-        const isTimeout = err instanceof Error && err.name === 'TimeoutError';
-        if (isTimeout) throw AppError.serviceUnavailable('LLM request timed out');
-        if (attempt === env.LLM_MAX_RETRIES) break;
+        request.signal?.throwIfAborted();
+        lastError = timeoutSignal.aborted
+          ? new AppError({ code: 'model_timeout', message: 'LLM request timed out' })
+          : err;
+        if (attempt === maxRetries) break;
         await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
       }
     }

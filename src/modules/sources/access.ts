@@ -11,7 +11,7 @@
  *    it (importer or creator of a case on it) — never every source.
  *  - Consent is separate from login: it lives in `consents`, per purpose.
  */
-import { and, eq } from 'drizzle-orm';
+import { and, eq, or, isNull, gt } from 'drizzle-orm';
 import type { Executor } from '../../db/client.js';
 import { authorVerifications, consents, followupCases } from '../../db/schema.js';
 import type { ConsentRow, SourceRow } from '../../db/schema.js';
@@ -29,6 +29,8 @@ export const EXCLUDED_COHORTS: ReadonlySet<string> = new Set([
   'demo',
   'internal',
   'fixture',
+  'test_fixture',
+  'unassigned',
   'pressure_test',
 ]);
 
@@ -125,6 +127,7 @@ export async function hasActiveConsent(
   db: Executor,
   sourceId: string,
   purpose: ConsentPurpose,
+  userId?: string,
 ): Promise<boolean> {
   const rows = await db
     .select({ id: consents.id })
@@ -134,6 +137,8 @@ export async function hasActiveConsent(
         eq(consents.sourceId, sourceId),
         eq(consents.purpose, purpose),
         eq(consents.status, 'granted'),
+        or(isNull(consents.expiresAt), gt(consents.expiresAt, new Date())),
+        userId ? eq(consents.userId, userId) : undefined,
       ),
     )
     .limit(1);
@@ -167,6 +172,6 @@ export async function hasRevokedConsent(
  * for the publish module to touch `permission_status`.
  */
 export async function isPubliclyVisible(db: Executor, source: SourceRow): Promise<boolean> {
-  if (source.permissionStatus !== 'public_approved') return false;
-  return !(await hasRevokedConsent(db, source.id, 'demo_public_display'));
+  if (source.deletedAt || source.permissionStatus !== 'public_approved') return false;
+  return hasActiveConsent(db, source.id, 'demo_public_display');
 }

@@ -272,6 +272,7 @@ export const sources = pgTable(
     permissionStatus: permissionStatusEnum('permission_status').notNull().default('pending'),
     /** test_fixture | real_authorized | team_material — keeps demo data isolated. */
     provenance: text('provenance').notNull().default('test_fixture'),
+    deletedAt: timestamp('deleted_at', { withTimezone: true }),
     notes: text('notes'),
     createdByUserId: uuid('created_by_user_id').references(() => users.id, {
       onDelete: 'set null',
@@ -328,6 +329,7 @@ export const consents = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     sourceId: uuid('source_id').references(() => sources.id, { onDelete: 'cascade' }),
     purpose: consentPurposeEnum('purpose').notNull(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }),
     status: consentStatusEnum('status').notNull().default('granted'),
     version: text('version').notNull().default('v1'),
     grantedAt: timestamp('granted_at', { withTimezone: true }).notNull().defaultNow(),
@@ -472,6 +474,8 @@ export const interviewSessions = pgTable(
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
     mode: interviewModeEnum('mode').notNull().default('ai'),
+    snapshotId: uuid('snapshot_id').references(() => sourceSnapshots.id, { onDelete: 'set null' }),
+    revision: integer('revision').notNull().default(1),
     status: interviewSessionStatusEnum('status').notNull().default('active'),
     /** Default 5 main questions; clarifications count against the budget. */
     budgetMainQuestions: integer('budget_main_questions').notNull().default(5),
@@ -505,6 +509,7 @@ export const interviewMessages = pgTable(
     purpose: text('purpose'),
     basisRefs: jsonb('basis_refs').$type<string[]>().notNull().default([]),
     authorMessage: text('author_message'),
+    visibility: text('visibility').notNull().default('private'),
     skipped: boolean('skipped').notNull().default(false),
     stopReason: text('stop_reason'),
     generatedBy: generatedByEnum('generated_by').notNull().default('manual'),
@@ -533,6 +538,8 @@ export const followupVersions = pgTable(
       .references(() => followupCases.id, { onDelete: 'cascade' }),
     version: integer('version').notNull(),
     status: followupVersionStatusEnum('status').notNull().default('draft'),
+    snapshotId: uuid('snapshot_id').references(() => sourceSnapshots.id, { onDelete: 'set null' }),
+    interviewId: uuid('interview_id').references(() => interviewSessions.id, { onDelete: 'set null' }),
     /** statements[]: { id, text, kind, evidence_refs[], visibility } */
     statements: jsonb('statements').$type<unknown[]>().notNull().default([]),
     unresolvedItems: jsonb('unresolved_items').$type<unknown[]>().notNull().default([]),

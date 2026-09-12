@@ -6,6 +6,7 @@
  * foundation's `andthen` database or another agent's database.
  */
 import { eq } from 'drizzle-orm';
+import { randomUUID } from 'node:crypto';
 import { buildApp } from '../../src/app.js';
 import {
   authorVerifications,
@@ -21,17 +22,18 @@ import {
 } from '../../src/db/schema.js';
 import { createUser, issueLoginToken } from '../../src/modules/identity/service.js';
 import { createLogger } from '../../src/shared/logger.js';
-import type { AppInstance } from '../../src/shared/types.js';
+import type { AppInstance, ModuleContext } from '../../src/shared/types.js';
 import { createTestContext, type TestContext } from '../helpers/testdb.js';
 
 export interface Harness {
   ctx: TestContext;
   app: AppInstance;
+  moduleCtx: ModuleContext;
   close: () => Promise<void>;
 }
 
 export async function createHarness(options: { enableDocs?: boolean } = {}): Promise<Harness> {
-  const ctx = await createTestContext();
+  const ctx = await createTestContext(`business_${randomUUID().slice(0, 8)}`);
   const built = await buildApp({
     env: ctx.env,
     db: ctx.db,
@@ -42,6 +44,7 @@ export async function createHarness(options: { enableDocs?: boolean } = {}): Pro
   return {
     ctx,
     app: built.app,
+    moduleCtx: built.ctx,
     close: async () => {
       await built.app.close();
       await ctx.close();

@@ -13,7 +13,7 @@
  * Nothing here calls an external platform API. A URL is registered, never
  * fetched.
  */
-import { and, desc, eq, inArray, isNull, notExists, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, exists, sql } from 'drizzle-orm';
 import type { Executor } from '../../db/client.js';
 import {
   auditLogs,
@@ -196,6 +196,11 @@ export async function importSource(
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
 
     let source = await findExistingSource(tx, input);
+    if (source) {
+      const [locked] = await tx.select().from(sources).where(eq(sources.id, source.id)).for('update');
+      if (!locked || locked.deletedAt) throw AppError.withdrawn('Source is being deleted');
+      source = locked;
+    }
     if (!source) {
       const inserted = await tx
         .insert(sources)
@@ -273,7 +278,7 @@ export async function findSourceById(
   db: Executor,
   sourceId: string,
 ): Promise<SourceRow | undefined> {
-  const rows = await db.select().from(sources).where(eq(sources.id, sourceId)).limit(1);
+  const rows = await db.select().from(sources).where(and(eq(sources.id, sourceId), isNull(sources.deletedAt))).limit(1);
   return rows[0];
 }
 
@@ -340,16 +345,19 @@ export async function grantConsent(
   purpose: ConsentPurpose,
   version: string,
 ): Promise<GrantConsentResult> {
-  const source = await findSourceById(ctx.db, sourceId);
+  return ctx.db.transaction(async (tx) => {
+    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, sourceId)).for('update');
+  const source = await findSourceById(tx, sourceId);
   if (!source) throw AppError.notFound('Source not found');
 
-  const access = await resolveSourceAccess(ctx.db, source, auth);
+  const access = await resolveSourceAccess(tx, source, auth);
   if (!access.isAuthor) {
     throw AppError.forbidden('Only the source author may grant a consent for it');
   }
 
   const now = ctx.now();
-  const rows = await ctx.db
+  await tx.update(consents).set({ status: 'expired' }).where(and(eq(consents.sourceId, sourceId), eq(consents.userId, auth.userId), eq(consents.purpose, purpose), eq(consents.status, 'granted')));
+  const rows = await tx
     .insert(consents)
     .values({
       userId: auth.userId,
@@ -370,7 +378,7 @@ export async function grantConsent(
 
   let sourcePermissionStatus = source.permissionStatus;
   if (purpose === 'demo_public_display' && access.isVerifiedAuthor) {
-    const updated = await ctx.db
+    const updated = await tx
       .update(sources)
       .set({ permissionStatus: 'public_approved', updatedAt: now })
       .where(eq(sources.id, sourceId))
@@ -378,7 +386,7 @@ export async function grantConsent(
     sourcePermissionStatus = updated[0]?.permissionStatus ?? 'public_approved';
   }
 
-  await writeAudit(ctx.db, {
+  await writeAudit(tx, {
     actorUserId: auth.userId,
     action: 'consent.granted',
     subjectType: 'source',
@@ -387,6 +395,7 @@ export async function grantConsent(
   });
 
   return { consent, sourcePermissionStatus };
+  });
 }
 
 export interface RevokeConsentResult {
@@ -407,10 +416,12 @@ export async function revokeConsent(
   sourceId: string,
   purpose: ConsentPurpose,
 ): Promise<RevokeConsentResult> {
-  const source = await findSourceById(ctx.db, sourceId);
+  return ctx.db.transaction(async (tx) => {
+    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, sourceId)).for('update');
+  const source = await findSourceById(tx, sourceId);
   if (!source) throw AppError.notFound('Source not found');
 
-  const access = await resolveSourceAccess(ctx.db, source, auth);
+  const access = await resolveSourceAccess(tx, source, auth);
   // The author may revoke their own consent; an admin may revoke for incident
   // response. A researcher can never sign (or unsign) on the author's behalf.
   if (!access.isAuthor && !access.isAdmin) {
@@ -418,7 +429,7 @@ export async function revokeConsent(
   }
 
   const now = ctx.now();
-  const revoked = await ctx.db
+  const revoked = await tx
     .update(consents)
     .set({ status: 'revoked', revokedAt: now })
     .where(
@@ -432,7 +443,7 @@ export async function revokeConsent(
   let consent = revoked[0];
   if (!consent) {
     // Idempotent: revoking an already-revoked consent returns the existing row.
-    const existing = await ctx.db
+    const existing = await tx
       .select()
       .from(consents)
       .where(
@@ -449,7 +460,7 @@ export async function revokeConsent(
 
   let sourcePermissionStatus = source.permissionStatus;
   if (purpose === 'demo_public_display') {
-    const updated = await ctx.db
+    const updated = await tx
       .update(sources)
       .set({ permissionStatus: 'revoked', updatedAt: now })
       .where(eq(sources.id, sourceId))
@@ -458,10 +469,10 @@ export async function revokeConsent(
   }
 
   let cancelledJobs = 0;
-  if (purpose === 'external_model_processing') {
+  if (purpose === 'external_model_processing' || purpose === 'private_interview') {
     // Cancel queued/running jobs that carry this source. A running job's
     // `complete()` requires status='running', so its late result is rejected.
-    const cancelled = await ctx.db.execute(sql`
+    const cancelled = await tx.execute(sql`
       update jobs
       set status = 'cancelled',
           lease_owner = null,
@@ -473,16 +484,19 @@ export async function revokeConsent(
       returning id
     `);
     cancelledJobs = (cancelled.rows as unknown[]).length;
+    await tx.execute(sql`update interview_sessions set mode='manual', revision=revision+1, stop_reason=${purpose === 'private_interview' ? 'private_consent_revoked' : 'model_consent_revoked'}, updated_at=now()
+      where case_id in (select id from followup_cases where source_id=${sourceId}) and status in ('active','paused')`);
+    await tx.execute(sql`update ai_runs set status='cancelled', finished_at=now(), output=null where source_id=${sourceId} and status in ('queued','running')`);
   }
 
-  await writeAudit(ctx.db, {
+  await writeAudit(tx, {
     actorUserId: auth.userId,
     action: 'consent.revoked',
     subjectType: 'source',
     subjectId: sourceId,
     properties: { purpose, cancelled_jobs: cancelledJobs, source_permission_status: sourcePermissionStatus },
   });
-  await writeResearchEvent(ctx.db, {
+  await writeResearchEvent(tx, {
     eventType: 'consent_revoked',
     cohort: auth.cohort,
     sourceId,
@@ -490,6 +504,7 @@ export async function revokeConsent(
   });
 
   return { consent, sourcePermissionStatus, cancelledJobs };
+  });
 }
 
 export async function listConsents(db: Executor, sourceId: string): Promise<ConsentRow[]> {
@@ -776,12 +791,14 @@ export async function listPublicStories(
       and(
         eq(consents.sourceId, sources.id),
         eq(consents.purpose, 'demo_public_display'),
-        eq(consents.status, 'revoked'),
+        eq(consents.status, 'granted'),
+        sql`(${consents.expiresAt} is null or ${consents.expiresAt} > now())`,
       ),
     );
   const where = and(
     eq(sources.permissionStatus, 'public_approved'),
-    notExists(revokedConsent),
+    exists(revokedConsent),
+    isNull(sources.deletedAt),
   );
 
   const totalRows = await db

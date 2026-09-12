@@ -1,4 +1,6 @@
 import type { ModuleDefinition } from '../../shared/types.js';
+import { registerInterviewRoutes } from './routes.js';
+import { registerInterviewJobs } from './worker.js';
 
 /**
  * RESERVED MODULE — no routes or handlers are registered in the foundation
@@ -15,4 +17,6 @@ import type { ModuleDefinition } from '../../shared/types.js';
  */
 export const interviewsModule: ModuleDefinition = {
   name: 'interviews',
+  registerRoutes: registerInterviewRoutes,
+  registerJobHandlers: registerInterviewJobs,
 };
