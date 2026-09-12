@@ -25,7 +25,7 @@ Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP provi
 | T15 withdraw / delete | Source/interview/activity tests plus `account-deletion.test.ts` credentials, author content, independent receipts and concurrent follow race | End-user active-store erasure covered; backup/provider retention remains explicitly separate |
 | T16 Zhihu search errors | No Zhihu search integration or fake live results; authorized import is the Demo input | Not applicable under revised scope; no claim of tested Zhihu 429 behavior |
 | T17 failure / quota | `llm-client.test.ts` timeout/retry; `interview-ai.test.ts` full-handler 429 and malformed JSON fallback preserves saved answers and hides provider body; daily admission cap test | HTTP failure handling covered; real-provider availability remains unverified |
-| T18 restart / redeploy | Live fixture survived DB/API/worker restart and API/worker recreation; nonempty backup restore | Passed for `1f0f59e`; final-runtime repetition pending |
+| T18 restart / redeploy | Current fixture survived DB/API/worker restart and forced recreation, with nonempty isolated backup restore | Passed through runtime `5f43604`; details and hashes in docker-acceptance.md |
 | T19 no authorized result | `stories.test.ts` checks empty database and unlicensed-only fixtures return empty lists and no private text | Backend empty-state regression passed; no business UI in scope |
 | T20 mixed windows / cohorts | `research.test.ts` date/cohort filtering, deidentified fields, fixed-duration window groups, deadline/late/unknown timing; `cases.test.ts` server-recorded response time | Backend reporting covered for new timestamped records; legacy missing times excluded rather than guessed. No real participant study claimed |
 | T21 private/public isolation | Source, case, interview, draft, notification and job owner checks; public statement projection tests | Covered sampled API paths; final core route sweep remains required |
@@ -57,9 +57,9 @@ All paths below have `/api` prefix.
 | P2 business / AI / governance | Core modules present. Missing items above remain requirements, not optional polish |
 | P3 complete backend fixture | Manual import→review→follow→interview→confirm→publish→notify→withdraw→delete exercised in tests and live Docker. Independent-model A/B/C/D paths use simulated providers in tests |
 | P4 real model | No independent credentials supplied; explicit unverified boundary permitted by active goal. Do not report authentic AI interview evaluation or provider deletion |
-| P5 Docker / persistence / performance | Prior nonempty restore and restart evidence; 10-session sample write p95 49.52 ms and async acknowledgment p95 45.92 ms. Final rebuild/migration/health/fixture/persistence/performance still pending |
+| P5 Docker / persistence / performance | Runtime `5f43604` deployed healthy with six migrations; fixture persistence/cleanup and nonempty restore verified. Current 10-session sample write p95 183.97 ms and async acknowledgment p95 70.71 ms |
 | Prompts and schemas | Four versioned prompts and output validators exist. Need final review of five-question/skip policy, injection regression and structured “then/later/reflection/unknown” output fidelity |
 | Retention | 30-day private cleanup and 90-day consent checks implemented. Backup rotation is operator-invoked; no daily host schedule. External provider retention remains a documented dependency |
-| Artifacts | Source, migrations, scheduler, project skills, Compose, demo/performance/backup/restore scripts exist. Final OpenAPI export, coherent frontend integration guide/README and final Git/runtime correspondence pending |
+| Artifacts | Source, migrations, scheduler, skills, Compose and scripts exist; startup/frontend guides refreshed, static/live OpenAPI matched 50 paths. Runtime evidence tied to `5f43604`; completion remains subject to outstanding matrix items |
 
 No public pilot or external research result is claimed. The goal remains active while required implementation and final-runtime evidence are incomplete.

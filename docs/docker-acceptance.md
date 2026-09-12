@@ -1,5 +1,9 @@
 # Local Docker acceptance — 2026-09-12
 
+**Current deployed runtime: `5f43604`**, image manifest list `sha256:b9552270fcbee1bd4ac425fbcf9767cbf0c8379481d7c19cbfccbea72c1e4fed`. Current-run evidence is in the final sections below; earlier measurements are retained as history.
+
+## Earlier foundation/runtime evidence
+
 Runtime code revision: `1f0f59e`. Image manifest list: `sha256:4712226e57c58e6aeb8a32cd0a718ede6e53ec972ac96efde99eb0fe16151fd8`. Later commits adding delivery scripts do not change this runtime code. Rebuild and repeat checks after subsequent backend changes.
 
 Observed: `docker compose build api` completed, including TypeScript compilation. Docker Hub metadata requests were slow but completed without changing system proxy/network settings. `docker compose -f docker-compose.yml -f docker-compose.test.yml up -d --no-build` recreated the services and applied migrations through the one-shot migrate service. API, PostgreSQL and worker are healthy; `/health/ready` reports database OK. API binds localhost:8080; the test overlay exposes PostgreSQL only on localhost:55432. No named data volume was deleted.
@@ -45,3 +49,23 @@ Rotation is limited to matching managed dump names and valid manifests inside th
 All asynchronous deletion jobs completed. Environment: local Windows host, Node v24.19.0, warm Linux Docker services, localhost HTTP. This passes the requested sampled write p95 ≤ 2 seconds and sampled asynchronous acknowledgment ≤ 1 second; it does not establish production capacity or AI request latency. The first performance attempt sent a JSON header on empty DELETE requests; after correcting the script, its partial fixtures were deleted and the whole sample rerun successfully.
 
 OpenAPI was exported from the running API to `docs/openapi.json`. Re-export after backend changes. Outstanding overall goal work includes 30-day private-content physical cleanup, full requirement/test audit, and actual model-provider evaluation when credentials are available.
+
+## Current backend rerun — 2026-09-12 19:22 CST
+
+Runtime code `12f6b88` was built and deployed successfully. Image manifest list: `sha256:c9879c1668b329575a3193b1dcf22af72958b995c8dd6ae42d80021e17e1bd5a`. The migrate service completed; the live database reports six applied migrations (0000–0005). API, DB and worker reached healthy status, and readiness reported database OK.
+
+The live manual fixture completed import/review/interest/interview/draft/confirmation/publication/notification. Source `9b9c3263-5bf9-48ef-b99d-71f372b9accd` and draft `ad090ca5-4922-4e7a-b510-750856533560` survived DB/API/worker restart with the saved answer and follow intact. This was synthetic `test_fixture` data; no independent model call or real invitation was made.
+
+A separate live reader-account erasure succeeded: old session 401, dedicated receipt 200 (`6817b841-6479-4303-afee-6686d146d0f9`). Live OpenAPI exactly matched the source-generated static artifact, 50 paths.
+
+Updated 10-session warm Docker sample: 200 interest writes p95 **183.97 ms**, max **460.56 ms**; 10 asynchronous deletion acknowledgments p95/max **70.71 ms**. All cleanup jobs completed. These meet the requested sampled bounds, not a production capacity claim.
+
+Nonempty custom-format backup SHA-256: `6F5DDC223AE3DD6C92C87E04A110BE5E18DE0B76022170ACBC26D65BC1D3AAD2`. Restored into an isolated database with 1 source, 1 snapshot, 11 interests, 1 interview, 1 message and 1 draft; isolated restore database was removed by the restore script. Extra interests are the marked performance fixture sessions, not research participants.
+
+Developer scheduler regression: **38/38 Node tests passed**, including fixed 1M configuration before prompt, resume, silent-300K refusal, model drift, permission handling and concurrency. These use a simulated ACP child and do not establish renewed WorkBuddy provider quota or full-1M recall.
+
+This run discovered bootstrap `--out` still printed its token. Commit `5f43604` fixes file-only credential output, with an actual subprocess/isolated-PostgreSQL test. The emitted demo credential had already been consumed by the demo. No raw credential is copied into this report. The credential-output correction requires the subsequent image rebuild before declaring that CLI version deployed.
+
+The subsequent `5f43604` image build also succeeded and was deployed with API/worker forced recreation. Manifest list: `sha256:b9552270fcbee1bd4ac425fbcf9767cbf0c8379481d7c19cbfccbea72c1e4fed`. All three persistent services are healthy. The fixture survived recreation; an immediate pre-readiness request had a socket failure, then verification passed after readiness became healthy. Only bootstrap output changed from the measured business runtime, so the earlier current-run business performance sample remains applicable to that unchanged code.
+
+In the running container, bootstrap `--out --json` with silent logging produced no stdout. Its test credential was consumed through the session API and that session logged out. The saved demonstration was then withdrawn and physically deleted; cleanup receipt `dd9836d7-fdc6-43f0-b225-4f656f1160cc` succeeded. Local demo state now contains only the deletion receipt. Backups still follow their documented rotation policy; no raw credential or fixture body is included in this report.
