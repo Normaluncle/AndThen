@@ -153,6 +153,7 @@ async function main(): Promise<void> {
     if (args.out) {
       writeFileSync(args.out, `${token.token}\n`, { mode: 0o600 });
       logger.info({ out: args.out }, 'token written to file');
+      return;
     }
 
     if (args.json) {
