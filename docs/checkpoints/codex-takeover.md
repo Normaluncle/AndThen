@@ -22,7 +22,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
 4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
-5. Docker rebuild/migrate/cold-start/persistence/backup-restore/performance against final commit; existing containers still run the old foundation image.
+5. Repeat Docker acceptance against final runtime commit after remaining changes. Containers now run `1f0f59e`; that revision passed build/migration/health, nonempty backup restore, restart/recreation persistence, manual HTTP closure and sampled performance.
 6. OpenAPI artifact, reproducible API demo, requirement/test matrix, final docs/commit.
 7. Real model credentials absent: use local `.env`, never claim simulated HTTP tests are real-model evaluation. P4 remains unverified until real configuration is provided.
 
@@ -86,3 +86,17 @@ Previous turn was progress (`6429b56`). Public consent grants default to 90-day 
 Tests cover deadline/replay/renewal, immediate denial, legacy expiry, notification withdrawal, audit cleanup and recurrence. Typecheck and focused suites passed. `docs/retention.md` explicitly distinguishes permission expiry from still-pending private 30-day physical cleanup and backup rotation. No Docker volumes removed; final Docker build and retention/backup acceptance remain required. Goal stays active.
 
 Final milestone verification: `pnpm.cmd test` passed 27 files / 141 tests and `pnpm.cmd typecheck` passed. The recurring job is implemented and tested locally but not yet deployed into the currently running old worker image.
+
+## Continuation evidence — Docker build and runtime acceptance
+
+Previous turn was progress (`1f0f59e`). Built current backend image (manifest `4712226e57c58e6aeb8a32cd0a718ede6e53ec972ac96efde99eb0fe16151fd8`), restarted Compose including migrations, and verified API/DB/worker healthy. Slow Docker Hub metadata lookup completed; no global network changes or volume deletion. New `scripts/demo.mjs` ran the full manual backend HTTP flow against the real containers and verified publication, interview answer and following data after service restart and forced API/worker recreation. It then completed withdrawal and source deletion through the live worker.
+
+Added PowerShell custom-format backup and isolated restore/checksum scripts. A nonempty backup restored one row in each of six core business relations. Managed expired-backup rotation was verified against an unmanaged sentinel. Rotation only runs with the backup command; an automatic daily host schedule is NOT installed, so uninterrupted maximum backup age is not yet proven. Added performance script: 10 concurrent sessions, 200 interest writes p95 49.52 ms / max 56.76 ms, 10 async deletion acknowledgments max 45.92 ms; all deletion jobs completed. Scripts had initial route/header typos corrected before successful reruns; partial performance fixtures were deleted through authorized API.
+
+Exported runtime OpenAPI (45 paths) to docs/openapi.json. Full evidence/reproduction commands and limitations are in docs/docker-acceptance.md. Read Docker-ops/git-delivery skills; runtime build compiles TypeScript, delivery scripts were executed live and node syntax checks pass. After live cleanup, added logout calls and an existing-state overwrite guard to the demo script; these small refinements need a second complete demo invocation before final delivery.
+
+Automatic approval rejected a combined command containing demo cleanup, credential file removal and checks with only 'blocked by policy'. Independent health/export calls and the scoped backend cleanup command succeeded. The consumed bootstrap token file remains locally; no alternate file-removal attempt was made. This is not a blocker to continued implementation.
+
+Goal remains active: private 30-day physical cleanup, broader deletion scope/API compatibility and full acceptance matrix remain incomplete; rerun final Docker checks after runtime changes, and keep real model verification explicitly unverified without configuration.
+
+Final script refinement verification: a second full `demo.mjs` create → verify → cleanup invocation succeeded against Docker, including the new session logout calls. The prior note that these refinements need a second invocation is now resolved. Fixture state was replaced with a content-free deletion receipt.
