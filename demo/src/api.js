@@ -1,5 +1,6 @@
 // Session remains in memory: refresh requires reauthentication, never logs credentials.
 let token = '';
+export function hasSession(){return !!token;}
 export function setToken(value) { token = value; }
 export async function api(path, method = 'GET', body) {
   const r = await fetch('/api' + path, {method,headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token ? {Authorization:'Bearer '+token}: {})},body:body===undefined?undefined:JSON.stringify(body)});

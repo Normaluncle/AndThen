@@ -10,10 +10,13 @@ import { success } from '../../http/errors.js';
 import { envelopeSchema } from '../../http/envelope.js';
 import { validMemoryRecords, memoryRequest, refreshMemory, requestRefresh } from './service.js';
 
+import { prepareSource } from './preparation.js';
+
 const jobPayload = z.object({ user_id: z.string().uuid(), generation: z.string().uuid() });
 export const memoryModule: ModuleDefinition = {
   name: 'memory',
   registerJobHandlers(ctx, registry) {
+    registry.register('memory.prepare',job=>prepareSource(ctx,job));
     registry.register('memory.refresh', async job => {
       const p = jobPayload.parse(job.payload);
       const interval = setInterval(() => { void job.heartbeat().catch(() => {}); }, 15000);

@@ -1,3 +1,4 @@
+import { invalidatePreparation } from '../memory/preparation.js';
 import { createHash } from 'node:crypto';
 import { and, eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
@@ -66,6 +67,7 @@ export const registerAccountDeletionRoutes: ModuleRegistrar = (app, ctx) => {
           await tx.delete(auditLogs).where(eq(auditLogs.actorUserId, auth.userId));
           await tx.delete(idempotencyKeys).where(eq(idempotencyKeys.userId, auth.userId));
           await tx.update(outbox).set({ recipients: sql`coalesce((select jsonb_agg(r) from jsonb_array_elements(${outbox.recipients}) r where r->>'readerKey' is distinct from ${auth.userId}), '[]'::jsonb)` }).where(sql`exists(select 1 from jsonb_array_elements(${outbox.recipients}) r where r->>'readerKey'=${auth.userId})`);
+          for(const sourceId of ids)await invalidatePreparation(ctx,tx,sourceId);
           if (ids.length) await tx.delete(sources).where(inArray(sources.id, ids));
           await tx.delete(users).where(eq(users.id, auth.userId));
           await tx.insert(deletionJobs).values({ id: req.body.receipt_id, scope: 'user', subjectId: auth.userId, reason, status: 'succeeded', finishedAt: ctx.now(), steps: [

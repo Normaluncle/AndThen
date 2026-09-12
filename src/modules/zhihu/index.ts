@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import { sources, zhihuCommentSyncs } from '../../db/schema.js';
+import { storeCandidates,candidateFeed,followCandidate } from './discovery.js';
 import { syncCommentPage } from './comments.js';
 import { requirePublicStory } from '../sources/service.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -13,7 +14,7 @@ import { importSource } from '../sources/service.js';
 
 import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js';
 
-const candidate = z.object({ url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
+const candidate = z.object({ candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
 export const zhihuModule: ModuleDefinition = {
   name: 'zhihu',
   registerJobHandlers(ctx,registry) { registry.register('zhihu.comments.sync',job=>syncCommentPage(ctx,job)); },
@@ -22,12 +23,16 @@ export const zhihuModule: ModuleDefinition = {
     r.get('/integrations/zhihu/capabilities', { schema: { tags: ['zhihu'], response: { 200: envelopeSchema(z.object({ search: z.boolean(), creator_account_reads: z.boolean(), comment_sync_scope: z.literal('access_secret_owner_only'), oauth: z.literal(false), oauth_reason: z.string(), arbitrary_fulltext: z.literal(false), comments: z.literal('selected_search_comments') })) } } }, async request => success(request.id, {
       search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: false, oauth_reason: ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
     }));
-    r.get('/discovery/search', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q) }));
+    r.get('/discovery/search', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q)) }));
+    r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request))}));
+    r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request),true)}));
+    r.put('/discovery/candidates/:id/interest',{preHandler:[app.authenticate],schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),body:z.object({active:z.boolean()}).strict(),response:{200:envelopeSchema(z.record(z.unknown()))}}},async request=>success(request.id,await followCandidate(ctx,requireAuthContext(request),request.params.id,request.body.active)));
     r.post('/sources/resolve', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], body: z.object({ url: z.string().url().max(1000) }).strict(), response: { 200: envelopeSchema(z.object({ source_id: z.string().uuid(), status: z.enum(['summary_available', 'pending_content']), candidate: candidate.nullable() })) } } }, async request => {
       const auth = requireAuthContext(request);
       const url = canonicalZhihuUrl(request.body.url);
       const items = await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, url);
-      const match = items.find(x => x.url === url);
+      const exact = items.find(x => x.url === url);
+      const match=exact?(await storeCandidates(ctx,[exact]))[0]:undefined;
       const imported = await importSource(ctx, auth, { sourceType: 'third_party_link', originalUrl: url, originalAccountRef: null,
         title: match?.title ?? null, materialLevel: 'api_summary', body: match?.text ?? null, excerpt: null, excerptLocation: null,
         publishedAt: null, upstreamUpdatedAt: null, notes: 'Official exact URL resolution; ownership not established', provenance: 'official_api' });

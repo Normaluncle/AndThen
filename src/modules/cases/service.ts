@@ -1,3 +1,4 @@
+import { requestPreparation } from '../memory/preparation.js';
 /**
  * Cases module service (PRD §9, §10, §13; FR-07..FR-11).
  *
@@ -132,6 +133,7 @@ export async function createCase(
         createdByUserId: auth.userId,
       })
       .returning();
+    await requestPreparation(ctx,tx,input.sourceId);
     const followupCase = inserted[0];
     if (!followupCase) throw AppError.internal('Failed to create case');
 

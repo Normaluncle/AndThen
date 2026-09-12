@@ -871,6 +871,29 @@ export const zhihuCommentSyncs = pgTable('zhihu_comment_syncs', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+export interface OfficialCandidate {
+  url: string; title: string; text: string; author_name: string;
+  author_avatar: string | null; author_url: null;
+  material_level: 'api_summary'; comments: string[]; comments_coverage: 'selected';
+}
+export const discoveryCandidates = pgTable('discovery_candidates', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  url: text('url').notNull().unique(),
+  data: jsonb('data').$type<OfficialCandidate>().notNull(),
+  sourceId: uuid('source_id').references(()=>sources.id,{onDelete:'cascade'}),
+  snapshotId: uuid('snapshot_id').references(()=>sourceSnapshots.id,{onDelete:'set null'}),
+  updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+});
+/** Post-scoped preparation is not an author profile and has no nickname identity. */
+export const sourcePreparations = pgTable('source_preparations', {
+  sourceId: uuid('source_id').primaryKey().references(()=>sources.id,{onDelete:'cascade'}),
+  snapshotId: uuid('snapshot_id').notNull().references(()=>sourceSnapshots.id,{onDelete:'cascade'}),
+  generation: uuid('generation').notNull().defaultRandom(),
+  status: text('status').notNull().default('pending'),
+  records: jsonb('records').$type<AuthorMemoryRecord[]>().notNull().default([]),
+  updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+});
+
 export const schema = {
   users,
   sessions,
@@ -895,4 +918,6 @@ export const schema = {
   idempotencyKeys,
   workerHeartbeats,
   zhihuCommentSyncs,
+  discoveryCandidates,
+  sourcePreparations,
 };
