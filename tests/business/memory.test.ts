@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
-import { createHarness, seedUser, auth, type Harness } from './helpers.js';
+import { createHarness, seedUser, seedPublishedStory, auth, type Harness } from './helpers.js';
 import { authorMemories, jobs } from '../../src/db/schema.js';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
@@ -21,6 +21,18 @@ it('memory consent is separate and cannot be supplied for another account', asyn
   expect(after!.generation).not.toBe(before!.generation);
   expect(after!.records).toEqual([]);
   expect(after!.enabled).toBe(false);
+});
+
+it('shows only verified own material metadata and distinguishes missing processing consent', async () => {
+  const owner = await seedUser(h, 'author');
+  const other = await seedUser(h, 'author');
+  const owned = await seedPublishedStory(h, { author: owner.user, verifyAuthor: true });
+  await seedPublishedStory(h, { author: other.user, verifyAuthor: true });
+  await seedPublishedStory(h, { author: owner.user, verifyAuthor: false });
+  const response = await h.app.inject({ url: '/api/me/memory', headers: auth(owner.token) });
+  expect(response.statusCode).toBe(200);
+  expect(response.json().data.materials).toEqual({ truncated: false, items: [{ source_id: owned.source.id, title: owned.source.title, material_level: 'exact_excerpt', status: 'consent_required' }] });
+  expect(response.json().data.materials.items[0]).not.toHaveProperty('body');
 });
 
 it('deduplicates refresh per generation and exposes failed refresh retries as pending', async () => {

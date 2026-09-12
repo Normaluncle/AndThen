@@ -145,3 +145,12 @@ docker compose --env-file .env.local up -d --build
 - 验证：pnpm typecheck 通过；pnpm test 207 通过、1 项真实模型 opt-in 跳过，48.69 秒，包含数据库和 OpenAPI 回归。本轮未重复真实模型调用，也尚未重启演示进程加载这次队列修改。
 - 本轮读取/沿用技能：backend-contracts、database-migrations、ai-evaluation、docker-ops、git-delivery。无迁移修改，无凭证入库。
 - 整体 Goal 仍 active；OAuth、安全回调、Docker 镜像运行及剩余页面和验收继续实施，不以本检查点表示整体完成。
+
+## 2026-09-13 作者资料清单检查点
+
+- 新增 memoryMaterials 后端元数据与 MemoryMaterials.jsx 功能组件：作者可查看资料标题、原文片段/官方摘要等范围、缺少同意/材料/首批上限等状态。仅已核验本人资料，50 条截断明确说明。
+- 新增真实数据库权限回归：其他作者及未核验资料不出现在清单，不返回正文。现有记忆生命周期、撤销和失效回归继续通过。
+- pnpm typecheck 通过；pnpm test 208 通过、1 项真实模型 opt-in 跳过（50.11 秒）；pnpm --dir demo build 通过。首次类型检查发现状态字面量推断扩大，保留字面量类型后通过。
+- 已仅重启隔离 8081 API 与 v12 worker，加载本轮及上一轮队列代码。原 8080 Docker 服务未操作。
+- 浏览器测试作者进入资料与记忆页：显示唯一已核验测试资料、原文片段、已有可用记忆，以及四条已有记忆和工资拒谈边界；官方发现候选未冒充为该作者资料。本轮没有新模型调用。
+- 技能：backend-contracts、database-migrations、git-delivery，以及此前读取的 web-development React 指南。PRD 与共享响应契约已同步。全部 Goal 仍未完成。

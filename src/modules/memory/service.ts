@@ -47,6 +47,23 @@ export async function requestRefresh(ctx: ModuleContext, userId: string) {
   });
 }
 
+/** Only verified ownership allows disclosure of private source metadata here. */
+export async function memoryMaterials(ctx: ModuleContext, userId: string, records: AuthorMemoryRecord[]) {
+  const rows = await ctx.db.selectDistinct({ source: sources }).from(sources)
+    .innerJoin(authorVerifications, and(eq(authorVerifications.sourceId, sources.id), eq(authorVerifications.userId, userId), eq(authorVerifications.status, 'verified')))
+    .where(isNull(sources.deletedAt)).orderBy(desc(sources.updatedAt), asc(sources.id)).limit(51);
+  const eligible = new Set((await authorizedMaterials(ctx, userId)).map(x => x.source.id));
+  const items = [];
+  for (const { source } of rows.slice(0, 50)) {
+    const [snapshot] = await ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, source.id)).orderBy(desc(sourceSnapshots.version)).limit(1);
+    const consent = await hasActiveConsent(ctx.db, source.id, 'private_interview', userId)
+      && await hasActiveConsent(ctx.db, source.id, 'external_model_processing', userId);
+    const status = !consent ? 'consent_required' : !snapshot ? 'material_missing' : !eligible.has(source.id) ? 'batch_limit' : records.some(x => x.sourceId === source.id) ? 'indexed' : 'no_current_memory';
+    items.push({ source_id: source.id, title: source.title, material_level: snapshot?.materialLevel ?? null, status } as const);
+  }
+  return { items, truncated: rows.length > 50 };
+}
+
 /** Call inside the source/identity mutation transaction; a revoked generation can never win CAS. */
 export async function invalidateAuthorMemory(ctx: ModuleContext, db: Executor, userId: string) {
   const [old] = await db.select().from(authorMemories).where(eq(authorMemories.userId, userId)).for('update');

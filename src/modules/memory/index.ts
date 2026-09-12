@@ -8,7 +8,7 @@ import { authorMemories } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { success } from '../../http/errors.js';
 import { envelopeSchema } from '../../http/envelope.js';
-import { validMemoryRecords, memoryRequest, refreshMemory, requestRefresh } from './service.js';
+import { validMemoryRecords, memoryMaterials, memoryRequest, refreshMemory, requestRefresh } from './service.js';
 
 import { prepareSource } from './preparation.js';
 
@@ -41,12 +41,14 @@ export const memoryModule: ModuleDefinition = {
     r.get('/me/memory', { ...guard, schema: { tags: ['memory'], response: { 200: envelopeSchema(z.object({
       enabled: z.boolean(), status: z.string(), updated_at: z.string().nullable(), error_code: z.string().nullable(),
       records: z.array(z.object({ name: z.string(), content: z.string(), source_id: z.string().uuid(), preference: z.boolean() })),
+      materials: z.object({ items: z.array(z.object({ source_id: z.string().uuid(), title: z.string().nullable(), material_level: z.string().nullable(), status: z.enum(['consent_required','material_missing','batch_limit','indexed','no_current_memory']) })), truncated: z.boolean() }),
     })) } } }, async request => {
       const auth = requireAuthContext(request);
       const [row] = await ctx.db.select().from(authorMemories).where(eq(authorMemories.userId, auth.userId));
       if (row?.enabled && ctx.now().getTime() - row.updatedAt.getTime() > 86400000) await requestRefresh(ctx, auth.userId);
       const valid = row?.enabled ? await validMemoryRecords(ctx, auth.userId,row.records) : [];
       return success(request.id, { enabled: row?.enabled ?? false, status: row?.status ?? 'empty', updated_at: row?.updatedAt.toISOString() ?? null, error_code: row?.errorCode ?? null,
+        materials: await memoryMaterials(ctx, auth.userId, row?.status === 'ready' ? valid : []),
         records: valid.map(x => ({ name: x.name, content: x.content, source_id: x.sourceId, preference: x.preference })) });
     });
     r.put('/me/memory/consent', { ...guard, schema: { tags: ['memory'], body: z.object({ enabled: z.boolean() }).strict(), response: { 200: envelopeSchema(z.object({ enabled: z.boolean() })) } } }, async request => {
