@@ -24,8 +24,10 @@ The cutoff is recorded in the receipt. Subsequent reader actions are new activit
 
 ## Receipts and current limits
 
+`DELETE /api/interviews/:id` requires the verified interview owner and body `{"confirms_deletion_and_withdrawal":true}`. It completes in a source-locked transaction and returns HTTP 200 with a succeeded receipt. It removes the interview/messages, related model results/job caches and derived version content. Affected publications are withdrawn and their notifications/outbox entries removed. Version numbers/hashes remain content-free receipts. The source snapshot is retained; source deletion is a separate operation. Repeated deletion returns the same receipt. In-flight model output cannot recreate the removed interview. The explicit confirmation covers removal of published content derived from this interview.
+
 `GET /api/deletions/:id` returns status, content-free cleanup steps and completion time to the requesting session owner only. It never returns erased content. The source receipt distinguishes active-store cleanup from independent model-provider retention and backup rotation.
 
-Whole-account closure (including identity and login credentials) is not implemented by `reader_activity`; neither are standalone case/interview deletion scopes exposed through this endpoint. These must not be presented as supported client options. Source deletion covers the contained author material. Backup copies follow the managed rotation/operator policy in `docs/retention.md`; no remote model-provider deletion API is implemented.
+Whole-account closure (including identity and login credentials) is not implemented by `reader_activity`. Standalone case deletion is not exposed; source deletion covers contained case material. Interview deletion uses its dedicated endpoint above. Backup copies follow the managed rotation/operator policy in `docs/retention.md`; no remote model-provider deletion API is implemented.
 
 Verification: `tests/business/reader-deletion.test.ts` exercises concurrent replay, ownership isolation, explicit confirmation, preservation of subsequent activity, continued source availability and old outbox replay after re-following. `tests/business/interviews.test.ts` exercises the source deletion chain and receipt.

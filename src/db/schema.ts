@@ -170,7 +170,7 @@ export const outboxStatusEnum = pgEnum('outbox_status', [
 ]);
 
 export const actorTypeEnum = pgEnum('actor_type', ['user', 'system', 'ai']);
-export const deletionScopeEnum = pgEnum('deletion_scope', ['user', 'source', 'case', 'followup']);
+export const deletionScopeEnum = pgEnum('deletion_scope', ['user', 'source', 'case', 'followup', 'interview']);
 
 /* -------------------------------------------------------------------------- */
 /* Identity                                                                    */

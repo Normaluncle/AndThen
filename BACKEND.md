@@ -71,4 +71,4 @@ pnpm exec tsx scripts/export-openapi.ts
 - [备份、恢复与性能证据](docs/docker-acceptance.md)、[保留策略](docs/retention.md)。备份脚本输出哈希清单，恢复检查只使用隔离数据库；备份轮替当前需要操作员执行。
 - [开发约定](AGENTS.md)、[WorkBuddy 调度器](docs/workbuddy-orchestration.md)、[最新检查点](docs/checkpoints/codex-takeover.md)。
 
-整账号注销、独立采访删除范围及验收矩阵中的其他缺口尚未完成。没有真实模型配置或授权样本时，不宣称完成真实动态采访评测或真实作者试点。不购买云资源、不发布公网、不自动发送邀请。
+整账号注销及验收矩阵中的其他缺口尚未完成；独立采访删除已提供，具体范围见删除接口文档。没有真实模型配置或授权样本时，不宣称完成真实动态采访评测或真实作者试点。不购买云资源、不发布公网、不自动发送邀请。

@@ -1,0 +1,1 @@
+ALTER TYPE "public"."deletion_scope" ADD VALUE 'interview';

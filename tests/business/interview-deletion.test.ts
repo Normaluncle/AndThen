@@ -1,0 +1,41 @@
+import { beforeAll, afterAll, describe, it, expect } from 'vitest';
+import { eq } from 'drizzle-orm';
+import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
+import { interviewSessions, interviewMessages, followupVersions, jobs, aiRuns, notifications, outbox, sources } from '../../src/db/schema.js';
+
+describe('explicit interview deletion', () => {
+  let h: Harness;
+  beforeAll(async () => { h = await createHarness(); });
+  afterAll(async () => { await h.close(); });
+  it('withdraws dependent publication, erases private content/results and replays one receipt while preserving the source', async () => {
+    const author = await seedUser(h, 'author');
+    const stranger = await seedUser(h, 'author');
+    const reader = await seedUser(h, 'reader');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    const [session] = await h.ctx.db.insert(interviewSessions).values({ caseId: story.followupCase.id, ownerUserId: author.user.id, status: 'finished' }).returning();
+    await h.ctx.db.insert(interviewMessages).values({ sessionId: session!.id, role: 'author', sequence: 1, authorMessage: 'PRIVATE_INTERVIEW' });
+    await h.ctx.db.update(followupVersions).set({ interviewId: session!.id, authorEdits: [{ text: 'PRIVATE_EDIT' }] }).where(eq(followupVersions.id, story.versionId));
+    await h.ctx.db.insert(notifications).values({ readerKey: reader.user.id, caseId: story.followupCase.id, followupVersionId: story.versionId });
+    await h.ctx.db.insert(outbox).values({ topic: 'followup.published', dedupeKey: story.versionId, payload: { source_id: story.source.id, version_id: story.versionId } });
+    const { job } = await h.moduleCtx.jobs.enqueue({ kind: 'ai.validate', payload: { source_id: story.source.id, draft_id: story.versionId, owner_user_id: author.user.id } });
+    await h.ctx.db.insert(aiRuns).values({ task: 'ai_d_val', jobId: job.id, sourceId: story.source.id, output: { draft_id: story.versionId, text: 'PRIVATE_DERIVATIVE' } });
+    const url = `/api/interviews/${session!.id}`;
+    const payload = { confirms_deletion_and_withdrawal: true };
+    expect((await h.app.inject({ method: 'DELETE', url, headers: auth(stranger.token), payload })).statusCode).toBe(404);
+    expect((await h.app.inject({ method: 'DELETE', url, headers: auth(author.token), payload: {} })).statusCode).toBe(400);
+    const removed = await Promise.all(Array.from({ length: 3 }, () => h.app.inject({ method: 'DELETE', url, headers: auth(author.token), payload })));
+    for (const response of removed) expect(response.statusCode, response.body).toBe(200);
+    expect(new Set(removed.map(r => r.json().data.deletion_id)).size).toBe(1);
+    expect(await h.ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, session!.id))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(aiRuns).where(eq(aiRuns.jobId, job.id))).toHaveLength(0);
+    expect((await h.ctx.db.select().from(jobs).where(eq(jobs.id, job.id)))[0]).toMatchObject({ status: 'cancelled', payload: {}, result: null });
+    const [draft] = await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.id, story.versionId));
+    expect(draft).toMatchObject({ status: 'withdrawn', statements: [], authorEdits: [], interviewId: null });
+    expect(draft!.contentPurgedAt).toBeInstanceOf(Date);
+    expect((await h.app.inject({ url: `/api/followups/${story.versionId}` })).statusCode).toBe(410);
+    expect(await h.ctx.db.select().from(notifications).where(eq(notifications.followupVersionId, story.versionId))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(outbox).where(eq(outbox.dedupeKey, story.versionId))).toHaveLength(0);
+    expect(await h.ctx.db.select().from(sources).where(eq(sources.id, story.source.id))).toHaveLength(1);
+    expect((await h.app.inject({ url: `/api/deletions/${removed[0]!.json().data.deletion_id}`, headers: auth(author.token) })).json().data.status).toBe('succeeded');
+  });
+});

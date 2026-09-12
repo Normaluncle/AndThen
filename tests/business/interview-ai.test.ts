@@ -90,6 +90,21 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       expect(after.body).not.toContain('provider-private-error');
     } finally { providerMode = 'normal'; }
   });
+  it('discards the in-flight model reply after explicit interview deletion', async () => {
+    const fixture = await start();
+    hold = true;
+    const running = runJob(h.moduleCtx, 'ai.interview.next').then(() => null, err => err);
+    try {
+      const deadline = Date.now() + 5000;
+      while (!delayReply && Date.now() < deadline) await new Promise(resolve => setTimeout(resolve, 10));
+      expect(delayReply).toBeTypeOf('function');
+      const removed = await h.app.inject({ method: 'DELETE', url: `/api/interviews/${fixture.session.id}`, headers: auth(fixture.author.token), payload: { confirms_deletion_and_withdrawal: true } });
+      expect(removed.statusCode, removed.body).toBe(200);
+      delayReply!(); delayReply = undefined;
+      expect(await running).toBeInstanceOf(Error);
+      expect(await h.ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, fixture.session.id))).toHaveLength(0);
+    } finally { hold = false; delayReply?.(); delayReply = undefined; await running; }
+  });
   it('makes zero provider requests without external processing permission', async () => {
     const before = calls;
     expect((await start(false)).session.mode).toBe('manual');
