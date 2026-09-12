@@ -1,3 +1,4 @@
+import { reasonSummary } from '../sources/reasons.js';
 import { asc, eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
@@ -56,7 +57,8 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
   let completion: Awaited<ReturnType<ReturnType<typeof createLlmClient>['complete']>> | undefined;
   let failureCode: string | null = null;
   try {
-    const serialized = JSON.stringify({ evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
+    const readerInterests = await reasonSummary(ctx.db,p.source_id);
+    const serialized = JSON.stringify({ reader_interests:{...readerInterests,tags:readerInterests.tags.slice(0,12)}, evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
       history: input.history.map(m => ({ role: m.role, question: m.question, answer: m.authorMessage, skipped: m.skipped })) });
     if (serialized.length > 64000) throw AppError.sourceIncomplete('Authorized input exceeds the task budget');
     completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });

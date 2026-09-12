@@ -95,6 +95,7 @@ const publicStatementSchema = z.object({
   text: z.string(),
   kind: z.string(),
   section: z.enum(['then', 'later', 'reflection']).optional(),
+  question: z.string().optional(),
 });
 
 const publicFollowupSchema = z.object({

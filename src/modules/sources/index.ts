@@ -1,3 +1,4 @@
+import { registerReasonRoutes, registerReasonJobs } from './reasons.js';
 import type { ModuleDefinition } from '../../shared/types.js';
 import { registerSourcesRoutes } from './routes.js';
 import { registerAnalysisRoutes, registerAnalysisJobs } from './analysis.js';
@@ -11,6 +12,6 @@ import { registerAnalysisRoutes, registerAnalysisJobs } from './analysis.js';
  */
 export const sourcesModule: ModuleDefinition = {
   name: 'sources',
-  registerRoutes: async (app, ctx) => { await registerSourcesRoutes(app, ctx); await registerAnalysisRoutes(app, ctx); },
-  registerJobHandlers: registerAnalysisJobs,
+  registerRoutes: async (app, ctx) => { await registerSourcesRoutes(app, ctx); await registerAnalysisRoutes(app, ctx); await registerReasonRoutes(app, ctx); },
+  registerJobHandlers: (ctx,registry)=>{registerAnalysisJobs(ctx,registry);registerReasonJobs(ctx,registry);},
 };

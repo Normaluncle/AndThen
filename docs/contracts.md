@@ -345,3 +345,13 @@ POST /api/operator/jobs/:id/retry（管理员）要求 expected_updated_at，复
 GET /api/auth/demo/status 返回 enabled。POST /api/auth/demo/reader 与 /api/auth/demo/author 接受严格空对象，返回一次性签发的 session_token 和固定账号 user；仅在 LOCAL_DEMO_LOGIN=true 且 PUBLIC_BASE_URL 为 loopback 时可用，浏览器 Origin 必须同源。预置账号需匹配固定 ID、角色和 local_demo_fixture cohort，并且未禁用。不能指定身份、角色或管理员账号，不自动创建账号；由 scripts/seed-local-playground.mjs 初始化。禁用返回 404，配置错误/跨源返回 403。令牌仍只存哈希，响应 no-store。
 
 GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总数（含演示，不是研究指标）。前端打开工作台期间每两秒检查；读者会话每两秒检查 /me/notifications，通知页和导航数量自动更新。关注操作不会伪造已发布通知，作者确认发布后仍通过原 outbox 流程通知。
+
+## 2026-09-13: interview context and reader interests (additive)
+
+- `draftStatement.question?: string` (1–500 chars) is derived from the original interview, covered by the content hash, author review and public visibility filter. Missing or ambiguous question associations are omitted; never guessed. New manual and AI draft versions attach the original question. Edits may retain or remove it, not invent a replacement.
+- `POST /api/drafts/:id/with-questions`, `{}`: owner-only, loads retained original interview questions into a new unconfirmed version. Existing publication stays unchanged until confirmation and publication. Private-content retention applies.
+- `PUT /api/sources/:id/interest-reason`: `{choice: outcome|journey|reflection|other, text?: string, allow_model_processing?: boolean}`. Requires own active interest; other requires nonempty <=20 Unicode characters and explicit model-processing consent. Presets do not call AI. Repeated writes replace one vote.
+- `GET /api/sources/:id/interest-reasons`: own active interest required; returns `total`, `pending`, `tags:[{tag,count,percentage}]`, `mine:{choice,text,tag}`. Percentage denominator includes filled active votes awaiting classification. Workbench supplies the same aggregation as `reader_interests`.
+- Migration 0013 adds nullable reason choice/text/tag columns. `interest.classify` serializes per source, reuses identical text, classifies semantic equivalents, retries failures, and fences writes against deletion. No reader identity or raw reason is exposed in the aggregate. Interview context uses at most 12 highest-count tags.
+- Zhihu resolve `url` accepts up to 4000 characters of share text containing exactly one distinct supported URL. It never guesses among multiple URLs.
+- Paragraph formatting is presentation-only; no evidence rewriting. The Demo asks authors to expand public bodies shorter than 100 characters; backend publish validity remains the existing evidence, consent and confirmation contract.

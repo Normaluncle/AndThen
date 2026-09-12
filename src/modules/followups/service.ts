@@ -9,6 +9,7 @@ import { draftStatementSchema } from '../../ai/tasks.js';
 import { contentHash, validateStatements, type Evidence, type Statement } from '../../ai/evidence.js';
 import { hasActiveConsent, isPubliclyVisible } from '../sources/access.js';
 import { privateExpired, publicStatements, requirePrivateFresh } from './retention.js';
+import { attachInterviewQuestions } from './questions.js';
 
 export async function getDraft(db: Executor, id: string, auth: AuthContext) {
   const [initial] = await db.select().from(followupVersions).where(eq(followupVersions.id, id));
@@ -77,7 +78,7 @@ export async function createManualDraft(ctx: ModuleContext, auth: AuthContext, i
     const [existing] = await tx.select().from(followupVersions).where(eq(followupVersions.interviewId, interviewId)).orderBy(desc(followupVersions.version)).limit(1);
     if (existing) return getDraft(tx, existing.id, auth);
     const messages = await tx.select().from(interviewMessages).where(eq(interviewMessages.sessionId, interviewId)).orderBy(asc(interviewMessages.sequence));
-    const statements: Statement[] = messages.filter(m => m.role === 'author' && m.authorMessage && !m.skipped).map(m => ({ id: m.id, text: m.authorMessage!, kind: 'author_report', evidence_refs: [`message:${m.id}`], visibility: m.visibility === 'public' ? 'public' : 'private' }));
+    const statements: Statement[] = attachInterviewQuestions(messages.filter(m => m.role === 'author' && m.authorMessage && !m.skipped).map(m => ({ id: m.id, text: m.authorMessage!, kind: 'author_report', evidence_refs: [`message:${m.id}`], visibility: m.visibility === 'public' ? 'public' : 'private' })),messages);
     if (!statements.length) throw AppError.sourceIncomplete('No author answers to draft');
     const [latest] = await tx.select().from(followupVersions).where(eq(followupVersions.caseId, session.caseId)).orderBy(desc(followupVersions.version)).limit(1);
     const [draft] = await tx.insert(followupVersions).values({ caseId: session.caseId, interviewId, snapshotId: session.snapshotId, version: (latest?.version ?? 0) + 1, statements, contentHash: contentHash(statements), aiAssisted: messages.some(m => m.generatedBy === 'ai'), createdByUserId: auth.userId }).returning();
@@ -89,6 +90,10 @@ export async function editDraft(ctx: ModuleContext, auth: AuthContext, id: strin
   return ctx.db.transaction(async tx => {
     const old = await getDraft(tx, id, auth);
     await requireCaseAuthor(tx, old.caseId, auth);
+    const messages=old.interviewId?await tx.select().from(interviewMessages).where(eq(interviewMessages.sessionId,old.interviewId)):[];
+    const original=z.array(draftStatementSchema).parse(old.statements);
+    const contexts=attachInterviewQuestions(original,messages);
+    for(const s of statements)if(s.question && s.question!==original.find(x=>x.id===s.id)?.question && s.question!==contexts.find(x=>x.id===s.id)?.question)throw AppError.validation('采访问题必须来自原始采访，不能伪造。');
     const [latest] = await tx.select().from(followupVersions).where(eq(followupVersions.caseId, old.caseId)).orderBy(desc(followupVersions.version)).limit(1);
     if (old.version !== expectedVersion || latest?.id !== id) throw AppError.conflict('Edit the current draft version');
     // User-supplied text is explicitly retained as author evidence, never attributed to AI or old source.
@@ -177,6 +182,6 @@ export async function publicFollowup(db: Executor, id: string) {
     .innerJoin(followupCases, eq(followupCases.id, followupVersions.caseId)).innerJoin(sources, eq(sources.id, followupCases.sourceId)).where(eq(followupVersions.id, id));
   if (!record) throw AppError.notFound();
   if (record.version.status !== 'published' || record.caseRow.publishedVersionId !== id || !await isPubliclyVisible(db, record.source)) throw AppError.withdrawn();
-  return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind, section }) => ({ id, text, kind, ...(section ? { section } : {}) })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
+  return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind, section, question }) => ({ id, text, kind, ...(section ? { section } : {}), ...(question ? { question } : {}) })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
 }
 import { invalidateAuthorMemory } from '../memory/service.js';

@@ -1,3 +1,4 @@
+import { attachInterviewQuestions } from './questions.js';
 import { asc, desc, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
@@ -58,7 +59,7 @@ async function readInput(tx: Transaction, p: z.infer<typeof payloadSchema>) {
     ...messages.filter(m => m.role === 'author' && !m.skipped && m.authorMessage).map(m => ({ id: `message:${m.id}`, text: m.authorMessage!, visibility: m.visibility === 'public' ? 'public' as const : 'private' as const }))];
   if (evidence.length < 2) throw AppError.sourceIncomplete('No author answers to draft');
   if (JSON.stringify(evidence).length > 64000) throw AppError.sourceIncomplete('Draft input exceeds budget');
-  return { source, caseRow, session, snapshot, latest, evidence };
+  return { source, caseRow, session, snapshot, latest, evidence, messages };
 }
 
 export function registerDraftingJobs(ctx: ModuleContext, registry: JobHandlerRegistry) {
@@ -93,6 +94,8 @@ export function registerDraftingJobs(ctx: ModuleContext, registry: JobHandlerReg
       try { current = await readInput(tx, p); } catch { throw new JobLeaseLostError(job.job.id, 'draft, source or permission changed'); }
       await withJobFence(tx, { jobId: job.job.id, fencingToken: job.job.fencingToken }, async fenced => {
         if (candidate && !errorCode) {
+          const attached=attachInterviewQuestions(candidate.statements,current.messages);
+          candidate.statements=candidate.statements.map((s,i)=>({...s,question:attached[i]?.question}));
           const data = followupDraftSchema.parse({ source_id: p.source_id, snapshot_hash: current.snapshot.contentHash, interview_id: p.session_id, version: p.expected_version + 1, statements: candidate.statements, unresolved_items: candidate.unresolved_items, author_edits: [], author_confirmations: [], ai_assisted: true, content_hash: contentHash(candidate.statements) });
           const [draft] = await fenced.insert(followupVersions).values({ caseId: p.case_id, snapshotId: current.snapshot.id, interviewId: p.session_id, version: data.version, statements: data.statements, unresolvedItems: data.unresolved_items, aiAssisted: true, contentHash: data.content_hash, createdByUserId: p.owner_user_id }).returning();
           draftId = draft!.id;

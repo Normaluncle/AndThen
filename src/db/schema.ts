@@ -413,6 +413,9 @@ export const interests = pgTable(
     active: boolean('active').notNull().default(true),
     cohort: text('cohort').notNull().default('unassigned'),
     triggeredBy: text('triggered_by').notNull().default('natural'),
+    reasonChoice: text('reason_choice'),
+    reasonText: text('reason_text'),
+    reasonTag: text('reason_tag'),
     /** Team/demo/pressure-test rows are excluded from research metrics. */
     excluded: boolean('excluded').notNull().default(false),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

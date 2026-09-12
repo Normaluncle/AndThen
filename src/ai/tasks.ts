@@ -93,6 +93,7 @@ export const draftStatementSchema = z.object({
   visibility: z.enum(['private', 'public']),
   // Optional for pre-existing drafts; newly generated AI drafts must supply it.
   section: z.enum(['then', 'later', 'reflection']).optional(),
+  question: z.string().trim().min(1).max(500).optional(),
 });
 
 /** AI-C output: a follow-up draft awaiting per-item author confirmation. */

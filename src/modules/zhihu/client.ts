@@ -17,6 +17,17 @@ export function canonicalZhihuUrl(raw: string): string {
   throw AppError.validation('Only Zhihu answer and article links are supported');
 }
 
+/** Accept normal sharing text or Markdown; do not fetch the pasted URL. */
+export function parseZhihuShare(raw: string): string {
+  const matches = raw.match(/https?:\/\/[^\s<>\[\]()"'，。；！]+/g) ?? [];
+  const urls = new Set<string>();
+  for (const match of matches) {
+    try { urls.add(canonicalZhihuUrl(match)); } catch { /* Ignore non-content links. */ }
+  }
+  if (urls.size !== 1) throw AppError.validation(urls.size ? '请一次只粘贴一篇知乎回答或文章。' : '未找到有效的知乎回答或文章链接。');
+  return [...urls][0]!;
+}
+
 const item = z.object({ Title: z.string(), Url: z.string(), ContentText: z.string(), AuthorName: z.string().default('知乎用户'),
   AuthorAvatar: z.string().default(''), CommentInfoList: z.array(z.object({ Content: z.string() })).default([]) });
 

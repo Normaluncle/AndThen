@@ -11,7 +11,7 @@ import type { ModuleDefinition } from '../../shared/types.js';
 import { success, AppError } from '../../http/errors.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
-import { canonicalZhihuUrl, officialSearch } from './client.js';
+import { canonicalZhihuUrl, parseZhihuShare, officialSearch } from './client.js';
 import { importSource } from '../sources/service.js';
 
 import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js';
@@ -30,9 +30,9 @@ export const zhihuModule: ModuleDefinition = {
     r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request))}));
     r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request),true)}));
     r.put('/discovery/candidates/:id/interest',{preHandler:[app.authenticate],schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),body:z.object({active:z.boolean()}).strict(),response:{200:envelopeSchema(z.record(z.unknown()))}}},async request=>success(request.id,await followCandidate(ctx,requireAuthContext(request),request.params.id,request.body.active)));
-    r.post('/sources/resolve', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], body: z.object({ url: z.string().url().max(1000) }).strict(), response: { 200: envelopeSchema(z.object({ source_id: z.string().uuid(), status: z.enum(['summary_available', 'pending_content']), candidate: candidate.nullable() })) } } }, async request => {
+    r.post('/sources/resolve', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], body: z.object({ url: z.string().min(1).max(4000) }).strict(), response: { 200: envelopeSchema(z.object({ source_id: z.string().uuid(), status: z.enum(['summary_available', 'pending_content']), candidate: candidate.nullable() })) } } }, async request => {
       const auth = requireAuthContext(request);
-      const url = canonicalZhihuUrl(request.body.url);
+      const url = parseZhihuShare(request.body.url);
       const items = await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, url);
       const exact = items.find(x => x.url === url);
       const match=exact?(await storeCandidates(ctx,[exact]))[0]:undefined;

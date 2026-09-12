@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { attachInterviewQuestions } from './questions.js';
+import { interviewMessages } from '../../db/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
 import { notifications, interviewSessions, followupVersions } from '../../db/schema.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -16,6 +18,18 @@ export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
   const response = { 200: envelopeSchema(z.record(z.unknown())), 400: errorEnvelopeSchema, 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 410: errorEnvelopeSchema, 422: errorEnvelopeSchema };
   const base = { tags: ['followups'], params, response, security: [{ bearerAuth: [] }] };
   const hooks = { preHandler: [app.authenticate] };
+  api.post('/drafts/:id/with-questions',{...hooks,schema:{...base,body:z.object({}).strict()}},async req=>{
+    const auth=requireAuthContext(req),draft=await getDraft(ctx.db,req.params.id,auth);
+    if('privateContentExpired' in draft && draft.privateContentExpired)throw AppError.withdrawn('原采访已过期，不能补齐问题。');
+    if(!draft.interviewId)throw AppError.sourceIncomplete('没有可关联的原始采访。');
+    const [session]=await ctx.db.select().from(interviewSessions).where(eq(interviewSessions.id,draft.interviewId));
+    if(!session)throw AppError.withdrawn();
+    requirePrivateFresh(session.updatedAt,ctx.now());
+    const messages=await ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId,draft.interviewId));
+    const statements=attachInterviewQuestions(z.array(draftStatementSchema).parse(draft.statements),messages);
+    if(!statements.some(s=>s.question))throw AppError.sourceIncomplete('原始问题已过期、缺失，或此段综合了多个回答，不能猜测问题。');
+    return success(req.id,await editDraft(ctx,auth,draft.id,draft.version,statements));
+  });
   for (const path of ['/notifications', '/me/notifications']) api.get(path, { ...hooks, schema: { tags: ['notifications'], response, security: base.security, summary: 'List own notification metadata; bodies are read through the authorized public endpoint' } }, async req => {
     const items = await ctx.db.select().from(notifications).where(eq(notifications.readerKey, requireAuthContext(req).userId)).orderBy(desc(notifications.createdAt)).limit(100);
     return success(req.id, { items });

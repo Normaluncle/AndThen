@@ -27,7 +27,7 @@ export function DraftAssistant({draft,dirty,disabled,onDraft,onPending}) {
     } catch(e){setError(e.message);} finally {setBusy(false);}
   }
   const available=!disabled&&!dirty&&!pending&&['draft','confirmed'].includes(draft.status)&&!draft.privateContentExpired;
-  return <section><h2>整理与检查草稿</h2>
+  return <section><h2>整理与检查草稿</h2><button disabled={disabled||dirty||pending||!draft.interviewId} onClick={async()=>{setBusy(true);try{onDraft(await api(`/drafts/${draft.id}/with-questions`,'POST',{}));}catch(e){setError(e.message);}finally{setBusy(false);}}}>补齐原采访问题，生成待确认新版本</button>
     <p>AI 根据已保存的采访回答整理新版本，需要重新确认后才能发布。草稿中后加的修改请自行保留；检查结果不能代替你确认事实。</p>
     {error&&<p role="alert">{error}</p>}{pending&&<p role="status">正在处理，原稿已保留…</p>}
     {dirty&&<p>请先保存修改，再进行整理或检查。</p>}
