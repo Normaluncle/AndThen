@@ -1,5 +1,6 @@
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
+import { registerLocalDemoRoutes } from './local-demo.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
@@ -68,6 +69,7 @@ function serializeUser(user: {
  * something silently trusted.
  */
 export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContext): Promise<void> {
+  await registerLocalDemoRoutes(app, ctx);
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.post(

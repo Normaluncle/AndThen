@@ -338,3 +338,10 @@ POST /api/me/zhihu/sync 要求 {accept_material_processing:true}：明确同意�
 POST /api/operator/jobs/:id/retry（管理员）要求 expected_updated_at，复制失败任务到新任务并关闭旧失败项；原处理器重新执行当前权限/版本/同意校验，不直接重放业务副作用。响应仅新 job_id/deduped。任务变更或重复提交返回 409。采访业务已降级但任务本身成功时，仍由作者采访重试接口处理。
 
 返回账号登录补充：迁移 0012 为授权请求增加 completed_user_id/completed_at/delivered_at。回调以经过官方 /user 核验的 UID 找到既有账号，不能把它重新绑定到发起的新临时读者。POST /api/auth/zhihu/finish 要求原发起会话与 attempt_id，在有效期内一次性交付 ready/session_token/user；未完成 ready=false，其他会话/重复领取/失效请求拒绝。站内 token 仅此响应返回一次，数据库仍只存哈希。原页点击“我已完成知乎授权”接收并进入账号，回调页不含站内令牌。
+
+
+## 本地试玩增量（2026-09-13）
+
+GET /api/auth/demo/status 返回 enabled。POST /api/auth/demo/reader 与 /api/auth/demo/author 接受严格空对象，返回一次性签发的 session_token 和固定账号 user；仅在 LOCAL_DEMO_LOGIN=true 且 PUBLIC_BASE_URL 为 loopback 时可用，浏览器 Origin 必须同源。预置账号需匹配固定 ID、角色和 local_demo_fixture cohort，并且未禁用。不能指定身份、角色或管理员账号，不自动创建账号；由 scripts/seed-local-playground.mjs 初始化。禁用返回 404，配置错误/跨源返回 403。令牌仍只存哈希，响应 no-store。
+
+GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总数（含演示，不是研究指标）。前端打开工作台期间每两秒检查；读者会话每两秒检查 /me/notifications，通知页和导航数量自动更新。关注操作不会伪造已发布通知，作者确认发布后仍通过原 outbox 流程通知。

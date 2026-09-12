@@ -57,3 +57,18 @@ Docker 浏览器新增来源 32b51376-98e5-46f9-8937-8abe969ef1fd：AI-B 449/91 
 从 demo/ 继续美化和组件拆分，保留现有接口、同意、材料范围、待处理/失败状态和确认发布门槛。演示入口 http://127.0.0.1:5174，API http://127.0.0.1:8082。会话仅在页面内存中，刷新页面需要重新登录；这是当前功能 Demo 的凭证保留方式。第三方授权在新页面完成后回原页面点击领取登录结果。
 
 使用技能：skills/backend-contracts/SKILL.md、database-migrations、ai-evaluation、docker-ops、git-delivery，以及既有 web-development React/Vite 指南。修改涉及 Zhihu/OAuth、记忆与账号衔接、管理接口、功能页面、配置、增量迁移 0010–0012、测试和文档；未改写旧迁移、基础入口或其他代理历史。
+
+
+## 2026-09-13 产品负责人试玩补充
+
+完整 PRD 正本改为 PRD.md：提交 4f6183d 原样保存用户 v1.1，随后增量 58 行新增/2 行版本替换，保留 24 章、附录及原126个章节标题。旧 PRD-v1.2.md 明确标为历史实施摘要，不替代正本。用户本轮明确要求不推送 GitHub。
+
+官方搜索两次真实请求保存20条结果（转行/毕业五年），来自现有官方适配器，无爬虫；只显示官方取得的材料范围。另由幂等脚本建立2个固定演示身份、3个 test_fixture 故事，不关联或冒认真实作者。新增本地登录开关与服务端预置身份校验；作者工作台有效关注数、读者通知每两秒自动检查。
+
+验证：pnpm typecheck 通过；pnpm test 228通过、1个真实模型opt-in跳过，55.90秒；node --test demo/src/workflow.test.js demo/src/api.test.js 9通过；前端构建通过；新登录回归测试覆盖默认关闭、非本地部署关闭、跨源、角色注入、固定账号复用。浏览器发现并修正新 effect 引用用户变量的初始化顺序错误，修正后重新构建前端并完成以下真实浏览器验收。
+
+浏览器 tab8 固定读者关注官方车辆工程文章与演示烘焙故事，“我的关注”均可见。tab9 模拟作者工作台显示烘焙1人关注，接受回访，真实 Qwen 提问“这半年里，你的烤面包练习实际进展如何？”，保存明确虚构回答，结束、整理、确认并本站发布。tab8 一直停在通知页，没有刷新或重新进入，自动出现“通知 (1)”与“阅读更新”。两个页面保留给用户。另两条演示故事保持未采访状态。
+
+标准 Docker 构建因镜像仓库重复鉴权等待被主动中止；依赖未变，改用现有本地镜像与本地编译产物更新，API/worker/demo 已重建运行；未删除卷。此过程不等价于本轮验证了从空机器下载全部依赖。OpenAPI 已从8082服务重新导出。没有重跑与本改动无关的真实memU全套。
+
+涉及文件：identity/local-demo、identity/routes、workbench/index、env、demo/main/style、Compose覆盖、初始化脚本、登录测试、PRD正本/摘要说明、契约和交接文档。使用技能：backend-contracts、database-migrations、ai-evaluation、docker-ops、git-delivery、web-development（React/Vite及浏览器验证指南）。外部 OAuth/真实作者试点的限制未改变。

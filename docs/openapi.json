@@ -165,6 +165,223 @@
         }
       }
     },
+    "/api/auth/demo/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "enabled": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "enabled"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "request_id",
+                    "status",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/demo/reader": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "session_token": {
+                          "type": "string"
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "role": {
+                              "type": "string"
+                            },
+                            "cohort": {
+                              "type": "string"
+                            },
+                            "display_name": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "role",
+                            "cohort",
+                            "display_name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "session_token",
+                        "user"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "request_id",
+                    "status",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/demo/author": {
+      "post": {
+        "tags": [
+          "identity"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {},
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "request_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ok"
+                      ]
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "session_token": {
+                          "type": "string"
+                        },
+                        "user": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string"
+                            },
+                            "role": {
+                              "type": "string"
+                            },
+                            "cohort": {
+                              "type": "string"
+                            },
+                            "display_name": {
+                              "type": "string",
+                              "nullable": true
+                            }
+                          },
+                          "required": [
+                            "id",
+                            "role",
+                            "cohort",
+                            "display_name"
+                          ],
+                          "additionalProperties": false
+                        }
+                      },
+                      "required": [
+                        "session_token",
+                        "user"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "request_id",
+                    "status",
+                    "data"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/auth/sessions": {
       "post": {
         "summary": "Exchange a single-use login token for a session",
@@ -19422,6 +19639,9 @@
                               "status": {
                                 "type": "string"
                               },
+                              "interest_count": {
+                                "type": "number"
+                              },
                               "interview_id": {
                                 "type": "string",
                                 "nullable": true
@@ -19436,6 +19656,7 @@
                               "source_id",
                               "title",
                               "status",
+                              "interest_count",
                               "interview_id",
                               "draft_id"
                             ],
