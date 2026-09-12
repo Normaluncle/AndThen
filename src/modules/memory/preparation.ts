@@ -1,14 +1,24 @@
-import { and, eq } from 'drizzle-orm';
+import { and, desc, eq } from 'drizzle-orm';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type { Executor } from '../../db/client.js';
 import type { ModuleContext } from '../../shared/types.js';
 import type { JobHandlerContext } from '../../jobs/types.js';
-import { discoveryCandidates,sourcePreparations,sourceSnapshots,sources,type AuthorMemoryRecord } from '../../db/schema.js';
+import { authorVerifications,discoveryCandidates,sourcePreparations,sourceSnapshots,sources,type AuthorMemoryRecord } from '../../db/schema.js';
 import { createLlmClient } from '../../ai/client.js';
 import { AppError } from '../../http/errors.js';
 import { fenceOf,withJobFence } from '../../jobs/transaction.js';
 import { memoryRequest } from './service.js';
+import { hasActiveConsent } from '../sources/access.js';
+
+/** Once ownership is known, public preparation cannot bypass that author's consent. */
+async function preparationAllowed(db:Executor,sourceId:string,snapshotId:string) {
+ const [latest]=await db.select({id:sourceSnapshots.id}).from(sourceSnapshots).where(eq(sourceSnapshots.sourceId,sourceId)).orderBy(desc(sourceSnapshots.version)).limit(1);
+ if(latest?.id!==snapshotId)return false;
+ const owners=await db.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId,sourceId),eq(authorVerifications.status,'verified')));
+ for(const owner of owners)if(!await hasActiveConsent(db,sourceId,'external_model_processing',owner.userId)||!await hasActiveConsent(db,sourceId,'private_interview',owner.userId))return false;
+ return true;
+}
 
 export async function invalidatePreparation(ctx:ModuleContext,db:Executor,sourceId:string) {
  const [old]=await db.select().from(sourcePreparations).where(eq(sourcePreparations.sourceId,sourceId)).for('update');
@@ -20,12 +30,13 @@ export async function invalidatePreparation(ctx:ModuleContext,db:Executor,source
 export async function requestPreparation(ctx:ModuleContext,db:Executor,sourceId:string) {
  const [candidate]=await db.select().from(discoveryCandidates).where(eq(discoveryCandidates.sourceId,sourceId));
  if(!candidate?.snapshotId)return;
+ if(!await preparationAllowed(db,sourceId,candidate.snapshotId))return;
  const [old]=await db.select().from(sourcePreparations).where(eq(sourcePreparations.sourceId,sourceId)).for('update');
  if(old?.snapshotId===candidate.snapshotId&&['pending','ready'].includes(old.status))return;
  if(old)await invalidatePreparation(ctx,db,sourceId);
  const generation=randomUUID();
  await db.insert(sourcePreparations).values({sourceId,snapshotId:candidate.snapshotId,generation}).onConflictDoUpdate({target:sourcePreparations.sourceId,set:{snapshotId:candidate.snapshotId,generation,status:'pending',records:[],updatedAt:ctx.now()}});
- await ctx.jobs.enqueue({kind:'memory.prepare',maxAttempts:1,payload:{source_id:sourceId,generation},dedupeKey:`memory:prepare:${sourceId}:${candidate.snapshotId}`},db);
+ await ctx.jobs.enqueue({kind:'memory.prepare',maxAttempts:1,payload:{source_id:sourceId,generation},dedupeKey:`memory:prepare:${sourceId}:${generation}`},db);
 }
 export async function prepareSource(ctx:ModuleContext,job:JobHandlerContext) {
  const p=z.object({source_id:z.string().uuid(),generation:z.string().uuid()}).parse(job.payload);
@@ -34,7 +45,7 @@ export async function prepareSource(ctx:ModuleContext,job:JobHandlerContext) {
  const [source]=await ctx.db.select().from(sources).where(eq(sources.id,p.source_id));
  const [candidate]=await ctx.db.select().from(discoveryCandidates).where(eq(discoveryCandidates.sourceId,p.source_id));
  const [snapshot]=await ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.id,state.snapshotId));
- if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus)||!snapshot||candidate?.snapshotId!==snapshot.id||candidate.data.text!==snapshot.body||snapshot.materialLevel!=='api_summary'){
+ if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus)||!snapshot||candidate?.snapshotId!==snapshot.id||candidate.data.text!==snapshot.body||snapshot.materialLevel!=='api_summary'||!await preparationAllowed(ctx.db,source.id,snapshot.id)){
   await job.withFence(async tx=>{await tx.update(sourcePreparations).set({status:'error',records:[]}).where(and(eq(sourcePreparations.sourceId,p.source_id),eq(sourcePreparations.generation,p.generation)));});
   throw AppError.sourceIncomplete('Official preparation material changed');
  }
@@ -53,7 +64,7 @@ export async function prepareSource(ctx:ModuleContext,job:JobHandlerContext) {
   await ctx.db.transaction(async tx=>{
    const [current]=await tx.select().from(sources).where(eq(sources.id,source.id)).for('update');
    const [currentCandidate]=await tx.select().from(discoveryCandidates).where(eq(discoveryCandidates.sourceId,source.id));
-   if(!current||current.deletedAt||['revoked','rejected'].includes(current.permissionStatus)||currentCandidate?.snapshotId!==snapshot.id)throw AppError.conflict('Preparation source changed');
+   if(!current||current.deletedAt||['revoked','rejected'].includes(current.permissionStatus)||currentCandidate?.snapshotId!==snapshot.id||!await preparationAllowed(tx,source.id,snapshot.id))throw AppError.conflict('Preparation source changed');
    await withJobFence(tx,fenceOf(job.job),async fenced=>{
     const changed=await fenced.update(sourcePreparations).set({status:'ready',records,updatedAt:ctx.now()}).where(and(eq(sourcePreparations.sourceId,source.id),eq(sourcePreparations.generation,p.generation))).returning();
     if(!changed.length)throw AppError.conflict('Preparation generation changed');

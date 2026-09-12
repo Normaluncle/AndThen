@@ -36,6 +36,7 @@ import type {
 } from '../../db/schema.js';
 import { AppError } from '../../http/errors.js';
 import { invalidateAuthorMemory } from '../memory/service.js';
+import { invalidatePreparation } from '../memory/preparation.js';
 import { sha256 } from '../identity/tokens.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
 import {
@@ -199,7 +200,7 @@ export async function importSource(
     let source = await findExistingSource(tx, input);
     if (source) {
       const [locked] = await tx.select().from(sources).where(eq(sources.id, source.id)).for('update');
-      if (!locked || locked.deletedAt) throw AppError.withdrawn('Source is being deleted');
+      if (!locked || locked.deletedAt || ['revoked', 'rejected'].includes(locked.permissionStatus)) throw AppError.withdrawn('Source is unavailable');
       source = locked;
     }
     if (!source) {
@@ -258,6 +259,7 @@ export async function importSource(
       .returning();
     const snapshot = insertedSnapshot[0];
     if (!snapshot) throw AppError.internal('Failed to create source snapshot');
+    await invalidatePreparation(ctx, tx, source.id);
     const owners = await tx.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId, source.id), eq(authorVerifications.status, 'verified')));
     for (const owner of owners) await invalidateAuthorMemory(ctx, tx, owner.userId);
 
@@ -486,6 +488,7 @@ export async function revokeConsent(
   }
 
   let cancelledJobs = 0;
+  if (['demo_public_display', 'external_model_processing', 'private_interview'].includes(purpose)) await invalidatePreparation(ctx, tx, sourceId);
   if (purpose === 'external_model_processing' || purpose === 'private_interview') {
     for (const userId of new Set(revoked.map(c => c.userId))) await invalidateAuthorMemory(ctx, tx, userId);
     // Cancel queued/running jobs that carry this source. A running job's
