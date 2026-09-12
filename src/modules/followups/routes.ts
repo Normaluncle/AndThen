@@ -16,7 +16,7 @@ export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
   const response = { 200: envelopeSchema(z.record(z.unknown())), 400: errorEnvelopeSchema, 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema, 409: errorEnvelopeSchema, 410: errorEnvelopeSchema, 422: errorEnvelopeSchema };
   const base = { tags: ['followups'], params, response, security: [{ bearerAuth: [] }] };
   const hooks = { preHandler: [app.authenticate] };
-  api.get('/notifications', { ...hooks, schema: { tags: ['notifications'], response, security: base.security, summary: 'List own notification metadata; bodies are read through the authorized public endpoint' } }, async req => {
+  for (const path of ['/notifications', '/me/notifications']) api.get(path, { ...hooks, schema: { tags: ['notifications'], response, security: base.security, summary: 'List own notification metadata; bodies are read through the authorized public endpoint' } }, async req => {
     const items = await ctx.db.select().from(notifications).where(eq(notifications.readerKey, requireAuthContext(req).userId)).orderBy(desc(notifications.createdAt)).limit(100);
     return success(req.id, { items });
   });

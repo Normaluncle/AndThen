@@ -118,3 +118,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - This is scoped activity erasure, not account closure. Identity/login deletion and standalone case/interview scopes remain unimplemented and are explicitly documented in `docs/deletion-api.md`; do not claim whole-account deletion is complete.
 - Typecheck and affected regression suites passed: 5 files / 9 tests (reader deletion, research, full manual workflow, OpenAPI, registry). Source deletion remains asynchronous via its existing endpoint. The final Docker image/OpenAPI artifact still need refreshing after remaining work.
 - Next: finish deletion scope audit, full PRD interface/acceptance matrix and final Docker delivery. Previous goal turn was concrete progress (retention code, migration, tests, commit); this turn adds actual API behavior and independently executed tests.
+
+## PRD route and acceptance audit continuation — 2026-09-12
+
+- Added `docs/acceptance-matrix.md` with every T01-T22 item, chapter-16 core route and implementation-plan gate, distinguishing executed evidence, partial coverage, missing behavior and revised-scope exclusions. Goal remains active; prior test counts do not prove full delivery.
+- Found and fixed two concrete chapter-16 gaps: `/api/me/notifications` now uses the existing owner-scoped notification handler; finish now returns an evidence-preserving draft and pending confirmation items. Repeated/concurrent finish requests reuse one draft. Skipped-only interviews return an explicit null draft rather than fabricated content.
+- Typecheck passed. Affected suites passed (4 files / 11 tests); after adding the skipped-only regression, the full manual workflow suite passed both tests. No Docker rebuild or OpenAPI artifact refresh yet.
+- Outstanding requirements are now centralized in the acceptance matrix: whole-account scope, research export path/date/cohort/event contract, specific AI adversarial/budget/failure cases, final runtime and delivery documentation.

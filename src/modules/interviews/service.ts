@@ -116,8 +116,10 @@ export async function transitionInterview(ctx: ModuleContext, auth: AuthContext,
     const initial = await getInterview(tx, id, auth);
     const { source } = await requireCaseAuthor(tx, initial.session.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
-    if (!session || session.revision !== expectedVersion) throw AppError.conflict('Interview version changed');
+    if (!session) throw AppError.notFound();
     requirePrivateFresh(session.updatedAt, ctx.now());
+    if (action === 'finish' && session.status === 'finished' && [expectedVersion, expectedVersion + 1].includes(session.revision)) return { session, job_id: null };
+    if (session.revision !== expectedVersion) throw AppError.conflict('Interview version changed');
     if (action === 'resume' ? session.status !== 'paused' : !['active', 'paused'].includes(session.status)) throw AppError.conflict('Invalid interview transition');
     if (action === 'resume' && !await hasActiveConsent(tx, source.id, 'private_interview', auth.userId)) throw AppError.consentRequired();
     // Source lock serializes cancellation against model writeback. The handler also checks revision.

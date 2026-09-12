@@ -47,3 +47,9 @@ Compose passes all budget settings through the shared API/worker environment. Re
 `tests/business/drafting.test.ts`: no-permission zero calls, stale base version rejection, unconfirmed AI draft creation, old-publication preservation, invented-fact/private-leak rejection, and late result discard/audit cancellation after an author edit.
 
 `tests/integration/ai-limits.test.ts`: competing queue instances obey shared concurrency and daily admission caps, allow idempotent replay at the limit, and continue ordinary work. Adapter tests cover UTF-8 input bounds, output token cap and cancellation of oversized streams; interview tests verify answers survive budget exhaustion.
+
+## Finish response compatibility
+
+`POST /api/interviews/:id/finish` now returns the finished session together with `draft_id`, `draft` and `pending_confirmation_items`. The draft is an evidence-preserving manual projection of saved author answers; it is not marked as newly generated AI text. A repeated finish request using the original expected revision reuses the finished state and the existing draft, including concurrent retries. The separate `/draft` endpoint remains available and returns the same current interview draft.
+
+If the interview contains only skipped/empty answers, finish succeeds with `draft_id: null`, no pending items and `draft_unavailable_reason: "no_author_answers"`; no facts or draft are fabricated. Explicit `/draft-ai` remains the optional independent-model operation and must use the actual current draft version as its expected version.

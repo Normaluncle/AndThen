@@ -36,10 +36,17 @@ describe('durable manual interview flow', () => {
     expect(read.json().data.messages).toHaveLength(1);
     expect(read.json().data.session.status).toBe('paused');
     expect((await h.app.inject({ method: 'POST', url: `${base}/resume`, headers: auth(author.token), payload: { expected_version: 3 } })).statusCode).toBe(200);
-    expect((await h.app.inject({ method: 'POST', url: `${base}/finish`, headers: auth(author.token), payload: { expected_version: 4 } })).json().data.session.status).toBe('finished');
+    const finishes = await Promise.all(Array.from({ length: 3 }, () => h.app.inject({ method: 'POST', url: `${base}/finish`, headers: auth(author.token), payload: { expected_version: 4 } })));
+    for (const finish of finishes) {
+      expect(finish.statusCode, finish.body).toBe(200);
+      expect(finish.json().data.session.status).toBe('finished');
+      expect(finish.json().data.pending_confirmation_items).toHaveLength(1);
+    }
+    expect(new Set(finishes.map(r => r.json().data.draft_id)).size).toBe(1);
     const draftResponse = await h.app.inject({ method: 'POST', url: `${base}/draft`, headers: auth(author.token) });
     expect(draftResponse.statusCode, draftResponse.body).toBe(200);
     const draft = draftResponse.json().data;
+    expect(draft.id).toBe(finishes[0]!.json().data.draft_id);
     const draftUrl = `/api/drafts/${draft.id}`;
     const publish = { content_hash: draft.contentHash, confirms_publication: true };
     expect((await h.app.inject({ method: 'POST', url: `${draftUrl}/publish`, headers: auth(author.token), payload: publish })).statusCode).toBe(409);
@@ -65,6 +72,10 @@ describe('durable manual interview flow', () => {
     await runJob(h.moduleCtx, 'followup.notify');
     const notices = await h.ctx.db.select().from(notifications).where(eq(notifications.followupVersionId, draft.id));
     expect(notices.map(n => n.readerKey)).toEqual([reader.user.id]);
+    const ownNotifications = await h.app.inject({ url: '/api/me/notifications', headers: auth(reader.token) });
+    expect(ownNotifications.statusCode).toBe(200);
+    expect(ownNotifications.json().data.items.map((n: { readerKey: string }) => n.readerKey)).toEqual([reader.user.id]);
+    expect((await h.app.inject({ url: '/api/me/notifications', headers: auth(lateReader.token) })).json().data.items).toEqual([]);
     await h.moduleCtx.jobs.enqueue({ kind: 'followup.notify', payload: { source_id: story.source.id, case_id: story.followupCase.id, version_id: draft.id } });
     await runJob(h.moduleCtx, 'followup.notify');
     expect(await h.ctx.db.select().from(notifications).where(eq(notifications.followupVersionId, draft.id))).toHaveLength(1);
@@ -88,5 +99,21 @@ describe('durable manual interview flow', () => {
     expect(await h.ctx.db.select().from(outbox).where(eq(outbox.dedupeKey, draft.id))).toHaveLength(0);
     const receipt = await h.app.inject({ method: 'GET', url: `/api/deletions/${deleted.json().data.deletion_id}`, headers: auth(author.token) });
     expect(receipt.json().data.status).toBe('succeeded');
+  });
+  it('finishes a skipped-only interview without inventing a draft and permits retry', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true });
+    await h.ctx.db.update(followupCases).set({ status: 'accepted', publishedVersionId: null }).where(eq(followupCases.id, story.followupCase.id));
+    await h.ctx.db.insert(consents).values({ userId: author.user.id, sourceId: story.source.id, purpose: 'private_interview' });
+    const start = await h.app.inject({ method: 'POST', url: `/api/cases/${story.followupCase.id}/interviews`, headers: auth(author.token), payload: { mode: 'manual', confirms_own_content: true, confirms_old_state: true } });
+    const base = `/api/interviews/${start.json().data.session.id}`;
+    const skipped = await h.app.inject({ method: 'POST', url: `${base}/messages`, headers: auth(author.token), payload: { skip: true, client_message_id: 'skip1', expected_version: 1 } });
+    expect(skipped.statusCode, skipped.body).toBe(200);
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const finished = await h.app.inject({ method: 'POST', url: `${base}/finish`, headers: auth(author.token), payload: { expected_version: 2 } });
+      expect(finished.statusCode, finished.body).toBe(200);
+      expect(finished.json().data).toMatchObject({ draft_id: null, pending_confirmation_items: [], draft_unavailable_reason: 'no_author_answers' });
+    }
+    expect(await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.interviewId, start.json().data.session.id))).toHaveLength(0);
   });
 });

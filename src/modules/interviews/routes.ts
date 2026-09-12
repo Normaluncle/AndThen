@@ -3,8 +3,9 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleRegistrar } from '../../shared/types.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
-import { success } from '../../http/errors.js';
+import { AppError, success } from '../../http/errors.js';
 import { getInterview, messageInput, saveMessage, startInterview, transitionInterview } from './service.js';
+import { createManualDraft } from '../followups/service.js';
 
 const params = z.object({ id: z.string().uuid() });
 const resultSchema = envelopeSchema(z.record(z.unknown()));
@@ -24,6 +25,15 @@ export const registerInterviewRoutes: ModuleRegistrar = (app, ctx) => {
   for (const action of ['pause', 'resume', 'finish'] as const) {
     api.post(`/interviews/:id/${action}`, { preHandler: [app.authenticate], schema: { ...base, summary: `${action} own interview with optimistic concurrency`, body: z.object({ expected_version: z.number().int().positive() }).strict() } }, async (req, reply) => {
       const data = await transitionInterview(ctx, requireAuthContext(req), req.params.id, action, req.body.expected_version);
+      if (action === 'finish') {
+        try {
+          const draft = await createManualDraft(ctx, requireAuthContext(req), req.params.id);
+          return reply.code(200).send(success(req.id, { ...data, draft_id: draft.id, draft, pending_confirmation_items: draft.statements }));
+        } catch (error) {
+          if (!(error instanceof AppError) || error.code !== 'source_incomplete') throw error;
+          return reply.code(200).send(success(req.id, { ...data, draft_id: null, pending_confirmation_items: [], draft_unavailable_reason: 'no_author_answers' }));
+        }
+      }
       return reply.code(data.job_id ? 202 : 200).send(success(req.id, data));
     });
   }
