@@ -18,6 +18,14 @@ test('unsaved edits cannot confirm or publish an earlier server version', () => 
   assert.equal(draftActions({status:'withdrawn',statements:saved},original).publish,false);
 });
 
+test('visibility changes and item removal require saving and invalidate confirmation affordances',()=>{
+  const statements=[{id:'a',text:'公开材料',visibility:'public'},{id:'b',text:'另一项',visibility:'public'}];
+  for(const edited of [[{...statements[0],visibility:'private'},statements[1]],[statements[0]]]) {
+    const result=draftActions({status:'confirmed',statements:edited},JSON.stringify(statements));
+    assert.equal(result.save,true);assert.equal(result.confirm,false);assert.equal(result.publish,false);
+  }
+});
+
 test('interview waits for a question and disables answers after pause or finish', () => {
   assert.equal(interviewActions({status:'active',mode:'ai'},[]).waiting,true);
   assert.equal(interviewActions({status:'active',mode:'ai'},[{role:'ai'}]).answer,true);

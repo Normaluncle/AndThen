@@ -7,7 +7,7 @@ import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
 import { draftStatementSchema } from '../../ai/tasks.js';
-import { confirmDraft, createManualDraft, editDraft, getDraft, publicFollowup, publishDraft, withdrawFollowup } from './service.js';
+import { confirmDraft, createManualDraft, editDraft, getDraft, publicFollowup, publishDraft, withdrawFollowup, readDraftEvidence } from './service.js';
 import { requirePrivateFresh } from './retention.js';
 
 export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
@@ -44,6 +44,9 @@ export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
   });
   api.post('/interviews/:id/draft', { ...hooks, schema: { ...base, summary: 'Build an evidence-preserving manual draft from saved author answers' } }, async req => success(req.id, await createManualDraft(ctx, requireAuthContext(req), req.params.id)));
   api.get('/drafts/:id', { ...hooks, schema: { ...base, summary: 'Read own draft with evidence and confirmations' } }, async req => success(req.id, await getDraft(ctx.db, req.params.id, requireAuthContext(req))));
+  api.get('/drafts/:id/evidence', { ...hooks, schema: { ...base, summary: 'Read only referenced evidence for the owning author; expired private evidence is unavailable',
+    response:{...response,200:envelopeSchema(z.object({draft_id:z.string().uuid(),content_hash:z.string(),items:z.array(z.object({id:z.string(),text:z.string(),visibility:z.enum(['public','private']),source_kind:z.enum(['original','interview','author_edit']),material_level:z.string().nullable()})),missing_refs:z.array(z.string())}))},
+  } },async req=>success(req.id,await readDraftEvidence(ctx,requireAuthContext(req),req.params.id)));
   api.patch('/drafts/:id', { ...hooks, schema: { ...base, summary: 'Create a new version from explicit author edits; previous public version stays visible', body: z.object({ expected_version: z.number().int().positive(), statements: z.array(draftStatementSchema).min(1).max(100) }).strict() } }, async req => success(req.id, await editDraft(ctx, requireAuthContext(req), req.params.id, req.body.expected_version, req.body.statements)));
   api.post('/drafts/:id/confirm', { ...hooks, schema: { ...base, summary: 'Confirm all statement IDs against the current content hash', body: z.object({ content_hash: z.string().length(64), statement_ids: z.array(z.string()).min(1).max(100) }).strict() } }, async req => success(req.id, await confirmDraft(ctx, requireAuthContext(req), req.params.id, req.body.content_hash, req.body.statement_ids)));
   api.post('/drafts/:id/publish', { ...hooks, schema: { ...base, summary: 'Atomically publish the confirmed draft and freeze follower recipients', body: z.object({ content_hash: z.string().length(64), confirms_publication: z.literal(true) }).strict() } }, async req => success(req.id, await publishDraft(ctx, requireAuthContext(req), req.params.id, req.body.content_hash)));

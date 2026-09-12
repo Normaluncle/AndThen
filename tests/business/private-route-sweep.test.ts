@@ -25,7 +25,7 @@ it('sweeps private reads against anonymous, unrelated and expired sessions and c
   const paths = [
     `/sources/${story.source.id}`, `/sources/${story.source.id}/snapshots`, `/sources/${story.source.id}/consents`,
     `/sources/${story.source.id}/author-verifications`, `/sources/${story.source.id}/analysis`,
-    `/cases/${story.followupCase.id}`, `/interviews/${interview!.id}`, `/drafts/${story.versionId}`, `/jobs/${queued.job.id}`,
+    `/cases/${story.followupCase.id}`, `/interviews/${interview!.id}`, `/drafts/${story.versionId}`, `/drafts/${story.versionId}/evidence`, `/jobs/${queued.job.id}`,
   ];
   for (const path of paths) {
     for (const headers of [undefined, auth(stranger.token), auth(expired.token)]) {

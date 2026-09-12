@@ -47,6 +47,24 @@ export async function draftEvidence(db: Executor, draft: typeof followupVersions
   return evidence;
 }
 
+export async function readDraftEvidence(ctx: ModuleContext, auth: AuthContext, id: string) {
+  return ctx.db.transaction(async tx => {
+    const draft = await getDraft(tx,id,auth);
+    if ('privateContentExpired' in draft && draft.privateContentExpired) throw AppError.withdrawn('Private evidence retention period expired');
+    const refs = new Set(z.array(draftStatementSchema).parse(draft.statements).flatMap(statement=>statement.evidence_refs));
+    const evidence = (await draftEvidence(tx,draft)).filter(item=>refs.has(item.id));
+    const [snapshot] = draft.snapshotId ? await tx.select({level:sourceSnapshots.materialLevel}).from(sourceSnapshots).where(eq(sourceSnapshots.id,draft.snapshotId)) : [];
+    return {
+      draft_id:draft.id, content_hash:draft.contentHash,
+      items:evidence.map(item=>({...item,
+        source_kind:item.id.startsWith('snapshot:')?'original' as const:item.id.startsWith('message:')?'interview' as const:'author_edit' as const,
+        material_level:item.id.startsWith('snapshot:')?snapshot?.level??null:null,
+      })),
+      missing_refs:[...refs].filter(ref=>!evidence.some(item=>item.id===ref)),
+    };
+  });
+}
+
 export async function createManualDraft(ctx: ModuleContext, auth: AuthContext, interviewId: string) {
   return ctx.db.transaction(async tx => {
     const [initial] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, interviewId));

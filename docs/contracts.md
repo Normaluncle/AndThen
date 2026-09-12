@@ -295,6 +295,8 @@ Private memU HTTP service uses a server-only token and UUID-scoped generation pa
 `memory.refresh` 新索引激活采用来源→作者记忆→任务租约的事务检查，并将旧索引清理入队。同意切换与相关任务入队同事务提交。成功/复用/过时结果保存在 job.result，包含不带正文的模型调用量、token 和时延；向量 token 未知，不推算。工作台超过 24 小时触发去重刷新。
 # v1.2 official candidate interest and preparation
 
+`GET /api/drafts/:id/evidence` is restricted to the case's author (including against unrelated admin sessions). It returns `draft_id`, `content_hash`, referenced `items` only, and `missing_refs`. Each item has `id`, `text`, `visibility`, `source_kind` (`original`, `interview`, `author_edit`) and nullable `material_level`. Missing or expired interview evidence is not invented; expired/purged private draft evidence returns 410 even if a public projection remains. Public story/followup projections never use this route. Reads use a transaction and the existing source lock/author checks.
+
 Operator page reads: `GET /api/operator/sources?offset=0` is restricted to admins/researchers. Admins see nondeleted source metadata; researchers see only their imports or assigned cases. Responses contain `items` and nullable `next_offset` (50 per page), with source ID/title/permission, case ID/status and preparation status, never source bodies. Existing private source routes continue to authorize detailed reads.
 
 `GET /api/operator/jobs?offset=0` is admin-only and lists failed task IDs, kind, status, attempts and update time (50 per page). It omits payloads, results and provider error text. This is an inspection endpoint, not generic task replay. No role or ownership is accepted from these query strings.
