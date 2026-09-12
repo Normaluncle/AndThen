@@ -214,3 +214,12 @@ docker compose --env-file .env.local up -d --build
 - pnpm typecheck 通过；pnpm test 216 通过、1 项真实模型 opt-in 跳过，50.33 秒，包含数据库与 OpenAPI 回归。本检查点未改数据库和公开 HTTP 契约。
 - PRD 与契约明确当前只完成底层适配。真实登录仍不可用；一次性请求持久化、账号绑定、令牌生命周期、首次资料同步和真实 OAuth 验收仍待完成。缺少 App ID/App Key 和安全回调确认是外部条件，不代表剩余实现无需继续。
 - 本轮重读 skills/backend-contracts/SKILL.md 与 skills/git-delivery/SKILL.md。现有 Docker 双账号 fixture 验收记录继续保留；Goal 保持 active，未宣称全计划完成。
+
+## 2026-09-13 OAuth 一次性请求持久化
+
+- 新增 oauth-attempts.ts 和 zhihu_oauth_attempts 表（生成的新增迁移 0009 及快照），绑定服务端会话，保存 state/browser proof 哈希，十分钟过期。相同会话新请求替代旧请求，消费先检查活动会话与账号状态，再原子标记已使用；提供过期记录清理函数。
+- 四项真实 Postgres 回归通过：并发三次只有一次消费；跨浏览器/旧标签拒绝；过期边界与清理；会话撤销、过期、账号停用后拒绝。数据库迁移从空库及重复执行测试通过，没有修改已应用迁移或现有业务数据。
+- pnpm typecheck 通过；pnpm test 220 通过、1 项 opt-in 跳过，50.89 秒。独立集成测试结果另记在下行。
+- 未启用公开 OAuth 路由，未取得真实 OAuth 凭证。Cookie/回调接线、过期清理调度、绑定和加密令牌仓库尚待实施；不能把内部函数验收当成真实授权。PRD、契约与验收矩阵已同步。
+- 技能：沿用 backend-contracts、git-delivery，本轮读取 database-migrations。Goal active，上一轮和本轮均有代码与可复核测试进展，非等待阻塞。
+- pnpm test:integration：163 通过、1 项 opt-in 跳过，49.14 秒。

@@ -894,7 +894,19 @@ export const sourcePreparations = pgTable('source_preparations', {
   updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
 });
 
+/** OAuth binding attempts contain hashes only, never codes or provider tokens. */
+export const zhihuOAuthAttempts = pgTable('zhihu_oauth_attempts', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  sessionId: uuid('session_id').notNull().references(() => sessions.id, { onDelete: 'cascade' }),
+  stateHash: text('state_hash').notNull().unique(),
+  browserHash: text('browser_hash').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+  consumedAt: timestamp('consumed_at', { withTimezone: true }),
+}, t => [index('zhihu_oauth_attempts_expiry_idx').on(t.expiresAt)]);
+
 export const schema = {
+  zhihuOAuthAttempts,
   users,
   sessions,
   loginTokens,

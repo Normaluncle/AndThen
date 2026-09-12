@@ -35,6 +35,7 @@ const EXPECTED_TABLES = [
   'users',
   'worker_heartbeats',
   'zhihu_comment_syncs',
+  'zhihu_oauth_attempts',
 ];
 
 const EXPECTED_INDEXES = [
