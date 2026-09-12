@@ -295,6 +295,10 @@ Private memU HTTP service uses a server-only token and UUID-scoped generation pa
 `memory.refresh` 新索引激活采用来源→作者记忆→任务租约的事务检查，并将旧索引清理入队。同意切换与相关任务入队同事务提交。成功/复用/过时结果保存在 job.result，包含不带正文的模型调用量、token 和时延；向量 token 未知，不推算。工作台超过 24 小时触发去重刷新。
 # v1.2 official candidate interest and preparation
 
+Operator page reads: `GET /api/operator/sources?offset=0` is restricted to admins/researchers. Admins see nondeleted source metadata; researchers see only their imports or assigned cases. Responses contain `items` and nullable `next_offset` (50 per page), with source ID/title/permission, case ID/status and preparation status, never source bodies. Existing private source routes continue to authorize detailed reads.
+
+`GET /api/operator/jobs?offset=0` is admin-only and lists failed task IDs, kind, status, attempts and update time (50 per page). It omits payloads, results and provider error text. This is an inspection endpoint, not generic task replay. No role or ownership is accepted from these query strings.
+
 Verified owners granting `private_interview` for a pending source move it to `private_only`, never `public_approved`. Review of a `third_party_link` requires the case's verified owner and active interview consent in addition to the existing snapshot/revision and permission checks. Operator case creation resolves any already verified owner from the database; callers do not supply ownership. Author verification, conflict checks and case binding commit under the source row lock.
 
 All paths below use `/api`. Authentication is required. `GET /discovery/feed` returns up to 50 recently stored official candidates; `GET /discovery/following` returns up to 100 candidates followed by the caller. Candidate fields include `candidate_id`, nullable `linked_source_id`, `interested`, and the official summary fields. Search and exact link resolution persist server-observed candidates without running memory extraction.

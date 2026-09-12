@@ -7,10 +7,12 @@ import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema } from '../../http/envelope.js';
 import { requestRefresh } from '../memory/service.js';
 import { success } from '../../http/errors.js';
+import { registerManagementRoutes } from './management.js';
 
 export const workbenchModule: ModuleDefinition = {
   name: 'workbench',
   async registerRoutes(app, ctx) {
+    await registerManagementRoutes(app, ctx);
     const r = app.withTypeProvider<ZodTypeProvider>();
     r.get('/me/workbench', { preHandler: [app.authenticate], schema: { tags: ['workbench'], response: { 200: envelopeSchema(z.object({ items: z.array(z.object({ id: z.string(), source_id: z.string(), title: z.string().nullable(), status: z.string(), interview_id: z.string().nullable(), draft_id: z.string().nullable() })) })) } } }, async request => {
       const auth = requireAuthContext(request);

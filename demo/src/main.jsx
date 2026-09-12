@@ -3,6 +3,7 @@ import {createRoot} from 'react-dom/client';
 import {api,setToken,hasSession} from './api';
 import './style.css';
 import {OfficialData} from './OfficialData.jsx';
+import {Management} from './Management.jsx';
 import {draftActions,interviewActions,poll} from './workflow.js';
 
 function App(){
@@ -20,7 +21,8 @@ function App(){
  async function readInterview(id){const d=await api('/interviews/'+id);setSession(d.session);setMessages(d.messages||[]);setPage('采访');}
  async function actionInterview(action){try{await api(`/interviews/${session.id}/${action}`,'POST',{expected_version:session.revision});}catch(e){if(e.status===409){await readInterview(session.id);throw new Error('采访已有更新，请查看最新问题后再次操作。');}throw e;}await readInterview(session.id);}
  async function openStory(id){const d=await api('/stories/'+id);setStory(d.story);setSourceId(id);setStoryComments(null);setPage('内容');setStoryComments(await api(`/stories/${id}/comments`));}
- return <><header><a href="#" onClick={()=>enter('发现')}>然后呢？</a><span>让认真留下的回答，等到它的后来。</span><small>{user?`${user.display_name||'当前用户'} · ${user.role}`:'尚未登录'}</small></header><nav>{['发现','我的关注','作者工作台','通知','资料与记忆','账号',...(user?.role==='admin'?['官方数据']:[])].map(p=><button key={p} onClick={()=>enter(p)}>{p}</button>)}</nav><main aria-busy={busy}>{error&&<p role="alert" className="error">{error}</p>}{busy&&<p role="status">处理中…</p>}{notice&&<p role="status">{notice}</p>}
+ return <><header><a href="#" onClick={()=>enter('发现')}>然后呢？</a><span>让认真留下的回答，等到它的后来。</span><small>{user?`${user.display_name||'当前用户'} · ${user.role}`:'尚未登录'}</small></header><nav>{['发现','我的关注','作者工作台','通知','资料与记忆','账号',...(user?.role==='admin'?['官方数据']:[]),...(['admin','researcher'].includes(user?.role)?['回访管理']:[])].map(p=><button key={p} onClick={()=>enter(p)}>{p}</button>)}</nav><main aria-busy={busy}>{error&&<p role="alert" className="error">{error}</p>}{busy&&<p role="status">处理中…</p>}{notice&&<p role="status">{notice}</p>}
+ {page==='回访管理'&&['admin','researcher'].includes(user?.role)&&<Management role={user.role}/>}
  {page==='官方数据'&&user?.role==='admin'&&<OfficialData/>}
  {page==='账号'&&<section><h1>进入然后呢？</h1><p>读者会话用于记录你关注的故事。作者使用管理员提供的一次性登录凭证；知乎授权目前等待应用配置。</p><button disabled={busy} onClick={()=>run(async()=>identify(await api('/auth/readers','POST',{consent:{accepted:true,version:'v1'}})))}>同意建立读者会话并进入</button><label>一次性登录凭证<input type="password" value={login} onChange={e=>setLogin(e.target.value)}/></label><button disabled={busy} onClick={()=>run(async()=>identify(await api('/auth/sessions','POST',{login_token:login})))}>登录</button>{user&&<button onClick={()=>run(async()=>{await api('/auth/logout','POST');setToken('');setUser(null);})}>退出</button>}</section>}
  {page==='发现'&&<><h1>故事还在继续</h1><p>浏览本站内容，或通过知乎官方搜索发现值得回访的经历。</p><form onSubmit={e=>{e.preventDefault();run(async()=>setItems((await api('/discovery/search?q='+encodeURIComponent(query))).items));}}><input aria-label="搜索关键词" value={query} onChange={e=>setQuery(e.target.value)} placeholder="例如：转行、毕业之后"/><button disabled={busy}>搜索知乎</button></form><form onSubmit={e=>{e.preventDefault();run(async()=>{const d=await api('/sources/resolve','POST',{url});setSourceId(d.source_id);setNotice(d.status==='pending_content'?'已登记链接，官方渠道暂未取得该帖正文。':'已取得官方摘要，等待作者核验与展示许可。');});}}><input aria-label="知乎链接" value={url} onChange={e=>setUrl(e.target.value)} placeholder="粘贴知乎回答或文章链接"/><button disabled={busy}>导入链接</button></form></>}
