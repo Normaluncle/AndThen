@@ -1,3 +1,24 @@
+# PRD v1.2 当前验收（2026-09-13）
+
+本节替代下方历史记录中的“后端交付范围已结束”结论。当前范围包含官方知乎适配、memU 和功能页面，**整体仍在实施**。下面保留的 2026-09-12 审计只描述原范围。
+
+| 验收项目 | 当前证据 | 状态 |
+|---|---|---|
+| 官方搜索 | 本地页面通过有效 Access Secret 返回摘要与精选评论；精确 URL 匹配才导入 | 搜索实测通过；完整本人内容/评论同步待完成 |
+| memU 真实链路 | memory-live.test.ts：隔离 PostgreSQL、真实 Qwen 整理、真实向量、memU 检索、采访问题，作者隔离与撤销 | 真实单例通过，完整生命周期矩阵继续补充 |
+| 作者采访 | 两个独立浏览器会话：作者接受回访、记忆 ready、真实提问、回答保存、暂停/恢复/结束 | fixture 浏览器通过；真人体验未验收 |
+| 编辑确认发布 | 作者编辑第 2 版；未保存时确认和发布禁用；保存后确认才允许发布 | 浏览器通过；workflow.test.js 覆盖状态保护 |
+| 读者通知 | 原关注读者收到通知，阅读页面显示作者编辑后的文字 | 浏览器通过，站内通知，非知乎通知 |
+| 撤回 | 作者撤回后读者从通知再次读取得到 HTTP 410，不显示版本正文 | 浏览器通过 |
+| 页面异步状态 | 采访/记忆串行轮询、离开页面不写回；失败停止轮询 | workflow.test.js 通过；自动刷新端到端仍需继续核对 |
+| 其他功能页面 | 审核管理、资料归属、来源准备等 | 尚未完成 |
+| OAuth | 缺少 App ID/App Key，回调安全契约尚需验证 | 外部配置阻塞真实验收；适配实现未完成 |
+| Docker 新增服务 | Python/Nginx 基础镜像获取遇 Docker Hub auth 超时 | 镜像验收阻塞；本地隔离进程可运行 |
+
+2026-09-13 此检查点：pnpm typecheck 通过；pnpm test 为 174 通过、1 项真实模型 opt-in 跳过；node --test demo/src/api.test.js demo/src/workflow.test.js 为 4 通过；pnpm --dir demo build 通过。真实模型 opt-in 的独立通过记录见 implementation-v1.2.md。
+
+---
+
 # Backend acceptance audit
 
 Audit date: 2026-09-12. The local engineering scope is delivered; **P4 real-model evaluation and real-author pilot remain unverified**. The user changed the PRD scope to a local backend Demo with authorized imports and no required Zhihu integration or business pages. WorkBuddy quota failure was followed by explicit authorization for Codex to implement directly. Real-author participation and independent real-model evaluation have not occurred.
