@@ -192,3 +192,15 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Replacement reclaimed the same durable job after the real five-second lease expired, incremented fencing token/attempt count and wrote exactly one next question. The pre-crash saved author answer remained exactly once. Both test processes were stopped and the isolated database cleaned up.
 - Test passed (one process-level integration test, about 6.6 seconds) and typecheck passed. This is a real process restart with a simulated provider; no real model or WorkBuddy call was made. Existing independent fence-race tests cover rejection of surviving stale owners.
 - Updated T10 evidence. Runtime code/image is unchanged at 5f43604; this turn adds executable acceptance evidence only. Remaining classification/structured-output and final scope audit still need closure before goal completion.
+
+## Final requirement audit — 2026-09-12
+
+Closed deterministic knowledge-only recommendation, explicit AI-C draft sections,
+and accepted operator withdrawal. Added nine-route private-read sweep and both
+public section projections; anonymous, unrelated and expired sessions denied.
+Full `pnpm typecheck` and `pnpm test`: 35 files / 167 tests passed, including the
+actual worker-process crash recovery test. Static OpenAPI exported: 50 paths.
+Skills applied: backend-contracts, database-migrations, ai-evaluation, docker-ops,
+git-delivery (read earlier in takeover). No real-provider quality claim.
+Contract changes are recorded in docs/contracts.md section 11. Final container
+rebuild and runtime acceptance follows this commit.

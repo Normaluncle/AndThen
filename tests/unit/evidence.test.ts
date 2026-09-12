@@ -18,5 +18,6 @@ describe('deterministic evidence and confirmation rules', () => {
     expect(contentHash({ a: 1, b: 2 })).toBe(contentHash({ b: 2, a: 1 }));
     expect(contentHash([1, 2])).not.toBe(contentHash([2, 1]));
     expect(contentHash(statement)).not.toBe(contentHash({ ...statement, text: 'changed' }));
+    expect(contentHash({ ...statement, section: 'then' })).not.toBe(contentHash({ ...statement, section: 'later' }));
   });
 });

@@ -671,6 +671,7 @@ export interface PublicStatement {
   id: string;
   text: string;
   kind: string;
+  section?: 'then' | 'later' | 'reflection';
 }
 
 export interface PublicFollowup {
@@ -709,7 +710,8 @@ function projectStatements(raw: unknown[]): PublicStatement[] {
     const text = typeof record.text === 'string' ? record.text : null;
     const kind = typeof record.kind === 'string' ? record.kind : null;
     if (!id || !text || !kind) continue;
-    out.push({ id, text, kind });
+    const section = record.section;
+    out.push({ id, text, kind, ...(section === 'then' || section === 'later' || section === 'reflection' ? { section } : {}) });
   }
   return out;
 }

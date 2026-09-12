@@ -2,7 +2,7 @@
 
 Audit date: 2026-09-12. This is a gap-tracking audit, **not a declaration that every release gate passed**. The user changed the PRD scope to a local backend Demo with authorized imports and no required Zhihu integration or business pages. WorkBuddy quota failure was followed by explicit authorization for Codex to implement directly. Real-author participation and independent real-model evaluation have not occurred.
 
-Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP providers prove transport/control behavior, not model quality. Docker evidence in `docker-acceptance.md` belongs to runtime commit `1f0f59e` and must be refreshed for the final code. Source references below are repository-relative.
+Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP providers prove transport/control behavior, not model quality. Docker evidence is versioned in `docker-acceptance.md`; historical measurements are identified separately from the final runtime. Source references below are repository-relative.
 
 ## PRD T01–T22
 
@@ -10,7 +10,7 @@ Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP provi
 |---|---|---|
 | T01 summary only | `sources-import.test.ts` rejects summary-as-quotation; `cases.test.ts` requires current-snapshot review before invitation | Backend rules covered; no page verification in backend scope |
 | T02 independent dates | `sources-import.test.ts` preserves unknown/null and known dates; `migrations.test.ts` checks acquisition/publication independently | Covered by database/API assertions |
-| T03 low likes vs knowledge | Import has no popularity cutoff; AI-A returns advisory candidates | Explicit paired experience/knowledge evaluation missing; do not call passed |
+| T03 low likes vs knowledge | `analysis.test.ts` paired low-popularity experience/high-popularity knowledge fixtures; server overrides knowledge-only invite candidates | Deterministic recommendation policy covered; actual model classification quality remains P4 |
 | T04 concurrent follows | `stories.test.ts` concurrent upsert, cancellation and restoration | Covered |
 | T05 test-account exclusion | `stories.test.ts`, `research.test.ts` cover author, test_fixture, team and prompted exclusions | Covered for implemented aggregate metrics |
 | T06 forwarded invitation / unrelated author | `cases.test.ts`, `verifications.test.ts`, `interviews.test.ts`, auth tests | Covered authorization checks; invitations cannot establish identity |
@@ -28,7 +28,7 @@ Evidence scope: PostgreSQL tests create isolated databases; simulated HTTP provi
 | T18 restart / redeploy | Current fixture survived DB/API/worker restart and forced recreation, with nonempty isolated backup restore | Passed through runtime `5f43604`; details and hashes in docker-acceptance.md |
 | T19 no authorized result | `stories.test.ts` checks empty database and unlicensed-only fixtures return empty lists and no private text | Backend empty-state regression passed; no business UI in scope |
 | T20 mixed windows / cohorts | `research.test.ts` date/cohort filtering, deidentified fields, fixed-duration window groups, deadline/late/unknown timing; `cases.test.ts` server-recorded response time | Backend reporting covered for new timestamped records; legacy missing times excluded rather than guessed. No real participant study claimed |
-| T21 private/public isolation | Source, case, interview, draft, notification and job owner checks; public statement projection tests | Covered sampled API paths; final core route sweep remains required |
+| T21 private/public isolation | Source, case, interview, draft, notification and job owner checks; public statement projection tests | Individual ownership tests plus `private-route-sweep.test.ts` cover anonymous, unrelated and expired sessions on nine core private reads and both public projections |
 | T22 copied vs Zhihu published | No copy endpoint or Zhihu publisher; Demo publication is local only | Not applicable under backend scope; no external-publication success claim |
 
 ## PRD chapter 16 route audit
@@ -43,7 +43,7 @@ All paths below have `/api` prefix.
 | POST cases/:id/interviews; POST interviews/:id/messages | Implemented, with durable answer before model execution |
 | POST interviews/:id/finish | Now returns persisted `draft_id`, draft and pending confirmation items; concurrent retry reuses the same draft. If all answers are skipped/empty, returns null draft with explicit reason |
 | PATCH drafts/:id; POST drafts/:id/confirm; POST drafts/:id/publish | Implemented with hash/version checks |
-| POST followups/:id/withdraw | Author path implemented; separate accepted operator workflow still needs scope review |
+| POST followups/:id/withdraw | Author, admin and case-assigned researcher paths implemented; optional reason and exactly-once audit, stranger/reader denied (`withdrawal.test.ts`) |
 | GET me/notifications | Implemented as an alias of notifications, same owner filter |
 | POST me/data-deletion | Explicit reader_activity scope; author source deletion is DELETE sources/:id and account closure is POST me/account-deletion with independent receipt credential |
 | GET admin/research-export | Implemented with source authorization, date/cohort filters, deidentified event details and explicit denominator limitations; legacy research/export uses the same contract |
@@ -54,11 +54,11 @@ All paths below have `/api` prefix.
 |---|---|
 | P0 development agents | Scheduler, skills, worktree/session persistence and fixed-model/1M guards exist under tools/workbuddy and tests/orchestrator. Prior live short-session recovery verified. Three-process scale test/full-1M recall not verified; quota blocked original development workflow and user authorized takeover |
 | P1 foundation | Node24/Fastify/PostgreSQL18/Drizzle; additive migrations; opaque hashed sessions; real-DB job lease/dedupe/fence tests; one-shot Compose migration |
-| P2 business / AI / governance | Core modules present. Missing items above remain requirements, not optional polish |
+| P2 business / AI / governance | Core modules implemented, including structured draft sections and accepted operator withdrawal |
 | P3 complete backend fixture | Manual import→review→follow→interview→confirm→publish→notify→withdraw→delete exercised in tests and live Docker. Independent-model A/B/C/D paths use simulated providers in tests |
 | P4 real model | No independent credentials supplied; explicit unverified boundary permitted by active goal. Do not report authentic AI interview evaluation or provider deletion |
 | P5 Docker / persistence / performance | Runtime `5f43604` deployed healthy with six migrations; fixture persistence/cleanup and nonempty restore verified. Current 10-session sample write p95 183.97 ms and async acknowledgment p95 70.71 ms |
-| Prompts and schemas | Four versioned prompts and output validators exist. Need final review of five-question/skip policy, injection regression and structured “then/later/reflection/unknown” output fidelity |
+| Prompts and schemas | Four versioned prompts and validators; five-question/skip and injection regressions. AI-C requires then/later/reflection section on each statement; unresolved_items is the separate private unknown block. Empty blocks remain empty. Older/manual drafts permit absent section, author can classify by a new version; section changes invalidate the hash. |
 | Retention | 30-day private cleanup and 90-day consent checks implemented. Backup rotation is operator-invoked; no daily host schedule. External provider retention remains a documented dependency |
 | Artifacts | Source, migrations, scheduler, skills, Compose and scripts exist; startup/frontend guides refreshed, static/live OpenAPI matched 50 paths. Runtime evidence tied to `5f43604`; completion remains subject to outstanding matrix items |
 

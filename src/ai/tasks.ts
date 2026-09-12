@@ -91,6 +91,8 @@ export const draftStatementSchema = z.object({
   kind: z.enum(STATEMENT_KINDS),
   evidence_refs: z.array(z.string()),
   visibility: z.enum(['private', 'public']),
+  // Optional for pre-existing drafts; newly generated AI drafts must supply it.
+  section: z.enum(['then', 'later', 'reflection']).optional(),
 });
 
 /** AI-C output: a follow-up draft awaiting per-item author confirmation. */

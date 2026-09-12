@@ -53,3 +53,11 @@ Compose passes all budget settings through the shared API/worker environment. Re
 `POST /api/interviews/:id/finish` now returns the finished session together with `draft_id`, `draft` and `pending_confirmation_items`. The draft is an evidence-preserving manual projection of saved author answers; it is not marked as newly generated AI text. A repeated finish request using the original expected revision reuses the finished state and the existing draft, including concurrent retries. The separate `/draft` endpoint remains available and returns the same current interview draft.
 
 If the interview contains only skipped/empty answers, finish succeeds with `draft_id: null`, no pending items and `draft_unavailable_reason: "no_author_answers"`; no facts or draft are fabricated. Explicit `/draft-ai` remains the optional independent-model operation and must use the actual current draft version as its expected version.
+
+AI-C output contract update (`2026-09-12.2`): every generated statement requires
+`section: then | later | reflection`; unknowns remain in `unresolved_items`.
+Evidence and privacy checks remain mandatory. All blocks need not contain text;
+missing evidence is never filled by invention. Existing manual drafts stay
+compatible and can be classified through author edits. AI-A knowledge-only
+candidates are deterministically changed to `not_suitable`; paired fixtures
+verify policy, not a real model's classification accuracy.

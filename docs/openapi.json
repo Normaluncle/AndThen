@@ -3397,6 +3397,14 @@
                                         },
                                         "kind": {
                                           "type": "string"
+                                        },
+                                        "section": {
+                                          "type": "string",
+                                          "enum": [
+                                            "then",
+                                            "later",
+                                            "reflection"
+                                          ]
                                         }
                                       },
                                       "required": [
@@ -3608,6 +3616,14 @@
                                       },
                                       "kind": {
                                         "type": "string"
+                                      },
+                                      "section": {
+                                        "type": "string",
+                                        "enum": [
+                                          "then",
+                                          "later",
+                                          "reflection"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -10415,6 +10431,14 @@
                             "private",
                             "public"
                           ]
+                        },
+                        "section": {
+                          "type": "string",
+                          "enum": [
+                            "then",
+                            "later",
+                            "reflection"
+                          ]
                         }
                       },
                       "required": [
@@ -11462,10 +11486,35 @@
     },
     "/api/followups/{id}/withdraw": {
       "post": {
-        "summary": "Immediately withdraw the current public version",
+        "summary": "Author, administrator or assigned researcher withdraws current publication; audited, optional reason",
         "tags": [
           "followups"
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "not": {}
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "reason": {
+                        "type": "string",
+                        "maxLength": 1000
+                      }
+                    },
+                    "additionalProperties": false,
+                    "nullable": true
+                  }
+                ]
+              }
+            }
+          }
+        },
         "parameters": [
           {
             "schema": {

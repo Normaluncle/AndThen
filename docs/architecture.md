@@ -1,8 +1,9 @@
 # Architecture
 
-Scope: the foundation delivered in this commit (identity + database + jobs).
-Business modules (sources, cases, interviews, followups, research) are reserved
-slots that plug into the contracts described here.
+Current scope: complete local backend Demo. Identity, sources, cases, interviews,
+followups, research and AI-A/B/C/D are registered modules. The topology and
+foundation contracts below remain applicable; see frontend-integration.md,
+ai-api.md and acceptance-matrix.md for the current behavior and evidence boundaries.
 
 ## 1. Runtime topology
 

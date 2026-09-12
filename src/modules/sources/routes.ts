@@ -94,6 +94,7 @@ const publicStatementSchema = z.object({
   id: z.string(),
   text: z.string(),
   kind: z.string(),
+  section: z.enum(['then', 'later', 'reflection']).optional(),
 });
 
 const publicFollowupSchema = z.object({

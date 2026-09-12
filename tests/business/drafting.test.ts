@@ -8,7 +8,7 @@ import { runJob } from '../helpers/run-job.js';
 describe('AI-C evidence-bound draft creation with simulated HTTP provider', () => {
   let h: Harness;
   let server: Server;
-  let mode: 'valid' | 'leak' | 'invented' | 'hold' = 'valid';
+  let mode: 'valid' | 'leak' | 'invented' | 'hold' | 'missing-section' = 'valid';
   let release: (() => void) | undefined;
   let calls = 0;
   beforeAll(async () => {
@@ -19,7 +19,7 @@ describe('AI-C evidence-bound draft creation with simulated HTTP provider', () =
       calls++;
       const input = JSON.parse(JSON.parse(raw).messages[1].content);
       const evidence = input.evidence.find((e: { id: string; visibility: string }) => e.id.startsWith('message:') && e.visibility === (mode === 'leak' ? 'private' : 'public'));
-      const response = { statements: [{ id: 's1', text: mode === 'invented' ? '2025年收入100万元' : evidence.text, kind: 'author_report', evidence_refs: [evidence.id], visibility: 'public' }], unresolved_items: ['未提供具体完成日期'] };
+      const response = { statements: [{ id: 's1', text: mode === 'invented' ? '2025年收入100万元' : evidence.text, kind: 'author_report', evidence_refs: [evidence.id], visibility: 'public', ...(mode === 'missing-section' ? {} : { section: 'later' }) }], unresolved_items: ['未提供具体完成日期'] };
       const send = () => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ model: 'test_fixture', choices: [{ message: { content: JSON.stringify(response) } }] })); };
       if (mode === 'hold') release = send; else send();
     });
@@ -53,14 +53,16 @@ describe('AI-C evidence-bound draft creation with simulated HTTP provider', () =
     expect(draft?.status).toBe('draft');
     expect(draft?.authorConfirmations).toEqual([]);
     expect(draft?.aiAssisted).toBe(true);
+    expect(draft?.statements[0]).toMatchObject({ section: 'later' });
+    expect(draft?.unresolvedItems).toEqual(['未提供具体完成日期']);
     expect((await h.app.inject({ method: 'POST', url: `/api/drafts/${draftId}/publish`, headers: auth(author.token), payload: { content_hash: draft!.contentHash, confirms_publication: true } })).statusCode).toBe(409);
     expect((await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.id, story.versionId)))[0]?.status).toBe('published');
-    for (const badMode of ['leak', 'invented'] as const) {
+    for (const badMode of ['leak', 'invented', 'missing-section'] as const) {
       mode = badMode;
       expect((await enqueue(2)).statusCode).toBe(202);
       const invalid = await runJob(h.moduleCtx, 'ai.draft');
       expect(invalid?.data?.draft_id).toBeNull();
-      expect(invalid?.data?.error_code).toBe('source_incomplete');
+      expect(invalid?.data?.error_code).toBe(badMode === 'missing-section' ? 'invalid_model_output' : 'source_incomplete');
     }
     expect(await h.ctx.db.select().from(followupVersions).where(eq(followupVersions.caseId, story.followupCase.id))).toHaveLength(2);
     mode = 'hold';

@@ -244,3 +244,23 @@ export function tokenHashEquals(a: string, b: string): boolean;
 2. Add or update a test that pins the new behaviour.
 3. Note the change under "Contract changes" in the commit message.
 4. Never edit an applied migration; add a new one.
+
+## 11. Contract changes — final implementation audit
+
+- AI-C prompt version `2026-09-12.2` requires statement `section`:
+  `then`, `later`, or `reflection`. `unresolved_items` remains the separate
+  private unknown block. Missing evidence means an empty block, not invented
+  filler. Private statements keep their section but never enter public output.
+- Existing/manual statements may omit section; no legacy stored hash is
+  rewritten. Authors can classify their answers with PATCH, producing a new
+  version/hash and requiring fresh confirmation. Both public story and followup
+  projections preserve the optional section and exclude evidence/private data.
+- AI-A knowledge-only classification forces `not_suitable`, regardless of a
+  model's contradictory invite recommendation; popularity is not an input gate.
+  Classification itself still requires real-model evaluation.
+- POST `/api/followups/:id/withdraw` accepts no body or `{reason?: string}`.
+  Verified author, admin, or researcher who created the case may withdraw the
+  current publication. An unrelated researcher cannot. This operation grants
+  no private draft-read permission; repeated withdrawal produces no new audit.
+  Audit records actor, optional reason and operator flag. Private-retention
+  expiry does not prevent withdrawal of a still-public version.

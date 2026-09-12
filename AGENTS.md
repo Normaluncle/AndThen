@@ -19,8 +19,7 @@ Backend only. "然后呢？ (AndThen)" — a reader asks *"然后呢？"*, an au
 *"后来"*. Pure Node 24 + TypeScript + Fastify 5 + Postgres 18 + Drizzle, Vitest,
 OpenAPI. No frontend. No dependency on any external platform API.
 
-The foundation commit (identity + database + jobs) is done. Business modules are
-assigned to separate worktrees. **Do not rewrite the foundation to suit your
+The foundation commit (identity + database + jobs) is done. Business modules have been integrated; historical agent worktrees remain preserved. **Do not rewrite the foundation to suit your
 module.**
 
 ## 2. Required reading per task type
@@ -77,11 +76,11 @@ src/
   ai/               OpenAI-compatible client + frozen AI-A/B/C/D output contracts
   modules/
     identity/       IMPLEMENTED — users, sessions, login-token exchange, auth contract
-    sources/        reserved
-    cases/          reserved
-    interviews/     reserved
-    followups/      reserved
-    research/       reserved
+    sources/        implemented
+    cases/          implemented
+    interviews/     implemented
+    followups/      implemented
+    research/       implemented
   shared/           logger, shared types (AppInstance, ModuleContext, ModuleRegistrar)
 tests/
   unit/             no database required

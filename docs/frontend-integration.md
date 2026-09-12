@@ -42,3 +42,19 @@
 私有采访/草稿默认最后操作后 30 天到期，公开展示许可默认最多 90 天。字段清理后的历史哈希只是原确认回执，不是当前缩减投影的哈希。读取不会延长保留期。详情见 `retention.md`。
 
 读者活动删除保留账号；整账号注销使用 POST /me/account-deletion；请求前保存随机回执 ID 和查询密钥，旧登录会话在成功后失效。独立采访删除使用 DELETE /interviews/:id，须明确确认同时撤回它支撑的公开版本，详情见删除接口说明。研究导出需要负责来源的研究员权限，按日期/cohort 分层；固定窗口统计排除历史未知回应时间。参见 `deletion-api.md`、`research-api.md` 和 `acceptance-matrix.md`。
+
+### Structured draft blocks
+
+AI-C now requires `section: then | later | reflection` on every statement,
+representing 当时表述／后来补充／现在回看. Render all three blocks, leaving a block
+empty when the author supplied no evidence for it. `unresolved_items` plus
+private statements form the private 仍未知／不愿公开 block; never copy this block
+into the public page. The model must not manufacture content to fill a section.
+Legacy/manual drafts can omit section; the author can assign it with a new
+PATCH version. Both public read projections preserve supplied sections. A
+section edit changes the content hash and invalidates old confirmation.
+
+Withdrawal additionally permits admins and the researcher assigned by case
+creation. Send POST `/api/followups/:id/withdraw` with an optional `{reason}`;
+no body remains supported for existing clients. This does not allow operators
+to read private interviews or drafts.

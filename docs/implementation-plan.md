@@ -1,5 +1,11 @@
 # Implementation plan
 
+This file preserves the original foundation handoff and work allocation. It is
+not the current progress report: all five business modules are now implemented.
+See acceptance-matrix.md for current P0–P5 gates and docker-acceptance.md for
+measured local runtime evidence. WorkBuddy quota failure led to user-authorized
+Codex takeover; independent real-model evaluation still requires credentials.
+
 ## 1. Status of this commit (foundation)
 
 Delivered and verified:

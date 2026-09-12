@@ -1,10 +1,10 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Executor } from '../../db/client.js';
-import { jobs, aiRuns, followupCases, followupVersions, interviewSessions, interviewMessages, sourceSnapshots, sources, interests, outbox, notifications } from '../../db/schema.js';
+import { auditLogs, jobs, aiRuns, followupCases, followupVersions, interviewSessions, interviewMessages, sourceSnapshots, sources, interests, outbox, notifications } from '../../db/schema.js';
 import type { ModuleContext, AuthContext } from '../../shared/types.js';
 import { AppError } from '../../http/errors.js';
-import { requireCaseAuthor } from '../interviews/service.js';
+import { lockCase, requireCaseAuthor } from '../interviews/service.js';
 import { draftStatementSchema } from '../../ai/tasks.js';
 import { contentHash, validateStatements, type Evidence, type Statement } from '../../ai/evidence.js';
 import { hasActiveConsent, isPubliclyVisible } from '../sources/access.js';
@@ -132,16 +132,22 @@ async function requireNoModelBlock(db: Executor, draftId: string, hash: string) 
   if (block) throw AppError.sourceIncomplete('Validation findings require a new author-edited draft');
 }
 
-export async function withdrawFollowup(ctx: ModuleContext, auth: AuthContext, id: string) {
+export async function withdrawFollowup(ctx: ModuleContext, auth: AuthContext, id: string, reason?: string) {
   return ctx.db.transaction(async tx => {
-    const draft = await getDraft(tx, id, auth);
-    const { caseRow } = await requireCaseAuthor(tx, draft.caseId, auth);
+    const [initial] = await tx.select().from(followupVersions).where(eq(followupVersions.id, id));
+    if (!initial) throw AppError.notFound();
+    const { caseRow } = await lockCase(tx, initial.caseId);
+    const operator = auth.role === 'admin' || (auth.role === 'researcher' && caseRow.createdByUserId === auth.userId);
+    if (!operator) await requireCaseAuthor(tx, initial.caseId, auth);
+    const [draft] = await tx.select().from(followupVersions).where(eq(followupVersions.id, id)).for('update');
+    if (!draft) throw AppError.notFound();
     if (draft.status === 'withdrawn') return { withdrawn: true };
     if (caseRow.publishedVersionId !== id) throw AppError.conflict('Only the current publication may be withdrawn');
     await tx.update(followupVersions).set({ status: 'withdrawn', withdrawnAt: ctx.now(), updatedAt: ctx.now() }).where(eq(followupVersions.id, id));
     await tx.update(followupCases).set({ status: 'withdrawn', publishedVersionId: null, updatedAt: ctx.now() }).where(eq(followupCases.id, draft.caseId));
     await tx.update(notifications).set({ status: 'withdrawn' }).where(eq(notifications.followupVersionId, id));
     await tx.update(outbox).set({ status: 'cancelled', recipients: [], updatedAt: ctx.now() }).where(eq(outbox.dedupeKey, id));
+    await tx.insert(auditLogs).values({ actorType: 'user', actorUserId: auth.userId, action: 'followup.withdrawn', subjectType: 'followup', subjectId: id, caseId: draft.caseId, properties: { operator, reason: reason ?? null } });
     return { withdrawn: true };
   });
 }
@@ -151,5 +157,5 @@ export async function publicFollowup(db: Executor, id: string) {
     .innerJoin(followupCases, eq(followupCases.id, followupVersions.caseId)).innerJoin(sources, eq(sources.id, followupCases.sourceId)).where(eq(followupVersions.id, id));
   if (!record) throw AppError.notFound();
   if (record.version.status !== 'published' || record.caseRow.publishedVersionId !== id || !await isPubliclyVisible(db, record.source)) throw AppError.withdrawn();
-  return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind }) => ({ id, text, kind })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
+  return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind, section }) => ({ id, text, kind, ...(section ? { section } : {}) })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
 }

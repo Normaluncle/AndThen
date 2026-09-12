@@ -11,6 +11,7 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
   let calls = 0;
   let invalid = false;
   let attemptTool = false;
+  let caseType = 'plan';
   let lastRequest: Record<string, unknown> = {};
   beforeAll(async () => {
     h = await createHarness();
@@ -20,7 +21,7 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
       calls++;
       lastRequest = JSON.parse(body);
       const input = JSON.parse(JSON.parse(body).messages[1].content);
-      const candidate = { case_type: 'plan', claims: [{ id: 'c1', text: input.evidence[0].text, kind: 'plan', evidence_refs: [invalid ? 'invented' : input.evidence[0].id], time_anchor: null, time_anchor_basis: null }], missing_information: ['later outcome'], safety: 'clear_for_pilot', safety_reasons: [], recommended_action: 'invite', action_reasons: ['author outcome unknown'], reviewer_required: false };
+      const candidate = { case_type: caseType, claims: [{ id: 'c1', text: input.evidence[0].text, kind: 'plan', evidence_refs: [invalid ? 'invented' : input.evidence[0].id], time_anchor: null, time_anchor_basis: null }], missing_information: ['later outcome'], safety: 'clear_for_pilot', safety_reasons: [], recommended_action: 'invite', action_reasons: ['author outcome unknown'], reviewer_required: false };
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ model: 'test_fixture', choices: [{ message: { content: JSON.stringify(attemptTool ? { ...candidate, publish: true } : candidate), ...(attemptTool ? { tool_calls: [{ type: 'function', function: { name: 'publish', arguments: '{}' } }] } : {}) } }], usage: { prompt_tokens: 20, completion_tokens: 30 } }));
     });
@@ -31,6 +32,25 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
     h.moduleCtx.env.LLM_MODEL = 'test_fixture';
   });
   afterAll(async () => { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); await h.close(); });
+  it('keeps low-popularity experience eligible and overrides a knowledge-only invite candidate', async () => {
+    const author = await seedUser(h, 'author', 'test_fixture');
+    try {
+      for (const fixture of [
+        { type: 'experience', text: '只有一个赞：我去年开始徒步，想继续记录进展。', action: 'invite' },
+        { type: 'knowledge', text: '一万个赞：三角形内角和为180度。', action: 'not_suitable' },
+      ]) {
+        caseType = fixture.type;
+        const story = await seedPublishedStory(h, { author: author.user, verifyAuthor: true, excerpt: fixture.text });
+        await h.ctx.db.insert(consents).values({ userId: author.user.id, sourceId: story.source.id, purpose: 'external_model_processing' });
+        const queued = await h.app.inject({ method: 'POST', url: `/api/sources/${story.source.id}/analyze`, headers: auth(author.token), payload: { snapshot_hash: story.snapshot.contentHash } });
+        expect(queued.statusCode, queued.body).toBe(202);
+        await runJob(h.moduleCtx, 'ai.extract');
+        const read = await h.app.inject({ method: 'GET', url: `/api/sources/${story.source.id}/analysis`, headers: auth(author.token) });
+        expect(read.json().data.analysis.recommended_action).toBe(fixture.action);
+        if (fixture.type === 'knowledge') expect(read.json().data.analysis.action_reasons).toContain('knowledge_only_has_no_followup_experience');
+      }
+    } finally { caseType = 'plan'; }
+  });
   it('checks permission before requests, binds citations to snapshot and never changes case state', async () => {
     const author = await seedUser(h, 'author', 'test_fixture');
     const outsider = await seedUser(h, 'author', 'test_fixture');

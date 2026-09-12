@@ -94,6 +94,11 @@ export function registerAnalysisJobs(ctx: ModuleContext, registry: JobHandlerReg
           if (claim.time_anchor !== null && (!claim.time_anchor_basis || !state.text.includes(claim.time_anchor_basis) || !claim.time_anchor_basis.includes(claim.time_anchor))) throw AppError.sourceIncomplete('Unsupported time anchor');
         }
         if (!state.snapshot.publishedAt || state.snapshot.materialLevel !== 'exact_excerpt') candidate.reviewer_required = true;
+        if (candidate.case_type === 'knowledge') {
+          candidate.recommended_action = 'not_suitable';
+          candidate.action_reasons = [...candidate.action_reasons, 'knowledge_only_has_no_followup_experience'];
+          candidate.reviewer_required = true;
+        }
       }
     } catch (err) {
       if (job.signal.aborted) throw err;

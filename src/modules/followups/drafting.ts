@@ -19,7 +19,7 @@ import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
 import { requirePrivateFresh } from './retention.js';
 
 const payloadSchema = z.object({ source_id: z.string().uuid(), case_id: z.string().uuid(), session_id: z.string().uuid(), owner_user_id: z.string().uuid(), expected_version: z.number().int().nonnegative(), revision: z.number().int(), request_id: z.string() });
-const candidateSchema = z.object({ statements: z.array(draftStatementSchema).min(1).max(50), unresolved_items: z.array(z.string().max(2000)).max(50) }).strict();
+const candidateSchema = z.object({ statements: z.array(draftStatementSchema.extend({ section: z.enum(['then', 'later', 'reflection']) }).strict()).min(1).max(50), unresolved_items: z.array(z.string().max(2000)).max(50) }).strict();
 
 export const registerDraftingRoutes: ModuleRegistrar = (app, ctx) => {
   const api = app.withTypeProvider<ZodTypeProvider>();
