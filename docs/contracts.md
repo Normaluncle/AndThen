@@ -273,3 +273,17 @@ export function tokenHashEquals(a: string, b: string): boolean;
 `GET /api/me/memory`, `PUT /api/me/memory/consent {enabled}`, and `POST /api/me/memory/refresh` act only on the authenticated account.
 Memory processing additionally requires verified source ownership and source-specific external-model/private-interview consent.
 Private memU HTTP service uses a server-only token and UUID-scoped generation paths. PostgreSQL owns the active generation; SQLite is rebuildable. No embedding or credentials are returned to the browser.
+
+## v1.2 官方本人内容与评论（2026-09-13）
+
+以下 GET 只向管理员开放，使用配置的 Access Secret 所属账号，不接受客户端 user_id、账号标识或 OAuth token：
+
+- `/api/integrations/zhihu/creator/contents?offset=0`：最多 20 条回答/文章摘要，带 `paging.is_end/next_offset/stopped_reason`。
+- `/api/integrations/zhihu/creator/content?url=...`：官方全文，`body_format=untrusted_html`。功能页面以文本显示，不执行 HTML。
+- `/api/integrations/zhihu/creator/comments?url=...&offset=0`：根评论与上游附带回复；`coverage=paged_roots_with_partial_children`，不代表楼中楼完整。作者链接仅由官方 AuthorToken 生成。
+- `POST /api/sources/:id/zhihu/comments/sync`：管理员为已有来源排入单页同步任务，返回 202 与 `job_id`，按来源去重；GET `/api/jobs/:id` 查看本人任务结果。达到官方额度/授权错误时本次任务失败，不自动反复请求。
+- `GET /api/stories/:id/comments`：只在原故事仍满足公开规则时返回已同步评论及同步时间。没有对应许可不返回评论正文。缓存不充当作者记忆或发布证据。
+
+游标按官方 NextOffset 原样回传并作 Int64 校验，不按页长度猜测。游标缺失或不递增时显式标记；每页事务写入，按精确评论 ID 更新。末页下次从原末页继续获取增量；缺失评论不推断为上游删除。最多缓存 2000 条，达到上限不部分提交。删除来源时缓存级联清理，来源失效/任务失去租约后不能回写。
+
+新增表 `zhihu_comment_syncs`；新增迁移 0007，旧迁移保持原样。能力状态新增 `creator_account_reads` 与 `comment_sync_scope=access_secret_owner_only`，不表示任意 OAuth 作者可调用全文/评论。

@@ -32,6 +32,7 @@ const EXPECTED_TABLES = [
   'sources',
   'users',
   'worker_heartbeats',
+  'zhihu_comment_syncs',
 ];
 
 const EXPECTED_INDEXES = [

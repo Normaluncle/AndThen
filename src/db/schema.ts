@@ -851,6 +851,26 @@ export type OutboxRow = typeof outbox.$inferSelect;
 export type IdempotencyKeyRow = typeof idempotencyKeys.$inferSelect;
 export type WorkerHeartbeatRow = typeof workerHeartbeats.$inferSelect;
 
+export interface ZhihuComment {
+  id: string;
+  text: string;
+  created_at_seconds: string;
+  likes: string;
+  author_url: string | null;
+  root_id: string | null;
+  reply_id: string | null;
+}
+/** One-way official comment cache, never interview evidence or a write-back queue. */
+export const zhihuCommentSyncs = pgTable('zhihu_comment_syncs', {
+  sourceId: uuid('source_id').primaryKey().references(() => sources.id, { onDelete: 'cascade' }),
+  revision: integer('revision').notNull().default(1),
+  offset: text('offset').notNull().default('0'),
+  items: jsonb('items').$type<ZhihuComment[]>().notNull().default([]),
+  isEnd: boolean('is_end').notNull().default(false),
+  stoppedReason: text('stopped_reason'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const schema = {
   users,
   sessions,
@@ -874,4 +894,5 @@ export const schema = {
   outbox,
   idempotencyKeys,
   workerHeartbeats,
+  zhihuCommentSyncs,
 };
