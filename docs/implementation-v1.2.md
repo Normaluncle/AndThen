@@ -205,3 +205,12 @@ docker compose --env-file .env.local up -d --build
 本链路累计真实 Qwen：AI-B 3 次，输入 809/941/1086，输出 101/86/86，耗时 2218/1333/1868 ms；两次记忆刷新分别调用 1 次与 2 次模型，输入 131 与 276，输出 195 与 275，耗时 3001 与 4634 ms，各写入一次索引。合计 6 次整理/提问调用，3243 输入、743 输出 token；向量 token 未单独计量。当前采样只证明这一条测试链路，不代表总体质量或速度保证。
 
 本轮无代码修改，复用 aa90a81 对应的类型检查、210 项通过/1 项 opt-in 跳过和 Docker 构建证据。本轮新增的是实际业务浏览器验收与数据库状态核对。技能沿用 docker-ops、git-delivery、backend-contracts。Goal 仍 active：官方候选到真实作者、OAuth、安全授权回调、失败重试按钮及其他剩余验收不因这条 fixture 闭环而自动完成。
+
+## 2026-09-13 OAuth 底层适配检查点
+
+- 重新下载官方稳定版 Skill（https://developer-cdn.zhihu.com/zhihu-cli/releases/stable/skill/zhihu-cli-skill.zip）。oauth.md 仍记载历史回调 authorization_code、换令牌参数 code 及未回传 state 的限制，未用第三方博客推断真实授权可用。
+- 新增 src/modules/zhihu/oauth-client.ts：固定官方域名、精确 HTTPS 回调、表单换令牌、OAuth bearer 用户读取、无损 UID、敏感字段剔除、回调 state 恒定时间比较、按账号绑定的 AES-256-GCM 加解密。提供方错误不回传；响应大小/超时/重定向有限制。空展示字段不阻断有效身份。
+- 新增 tests/unit/zhihu-oauth.test.ts 六项回归：请求参数、回调不匹配/歧义、长 ID、空字段、异常与超大响应脱敏、密文隔离/随机 IV/错误密钥。均使用虚构接口，不消耗真实令牌或模型调用。
+- pnpm typecheck 通过；pnpm test 216 通过、1 项真实模型 opt-in 跳过，50.33 秒，包含数据库与 OpenAPI 回归。本检查点未改数据库和公开 HTTP 契约。
+- PRD 与契约明确当前只完成底层适配。真实登录仍不可用；一次性请求持久化、账号绑定、令牌生命周期、首次资料同步和真实 OAuth 验收仍待完成。缺少 App ID/App Key 和安全回调确认是外部条件，不代表剩余实现无需继续。
+- 本轮重读 skills/backend-contracts/SKILL.md 与 skills/git-delivery/SKILL.md。现有 Docker 双账号 fixture 验收记录继续保留；Goal 保持 active，未宣称全计划完成。
