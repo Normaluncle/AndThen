@@ -95,10 +95,13 @@ it('marks a partial index failure as error, retries with a new generation, and i
  });
  await expect(runJob(h.moduleCtx,'memory.prepare')).rejects.toThrow('fixture interrupted');
  const [failed]=await h.ctx.db.select().from(sourcePreparations).where(eq(sourcePreparations.sourceId,sourceId));expect(failed!.status).toBe('error');expect(failed!.records).toEqual([]);
- // The test runner does not transition failures like the real worker. Leave its
- // old claim running deliberately to exercise replacement-generation dedupe.
+ // The test runner does not transition failures like the real worker. A new
+ // generation can queue, but cannot run until the prior owner's lease is released.
  failIndex=false;
  expect((await h.app.inject({method:'PUT',url:endpoint,headers:auth(reader.token),payload:{active:true}})).statusCode).toBe(200);
+ expect(await h.moduleCtx.jobs.claim({workerId:'fixture-overlap',leaseSeconds:60,kinds:['memory.prepare']})).toBeNull();
+ const oldClaim=(await h.ctx.db.select().from(jobs).where(eq(jobs.kind,'memory.prepare'))).find(j=>j.payload.generation===failed!.generation)!;
+ await h.ctx.db.update(jobs).set({status:'failed',leaseOwner:null,leaseExpiresAt:null}).where(eq(jobs.id,oldClaim.id));
  await runJob(h.moduleCtx,'memory.prepare');
  const [ready]=await h.ctx.db.select().from(sourcePreparations).where(eq(sourcePreparations.sourceId,sourceId));expect(ready!.status).toBe('ready');expect(ready!.generation).not.toBe(failed!.generation);
  const changed=await h.app.inject({method:'POST',url:'/api/sources',headers:auth(reader.token),payload:{source_type:'third_party_link',original_url:candidate!.url,title:'fixture retry',material_level:'api_summary',body:'测试：已修正为九个月。',provenance:'test_fixture'}});

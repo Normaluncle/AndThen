@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, it } from 'vitest';
 import { createHarness, seedUser, auth, type Harness } from './helpers.js';
-import { authorMemories } from '../../src/db/schema.js';
+import { authorMemories, jobs } from '../../src/db/schema.js';
+import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 
 let h: Harness;
@@ -20,4 +21,31 @@ it('memory consent is separate and cannot be supplied for another account', asyn
   expect(after!.generation).not.toBe(before!.generation);
   expect(after!.records).toEqual([]);
   expect(after!.enabled).toBe(false);
+});
+
+it('deduplicates refresh per generation and exposes failed refresh retries as pending', async () => {
+  const a = await seedUser(h, 'author');
+  const headers = auth(a.token);
+  const refresh = () => h.app.inject({ method: 'POST', url: '/api/me/memory/refresh', headers });
+  expect((await refresh()).statusCode).toBe(422);
+  await h.app.inject({ method: 'PUT', url: '/api/me/memory/consent', headers, payload: { enabled: true } });
+  const ownRefreshes = async () => (await h.ctx.db.select().from(jobs)).filter(j => j.kind === 'memory.refresh' && j.payload.user_id === a.user.id);
+  await Promise.all([refresh(), refresh()]);
+  expect(await ownRefreshes()).toHaveLength(1);
+  const [first] = await ownRefreshes();
+  await h.ctx.db.update(jobs).set({ status: 'failed' }).where(eq(jobs.id, first!.id));
+  await h.ctx.db.update(authorMemories).set({ status: 'error', errorCode: 'memory_refresh_failed' }).where(eq(authorMemories.userId, a.user.id));
+  expect((await refresh()).statusCode).toBe(200);
+  const state = await h.app.inject({ method: 'GET', url: '/api/me/memory', headers });
+  expect(state.json().data).toMatchObject({ status: 'pending', error_code: null });
+  expect(await ownRefreshes()).toHaveLength(2);
+  const generation = randomUUID();
+  await h.ctx.db.update(authorMemories).set({ generation }).where(eq(authorMemories.userId, a.user.id));
+  await refresh();
+  const queued = await ownRefreshes();
+  expect(queued).toHaveLength(3);
+  expect(queued.some(j => j.payload.generation === generation)).toBe(true);
+  await h.ctx.db.update(authorMemories).set({ status: 'ready' }).where(eq(authorMemories.userId, a.user.id));
+  await refresh();
+  expect((await h.app.inject({ method: 'GET', url: '/api/me/memory', headers })).json().data.status).toBe('ready');
 });

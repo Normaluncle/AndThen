@@ -108,11 +108,18 @@ export class JobQueue {
         FROM jobs
         WHERE status = 'queued'
           AND run_at <= now()
-          AND (kind NOT LIKE 'ai.%' OR (
+          AND ((kind NOT LIKE 'ai.%' AND kind NOT IN ('memory.refresh','memory.prepare')) OR (
             SELECT count(*) FROM jobs running_jobs
-            WHERE running_jobs.kind LIKE 'ai.%' AND running_jobs.status='running'
+            WHERE (running_jobs.kind LIKE 'ai.%' OR running_jobs.kind IN ('memory.refresh','memory.prepare')) AND running_jobs.status='running'
               AND running_jobs.lease_expires_at > now()
           ) < ${this.maxConcurrentAiJobs})
+          AND (kind NOT LIKE 'memory.%' OR NOT EXISTS (
+            SELECT 1 FROM jobs memory_jobs
+            WHERE memory_jobs.kind LIKE 'memory.%' AND memory_jobs.status='running'
+              AND memory_jobs.lease_expires_at > now()
+              AND coalesce(memory_jobs.payload->>'user_id',memory_jobs.payload->>'source_id')
+                = coalesce(jobs.payload->>'user_id',jobs.payload->>'source_id')
+          ))
           ${kindFilter}
         ORDER BY priority DESC, run_at ASC
         FOR UPDATE SKIP LOCKED

@@ -135,3 +135,13 @@ docker compose --env-file .env.local up -d --build
 - 浏览器实测第 4 版展开原帖与采访正文；将一项标私有、移除一项后，确认按钮禁用直到保存。第 5 版有五项，私有项及其 author_edit 依据标记保留；未确认、未发布该新版本。
 - `draft-evidence.test.ts` 覆盖匿名、陌生作者、管理员拒绝，引用范围过滤、缺失依据和已发布稿私有保留期过期。纳入私有路由扫描。首次测试发现 fixture 草稿未关联 snapshot_id，补齐正确测试关系后单项通过；未为测试放宽接口。
 - 页面 API/流程测试 7 项通过、Vite build 和 typecheck 通过；最终 pnpm test 为 204 通过、1 项真实模型 opt-in 跳过。采访私有回答的实际页面提交仍需后续独立采访场景验证。
+
+## 2026-09-13 记忆串行与刷新恢复检查点
+
+- 队列按作者/来源阻止多个有效记忆租约同时运行，覆盖不同版本、多个 worker 与清理任务；其他作者仍能执行。记忆建档与采访共用模型并发限制，不改变每日额度语义。
+- 主动刷新与同意启用使用相同的版本去重键。失败状态重试原子地回到 pending，保留 ready 状态下的可用索引。
+- 新增 memory-serialization.test.ts 两项真实数据库并发测试；memory.test.ts 新增恢复、重复点击、新旧版本与未启用拒绝测试。准备材料故障测试调整为等待旧租约释放。
+- 首次定向测试发现测试误将 consent_required 预期为 403，按已有契约修正为 422；未改变错误契约。
+- 验证：pnpm typecheck 通过；pnpm test 207 通过、1 项真实模型 opt-in 跳过，48.69 秒，包含数据库和 OpenAPI 回归。本轮未重复真实模型调用，也尚未重启演示进程加载这次队列修改。
+- 本轮读取/沿用技能：backend-contracts、database-migrations、ai-evaluation、docker-ops、git-delivery。无迁移修改，无凭证入库。
+- 整体 Goal 仍 active；OAuth、安全回调、Docker 镜像运行及剩余页面和验收继续实施，不以本检查点表示整体完成。

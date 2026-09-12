@@ -38,9 +38,13 @@ export async function authorizedMaterials(ctx: ModuleContext, userId: string, db
 }
 
 export async function requestRefresh(ctx: ModuleContext, userId: string) {
-  const [profile] = await ctx.db.select().from(authorMemories).where(eq(authorMemories.userId, userId));
-  if (!profile?.enabled) throw AppError.consentRequired('Enable author memory first');
-  return ctx.jobs.enqueue({ kind: 'memory.refresh', payload: { user_id: userId, generation: profile.generation }, dedupeKey: `memory:${userId}:refresh` });
+  return ctx.db.transaction(async tx=>{
+    const [profile] = await tx.select().from(authorMemories).where(eq(authorMemories.userId, userId)).for('update');
+    if (!profile?.enabled) throw AppError.consentRequired('Enable author memory first');
+    const result=await ctx.jobs.enqueue({ kind: 'memory.refresh', payload: { user_id: userId, generation: profile.generation }, dedupeKey: `memory:${userId}:${profile.generation}:refresh` },tx);
+    if(profile.status==='error')await tx.update(authorMemories).set({status:'pending',errorCode:null,updatedAt:ctx.now()}).where(eq(authorMemories.userId,userId));
+    return result;
+  });
 }
 
 /** Call inside the source/identity mutation transaction; a revoked generation can never win CAS. */

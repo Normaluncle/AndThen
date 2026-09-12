@@ -58,7 +58,7 @@ export const memoryModule: ModuleDefinition = {
         const generation=randomUUID();
         await tx.update(authorMemories).set({enabled:request.body.enabled,generation,records:[],inputHash:null,errorCode:null,status:request.body.enabled?'pending':'disabled',updatedAt:ctx.now()}).where(eq(authorMemories.userId,userId));
         await ctx.jobs.enqueue({kind:'memory.delete',payload:{user_id:userId,generation:old!.generation},dedupeKey:`memory:delete:${old!.generation}`},tx);
-        if(request.body.enabled)await ctx.jobs.enqueue({kind:'memory.refresh',payload:{user_id:userId,generation},dedupeKey:`memory:${userId}:refresh`},tx);
+        if(request.body.enabled)await ctx.jobs.enqueue({kind:'memory.refresh',payload:{user_id:userId,generation},dedupeKey:`memory:${userId}:${generation}:refresh`},tx);
       });
       return success(request.id, { enabled: request.body.enabled });
     });
