@@ -235,6 +235,17 @@ export async function importSource(
       return { source, snapshot: existingSnapshot[0], deduped: true };
     }
 
+    // Only the internal official adapter may refresh official material on
+    // behalf of a reader. HTTP import schemas cannot supply official_api.
+    const trustedOfficial = input.provenance === 'official_api' && source.provenance === 'official_api';
+    if (!trustedOfficial) {
+      const access = await resolveSourceAccess(tx, source, auth);
+      const verifiedOwners = await tx.select({ id: authorVerifications.id }).from(authorVerifications)
+        .where(and(eq(authorVerifications.sourceId, source.id), eq(authorVerifications.status, 'verified'))).limit(1);
+      if (!access.isAdmin && !access.isVerifiedAuthor && !access.isAssignedResearcher
+        && !(access.isImporter && verifiedOwners.length === 0)) throw AppError.forbidden('Only the responsible owner may replace source material');
+    }
+
     const maxRow = await tx
       .select({ max: sql<number>`coalesce(max(${sourceSnapshots.version}), 0)::int` })
       .from(sourceSnapshots)

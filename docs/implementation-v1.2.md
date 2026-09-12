@@ -171,3 +171,11 @@ docker compose --env-file .env.local up -d --build
 - memU 容器内真实百炼向量写入/检索/删除测试通过（虚构数据，1303 ms）。Docker 双账号完整业务与真实采访尚待执行。
 - pnpm typecheck 通过；pnpm test 209 通过、1 项真实模型 opt-in 跳过（56.06 秒）；前端镜像内 frozen install + build 通过。Docker 运行命令、镜像哈希和限制见 docker-acceptance.md。
 - 技能：docker-ops、git-delivery；沿用 backend-contracts 与 web-development 构建指南。无生产数据迁移改写、无凭证提交。Goal 继续 active。
+
+## 2026-09-13 主动资料提交与版本写入权限
+
+- 新增 SourceMaterials.jsx 和提交资料导航：原文片段/作者回忆、真实性选择、已有版本读取、三项用途同意/撤销。服务端继续控制角色与归属，提交不会自动核验或发布。
+- 开发前检查发现相同链接不同正文可被无关账号追加版本。已在来源事务中补写入权限：管理员/核验作者/负责研究员，或无核验归属时的原导入者。官方受控同步保留，HTTP 不接受 official_api 标记。
+- 新增真实数据库回归验证无关账号 403、未核验时导入者可更新、核验后原导入者 403、核验作者可更新，拒绝内容不落库。官方候选准备回归仍通过。
+- pnpm typecheck 通过；pnpm test 210 通过、1 项真实模型 opt-in 跳过（50.88 秒）；pnpm --dir demo build 通过。新提交页面尚待浏览器验收，Docker 镜像尚未包含本检查点。
+- 技能沿用：backend-contracts、database-migrations、git-delivery 和 web-development React 指南。PRD/契约同步，无迁移修改。整体 Goal active。

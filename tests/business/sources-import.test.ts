@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { sourceSnapshots, sources } from '../../src/db/schema.js';
+import { authorVerifications, sourceSnapshots, sources } from '../../src/db/schema.js';
 import { truncateAll } from '../helpers/testdb.js';
 import { auth, createHarness, importSource, seedUser, type Harness } from './helpers.js';
 
@@ -71,6 +71,24 @@ describe('sources: import, dedupe, material rules and private read', () => {
       .where(eq(sourceSnapshots.sourceId, first.sourceId));
     expect(snapshots).toHaveLength(2);
     expect(snapshots.map((s) => s.version).sort()).toEqual([1, 2]);
+  });
+
+  it('rejects unrelated replacement and removes importer replacement rights after verified ownership', async () => {
+    const reader = await seedUser(h, 'reader');
+    const stranger = await seedUser(h, 'author');
+    const owner = await seedUser(h, 'author');
+    const payload = { source_type: 'third_party_link', original_url: 'https://example.test/ownership', material_level: 'api_summary', body: 'Original fixture summary' };
+    const initial = await importSource(h, reader.token, payload);
+    const replace = (token: string, body: string) => h.app.inject({ method: 'POST', url: '/api/sources', headers: auth(token), payload: { ...payload, body } });
+    expect((await replace(stranger.token, 'Unrelated replacement')).statusCode).toBe(403);
+    expect((await replace(reader.token, 'Importer revision')).statusCode).toBe(200);
+    await h.ctx.db.insert(authorVerifications).values({ sourceId: initial.sourceId, userId: owner.user.id, method: 'manual', status: 'verified', evidenceRef: 'fixture-ownership' });
+    expect((await replace(reader.token, 'Old importer overwrite')).statusCode).toBe(403);
+    expect((await replace(owner.token, 'Verified author revision')).statusCode).toBe(200);
+    const snapshots = await h.ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId, initial.sourceId));
+    expect(snapshots).toHaveLength(3);
+    expect(snapshots.map(s => s.body)).not.toContain('Unrelated replacement');
+    expect(snapshots.map(s => s.body)).not.toContain('Old importer overwrite');
   });
 
   it('rejects an exact_excerpt without the excerpt text', async () => {
