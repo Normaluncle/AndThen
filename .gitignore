@@ -1,0 +1,49 @@
+# --- Orchestration / agent scratch (never commit) ---
+.orchestrator/
+.worktrees/
+.codebuddy/
+
+# --- Probe artifacts (local evidence, not product source) ---
+workbuddy-probe-results/
+
+# --- Node / build output ---
+node_modules/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+.vitest/
+.eslintcache
+
+# --- Environment & secrets ---
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.crt
+
+# --- Local data, volumes, private evidence ---
+data/
+data-*/
+pgdata/
+private/
+evidence/
+*.sqlite
+*.sqlite3
+*.db
+
+# --- Logs & runtime ---
+logs/
+*.log
+npm-debug.log*
+pnpm-debug.log*
+tmp/
+.tmp/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
