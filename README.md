@@ -17,9 +17,7 @@ OpenAPI。不依赖任何第三方平台 API，不做前端。
 | [docs/checkpoints/foundation.md](docs/checkpoints/foundation.md) | 基础设施检查点：证据、导出签名、阻塞项 |
 | [skills/](skills/) | 五个项目技能：backend-contracts / database-migrations / ai-evaluation / docker-ops / git-delivery |
 
-当前状态：基础设施（identity + 数据库 + 任务队列）已完成并通过测试；
-业务模块 `sources` / `cases` / `interviews` / `followups` / `research` 为预留
-注册位，尚未实现。
+当前状态：业务模块已实现，包含来源、采访、发布通知、删除和研究导出。完整验收仍在进行；请以 [验收矩阵](docs/acceptance-matrix.md) 和 [最新检查点](docs/checkpoints/codex-takeover.md) 为准。前端接入见 [接入指南](docs/frontend-integration.md)。下方 WorkBuddy 探针属于历史证据，不代表当前配额或运行状态。
 
 ---
 

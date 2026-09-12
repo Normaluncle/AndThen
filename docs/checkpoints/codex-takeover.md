@@ -154,3 +154,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Added empty-public-list assertions for an empty database and for unlicensed-only material, including no private excerpt leakage and denied direct read.
 - Typecheck passed; affected suites passed 2 files / 14 tests. Updated T11/T19 evidence. These tests prove deterministic backend boundaries using simulated output, not real-model quality.
 - Goal remains active. Outstanding scope and final-runtime checks remain tracked in the acceptance matrix; no new Docker deployment or external model call occurred.
+
+## Delivery documentation continuation — 2026-09-12
+
+- Replaced stale foundation-only BACKEND.md with current Windows/Docker/local-development instructions, correct DATABASE_URL migration setup, separate runtime/dev-agent model boundaries and explicit outstanding scope.
+- Updated README current-status paragraph while preserving the original WorkBuddy probe history. Added docs/frontend-integration.md covering sessions, asynchronous saved-input semantics, version conflicts, finish/draft/publication, privacy-safe reads, deletion limitations and same-origin browser proxy requirements.
+- Added scripts/export-openapi.ts and actually ran it: current source registry exported 48 paths to docs/openapi.json. The first run exposed missing DATABASE_URL; the route-only exporter now provides a local fallback connection configuration and does not execute database work or start workers. This is source-schema evidence, not evidence of a new deployed image.
+- OpenAPI regression suites passed: 2 files / 4 tests. Final Docker rebuild and live acceptance remain required, as do the unimplemented scopes in the acceptance matrix.
