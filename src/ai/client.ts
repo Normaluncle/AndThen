@@ -70,13 +70,17 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
     }
 
     const started = Date.now();
+    if (Buffer.byteLength(JSON.stringify(request.messages), 'utf8') > env.LLM_MAX_INPUT_BYTES) {
+      throw AppError.sourceIncomplete('Model input exceeds configured byte budget');
+    }
+    if (request.model && request.model !== model) throw AppError.validation('Per-request model switching is disabled');
 
     const body: Record<string, unknown> = {
       model: request.model ?? model,
       messages: request.messages,
     };
     if (request.temperature !== undefined) body.temperature = request.temperature;
-    if (request.maxTokens !== undefined) body.max_tokens = request.maxTokens;
+    body.max_tokens = Math.min(request.maxTokens ?? env.LLM_MAX_OUTPUT_TOKENS, env.LLM_MAX_OUTPUT_TOKENS);
     if (request.json) body.response_format = { type: 'json_object' };
 
     let lastError: unknown;
@@ -112,7 +116,23 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
           throw AppError.serviceUnavailable(`LLM request rejected (${response.status})`);
         }
 
-        const payload = (await response.json()) as OpenAiChatResponse;
+        const reader = response.body?.getReader();
+        if (!reader) throw AppError.serviceUnavailable('LLM returned no response body');
+        const chunks: Uint8Array[] = [];
+        let size = 0;
+        try {
+          for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            size += value.byteLength;
+            if (size > env.LLM_MAX_RESPONSE_BYTES) {
+              await reader.cancel();
+              throw AppError.sourceIncomplete('Model response exceeds configured byte budget');
+            }
+            chunks.push(value);
+          }
+        } finally { reader.releaseLock(); }
+        const payload = JSON.parse(Buffer.concat(chunks).toString('utf8')) as OpenAiChatResponse;
         const choice = payload.choices?.[0];
         if (typeof choice?.message?.content !== 'string' || !choice.message.content.trim()) {
           throw AppError.serviceUnavailable('LLM returned no usable content');
@@ -132,6 +152,7 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
         lastError = timeoutSignal.aborted
           ? new AppError({ code: 'model_timeout', message: 'LLM request timed out' })
           : err;
+        if (err instanceof AppError && err.code === 'source_incomplete') break;
         if (attempt === maxRetries) break;
         await new Promise((r) => setTimeout(r, 250 * (attempt + 1)));
       }

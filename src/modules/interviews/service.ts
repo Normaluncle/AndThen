@@ -46,12 +46,21 @@ export async function getInterview(db: Executor, id: string, auth: AuthContext) 
 
 export async function enqueueNext(ctx: ModuleContext, db: Executor, session: typeof interviewSessions.$inferSelect, sourceId: string) {
   if (session.mode !== 'ai' || session.questionsAsked >= Math.min(session.budgetMainQuestions, 5)) return null;
+  try {
   const { job } = await ctx.jobs.enqueue({
     kind: AI_JOB_KINDS.interviewNext, maxAttempts: 1,
     dedupeKey: `${interviewGenerateDedupeKey(session.id)}:${session.revision}`,
     payload: { source_id: sourceId, case_id: session.caseId, session_id: session.id, owner_user_id: session.ownerUserId, revision: session.revision },
   }, db);
   return job.id;
+  } catch (err) {
+    if (!(err instanceof AppError) || err.code !== 'quota_exhausted') throw err;
+    // The answer and revision stay committed even when model admission is exhausted.
+    await db.update(interviewSessions).set({ mode: 'manual', stopReason: 'quota_exhausted', updatedAt: ctx.now() }).where(eq(interviewSessions.id, session.id));
+    session.mode = 'manual';
+    session.stopReason = 'quota_exhausted';
+    return null;
+  }
 }
 
 export async function startInterview(ctx: ModuleContext, auth: AuthContext, caseId: string, mode: 'ai' | 'manual') {

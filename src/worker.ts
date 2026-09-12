@@ -29,7 +29,7 @@ async function main(): Promise<void> {
     db,
     env,
     logger,
-    jobs: new JobQueue(db),
+    jobs: new JobQueue(db, env.LLM_MAX_CONCURRENT_JOBS, env.LLM_DAILY_JOB_LIMIT),
     now: () => new Date(),
   };
 

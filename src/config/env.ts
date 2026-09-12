@@ -29,6 +29,11 @@ const envSchema = z.object({
   LLM_MODEL: z.string().optional(),
   LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
   LLM_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(1),
+  LLM_MAX_INPUT_BYTES: z.coerce.number().int().min(1024).max(1000000).default(131072),
+  LLM_MAX_RESPONSE_BYTES: z.coerce.number().int().min(1024).max(1000000).default(131072),
+  LLM_MAX_OUTPUT_TOKENS: z.coerce.number().int().min(1).max(16384).default(4096),
+  LLM_MAX_CONCURRENT_JOBS: z.coerce.number().int().min(1).max(16).default(2),
+  LLM_DAILY_JOB_LIMIT: z.coerce.number().int().min(0).max(100000).default(1000),
 
   WORKER_ID: z.string().optional(),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(64).default(4),

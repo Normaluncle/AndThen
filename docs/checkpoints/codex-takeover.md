@@ -18,7 +18,7 @@ User explicitly requested a goal and authorized Codex to take over after WorkBud
 
 ## Still required before goal completion
 
-1. Shared usage/input/output/concurrency quotas and case review transition. AI-A/B/C/D now have handlers and tests; real provider evaluation remains unverified.
+1. Case review transition and remaining AI behavior acceptance. Shared byte/output-token/concurrency/daily-admission budgets now implemented; real provider evaluation remains unverified.
 2. PRD core route compatibility, stricter schema responses and frontend docs. Research observation/export routes now implemented (see continuation evidence below); fixed-window acceptance timing still needs an authoritative response timestamp before that rate can be claimed.
 3. Full acceptance coverage: five-question cap, skip/repeat, pause/restart, faults and concurrent revocation/publication; source public consent version renewal and expiry; performance.
 4. Retention automation, user/case/followup deletion scope as appropriate, backup rotation/restore. Source deletion active-store test passes but external model deletion API is not available.
@@ -62,3 +62,11 @@ Previous turn was progress (`e80dbf6`). Added `/interviews/:id/draft-ai` and `ai
 New tests use a simulated HTTP server and cover no-consent zero calls, unconfirmed draft creation, stale versions, invented numbers/dates, private-to-public leakage and delayed response after author edit, including cancelled audit status. Read/apply existing AI-evaluation, backend-contracts and git-delivery project skills. `docs/ai-api.md` updated. Process-crash audit reconciliation (as opposed to caught handler errors) remains to implement with operational cleanup. Goal stays active pending quotas/review/retention/Docker/delivery acceptance.
 
 Verification: bundled `pnpm.cmd typecheck` passed and `pnpm.cmd test` passed 25 files / 133 tests. Existing Docker containers were not rebuilt in this milestone.
+
+## Continuation evidence — shared AI budgets
+
+Previous turn was concrete progress (`662b337`). Added validated env settings for UTF-8 input bytes, bounded response stream bytes, output tokens, shared active AI leases and UTC daily AI job admissions. Every stage uses the bounded HTTP client; it also rejects per-request model switching. PostgreSQL advisory locks serialize claim/admission checks across queue instances; ordinary work remains available at the AI cap. Deduplicated active requests remain replayable at the daily limit. Interview answer transactions catch admission quota errors and commit the answer with explicit manual fallback.
+
+App/worker edits only pass infrastructure budget settings to JobQueue, not business route wiring. Compose forwards the same settings to both services. Read database-migrations and docker-ops project skills for SQL/config review alongside the existing backend/AI/git skills; no migration or volume operation was needed. Tests prove cross-instance admission caps, replay, ordinary-job availability, oversized stream cancellation, UTF-8 byte limits, capped output tokens and preserved answers on quota exhaustion.
+
+Verification: `pnpm.cmd typecheck` passed, `pnpm.cmd test` passed 26 files / 138 tests, and `docker compose config --quiet` passed. This does not prove the running old containers use these settings; rebuild and final runtime acceptance remain pending. Daily admissions are not monetary/token billing; cancelled remote requests may outlive a local lease, as documented. Goal remains active for case review, retention, deletion scope, full acceptance, Docker persistence/restore/performance and final docs.

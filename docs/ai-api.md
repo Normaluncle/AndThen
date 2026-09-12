@@ -28,7 +28,15 @@ The worker sends bounded evidence, validates the candidate schema and evidence/v
 
 A successful run creates a new `draft` version with `aiAssisted: true`, no confirmations, a server-computed hash and pinned snapshot/interview references. The previous published version stays published. An invalid or failed model result creates no draft and returns `fallback_mode: manual_draft`. Audit rows close as cancelled when context changes; output is not retained on cancellation.
 
-Shared global usage/concurrency quotas are still outstanding. AI-A/B/C/D have implemented handlers, but real-provider evaluation remains unverified without credentials; HTTP-provider tests are explicitly synthetic.
+## Shared runtime budgets
+
+All four stages use the same bounded HTTP adapter. `LLM_MAX_INPUT_BYTES` caps serialized UTF-8 messages before network traffic, `LLM_MAX_RESPONSE_BYTES` cancels oversized response streams, and `LLM_MAX_OUTPUT_TOKENS` caps the requested output. Defaults are 131072 bytes for input/response and 4096 output tokens. Input bytes are an engineering bound, not an exact tokenizer count. Per-request model switching is disabled. Unknown provider usage/cost stays unknown.
+
+`LLM_MAX_CONCURRENT_JOBS` (default 2) caps running unexpired AI job leases across the shared PostgreSQL database. Claim transactions serialize a short admission check, with no model call inside the transaction. Non-AI jobs remain eligible when AI capacity is full. All API/worker replicas must use identical limits. This caps admitted active leases; it cannot prove a remote provider has stopped an already-cancelled HTTP request after a worker crash or network failure.
+
+`LLM_DAILY_JOB_LIMIT` (default 1000, zero disables new admissions) caps newly admitted AI jobs per UTC day using transactional PostgreSQL locking. Failed/cancelled jobs count; active idempotent replays do not consume another admission. Each model completion retries at most once. This is a task/request budget, not a monetary invoice or token-spend total. Ordinary jobs are unaffected. If the limit is reached while saving an interview answer, the answer commits and the session explicitly switches to manual mode with `quota_exhausted`.
+
+Compose passes all budget settings through the shared API/worker environment. Real-provider evaluation remains unverified without credentials; HTTP-provider tests are explicitly synthetic.
 
 ## Verification
 
@@ -37,3 +45,5 @@ Shared global usage/concurrency quotas are still outstanding. AI-A/B/C/D have im
 `tests/business/validation.test.ts`: rule-only/no-permission path, pending-job gate, model severity overriding an inconsistent flag, stale hash rejection, and new-version confirmation isolation.
 
 `tests/business/drafting.test.ts`: no-permission zero calls, stale base version rejection, unconfirmed AI draft creation, old-publication preservation, invented-fact/private-leak rejection, and late result discard/audit cancellation after an author edit.
+
+`tests/integration/ai-limits.test.ts`: competing queue instances obey shared concurrency and daily admission caps, allow idempotent replay at the limit, and continue ordinary work. Adapter tests cover UTF-8 input bounds, output token cap and cancellation of oversized streams; interview tests verify answers survive budget exhaustion.

@@ -23,7 +23,7 @@ const LEASE_HELD = sql`lease_expires_at IS NOT NULL AND lease_expires_at > now()
  *    interview generation cannot be enqueued twice concurrently.
  */
 export class JobQueue {
-  constructor(private readonly db: Database) {}
+  constructor(private readonly db: Database, private readonly maxConcurrentAiJobs = 2, private readonly dailyAiJobLimit = 1000) {}
 
   /**
    * Enqueue a job.
@@ -33,6 +33,22 @@ export class JobQueue {
    * it the insert uses the pool.
    */
   async enqueue(options: EnqueueOptions, executor?: Executor): Promise<EnqueueResult> {
+    const db = executor ?? this.db;
+    if (!options.kind.startsWith('ai.')) return this.insert(options, db);
+    return db.transaction(async tx => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('andthen-ai-daily-admission'))`);
+      if (options.dedupeKey) {
+        const [existing] = await tx.select().from(jobs).where(and(eq(jobs.dedupeKey, options.dedupeKey), inArray(jobs.status, [...ACTIVE_STATUSES]))).limit(1);
+        if (existing) return { job: existing, deduped: true };
+      }
+      const counts = await tx.execute(sql`select count(*)::int as total from jobs where kind like 'ai.%' and created_at >= (date_trunc('day', now() at time zone 'UTC') at time zone 'UTC')`);
+      const total = Number((counts.rows[0] as { total: number }).total);
+      if (total >= this.dailyAiJobLimit) throw new AppError({ code: 'quota_exhausted', message: 'Daily AI job admission budget exhausted' });
+      return this.insert(options, tx);
+    });
+  }
+
+  private async insert(options: EnqueueOptions, executor?: Executor): Promise<EnqueueResult> {
     const db = executor ?? this.db;
 
     const inserted = await db
@@ -82,12 +98,21 @@ export class JobQueue {
     const kindFilter =
       kinds.length > 0 ? sql`AND kind = ANY(${sql.param(kinds)}::text[])` : sql``;
 
-    const result = await this.db.execute(sql`
+    const result = await this.db.transaction(async tx => {
+      // Separate lock statement ensures the following READ COMMITTED snapshot
+      // sees the previous claimant's committed lease across processes.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('andthen-ai-claim'))`);
+      return tx.execute(sql`
       WITH candidate AS (
         SELECT id
         FROM jobs
         WHERE status = 'queued'
           AND run_at <= now()
+          AND (kind NOT LIKE 'ai.%' OR (
+            SELECT count(*) FROM jobs running_jobs
+            WHERE running_jobs.kind LIKE 'ai.%' AND running_jobs.status='running'
+              AND running_jobs.lease_expires_at > now()
+          ) < ${this.maxConcurrentAiJobs})
           ${kindFilter}
         ORDER BY priority DESC, run_at ASC
         FOR UPDATE SKIP LOCKED
@@ -105,6 +130,7 @@ export class JobQueue {
       WHERE jobs.id = candidate.id
       RETURNING jobs.id
     `);
+    });
 
     const rows = result.rows as Array<{ id: string }>;
     const claimed = rows[0];

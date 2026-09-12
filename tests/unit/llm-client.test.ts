@@ -7,6 +7,27 @@ const env = loadEnv({ DATABASE_URL: 'postgres://unused/unused', LOG_LEVEL: 'sile
 const logger = createLogger(env);
 const request = { messages: [{ role: 'user' as const, content: 'test_fixture' }] };
 describe('independent LLM adapter failures', () => {
+  it('rejects oversized UTF-8 input and model switching before any request', async () => {
+    const send = vi.fn();
+    const client = createLlmClient({ ...env, LLM_MAX_INPUT_BYTES: 1024 }, logger, send);
+    await expect(client.complete({ messages: [{ role: 'user', content: '汉'.repeat(500) }] })).rejects.toMatchObject({ code: 'source_incomplete' });
+    await expect(client.complete({ ...request, model: 'different-model' })).rejects.toMatchObject({ code: 'validation_error' });
+    expect(send).not.toHaveBeenCalled();
+  });
+  it('caps output tokens and stops an oversized streamed response without retry', async () => {
+    let cancelled = false;
+    const send = vi.fn(async (_url, init) => {
+      expect(JSON.parse(init!.body as string).max_tokens).toBe(100);
+      return new Response(new ReadableStream({
+        pull(controller) { controller.enqueue(new Uint8Array(2048)); },
+        cancel() { cancelled = true; },
+      }));
+    });
+    const client = createLlmClient({ ...env, LLM_MAX_RESPONSE_BYTES: 1024, LLM_MAX_OUTPUT_TOKENS: 100 }, logger, send);
+    await expect(client.complete({ ...request, maxTokens: 5000 })).rejects.toMatchObject({ code: 'source_incomplete' });
+    expect(cancelled).toBe(true);
+    expect(send).toHaveBeenCalledTimes(1);
+  });
   it('does not call a provider without model configuration', async () => {
     const send = vi.fn();
     const client = createLlmClient({ ...env, LLM_MODEL: undefined }, logger, send);

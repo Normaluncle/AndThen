@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm';
 import { auth, createHarness, seedPublishedStory, seedUser, type Harness } from './helpers.js';
 import { consents, followupCases, interviewMessages, interviewSessions } from '../../src/db/schema.js';
 import { runJob } from '../helpers/run-job.js';
+import { JobQueue } from '../../src/jobs/queue.js';
 
 describe('AI-B with a simulated HTTP provider (not a real model evaluation)', () => {
   let h: Harness;
@@ -71,5 +72,20 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
     expect(await h.ctx.db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, fixture.session.id))).toHaveLength(0);
     const [session] = await h.ctx.db.select().from(interviewSessions).where(eq(interviewSessions.id, fixture.session.id));
     expect(session?.mode).toBe('manual');
+  });
+  it('preserves the submitted answer when daily admission is exhausted', async () => {
+    const fixture = await start();
+    await runJob(h.moduleCtx, 'ai.interview.next');
+    const base = `/api/interviews/${fixture.session.id}`;
+    const state = (await h.app.inject({ method: 'GET', url: base, headers: auth(fixture.author.token) })).json().data;
+    const originalQueue = h.moduleCtx.jobs;
+    h.moduleCtx.jobs = new JobQueue(h.ctx.db, 2, 0);
+    try {
+      const saved = await h.app.inject({ method: 'POST', url: `${base}/messages`, headers: auth(fixture.author.token), payload: { message: '额度耗尽也不能丢失这条回答', client_message_id: 'budget-answer', expected_version: state.session.revision } });
+      expect(saved.statusCode, saved.body).toBe(200);
+      expect(saved.json().data.session.mode).toBe('manual');
+      expect(saved.json().data.session.stopReason).toBe('quota_exhausted');
+      expect(saved.json().data.message.authorMessage).toBe('额度耗尽也不能丢失这条回答');
+    } finally { h.moduleCtx.jobs = originalQueue; }
   });
 });
