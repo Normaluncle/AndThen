@@ -185,3 +185,10 @@ Final script refinement verification: a second full `demo.mjs` create → verify
 - Current image manifest list b9552270fcbee1bd4ac425fbcf9767cbf0c8379481d7c19cbfccbea72c1e4fed; all services healthy. Static/live OpenAPI matched at 50 paths before CLI-only rebuild. A separate real-HTTP account deletion verified old session 401 and receipt 200.
 - WorkBuddy scheduler 38/38 tests passed with simulated ACP. No real provider quota or paid model request was used. Bootstrap credential file from earlier denied removal remains untouched; newly tested credentials were consumed without deletion workarounds.
 - Overall goal remains active pending the remaining acceptance-matrix items; Docker deployment is now current, not the old foundation image.
+
+## Actual worker process crash continuation — 2026-09-12
+
+- Added worker-crash.test.ts using the real src/worker.ts entrypoint in independent Node processes and an isolated PostgreSQL database. The first process reached a held local HTTP model request, was terminated with SIGKILL and observed exited; only then was its replacement started.
+- Replacement reclaimed the same durable job after the real five-second lease expired, incremented fencing token/attempt count and wrote exactly one next question. The pre-crash saved author answer remained exactly once. Both test processes were stopped and the isolated database cleaned up.
+- Test passed (one process-level integration test, about 6.6 seconds) and typecheck passed. This is a real process restart with a simulated provider; no real model or WorkBuddy call was made. Existing independent fence-race tests cover rejection of surviving stale owners.
+- Updated T10 evidence. Runtime code/image is unchanged at 5f43604; this turn adds executable acceptance evidence only. Remaining classification/structured-output and final scope audit still need closure before goal completion.
