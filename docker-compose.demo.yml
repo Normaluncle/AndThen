@@ -1,0 +1,23 @@
+# Isolated v1.2 acceptance stack. Always use with -p andthen-v12-demo.
+# Existing andthen services and andthen-pgdata are not reused.
+services:
+  demo:
+    image: andthen-demo:v12
+    ports: !override ["127.0.0.1:5174:80"]
+  memory:
+    image: andthen-memory:v12
+  migrate:
+    image: andthen-backend:v12
+  api:
+    image: andthen-backend:v12
+    ports: !override ["127.0.0.1:8082:8080"]
+    environment:
+      PUBLIC_BASE_URL: http://127.0.0.1:5174
+  worker:
+    image: andthen-backend:v12
+    environment:
+      PUBLIC_BASE_URL: http://127.0.0.1:5174
+      WORKER_ID: v12-compose-worker
+volumes:
+  andthen-pgdata:
+    name: andthen-v12-demo-pgdata

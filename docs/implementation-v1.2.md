@@ -162,3 +162,12 @@ docker compose --env-file .env.local up -d --build
 - pnpm typecheck 通过；pnpm test 209 通过、1 项真实模型 opt-in 跳过，49.17 秒；node --test demo/src/workflow.test.js demo/src/api.test.js 八项通过；pnpm --dir demo build 通过。
 - 本轮未调用真实模型。新接口尚待重启隔离 API 后做按钮浏览器验收，不能将模拟故障回归算成真实模型或页面验收。
 - 技能：backend-contracts、ai-evaluation、git-delivery；沿用 web-development React 指南。变更为采访路由/服务、前端按钮/状态、回归及 PRD/接口契约，无数据库迁移。整体 Goal 继续 active。
+
+## 2026-09-13 完整 Docker 启动检查点
+
+- 已解除此前镜像下载障碍，实际构建 backend/demo/memory 三个镜像。修复前端缺少 pnpm 固定版本与 esbuild 安装许可的问题。
+- 新增 docker-compose.demo.yml 隔离覆盖：5174 前端、8082 API、专用数据库卷、独立后端镜像，原服务和卷保持健康。
+- Compose 实际配置检查证明 PostgreSQL 不发布端口；迁移成功，四个后端服务健康。页面浏览器空态、同源 API 与 OpenAPI 重试路由验证通过。
+- memU 容器内真实百炼向量写入/检索/删除测试通过（虚构数据，1303 ms）。Docker 双账号完整业务与真实采访尚待执行。
+- pnpm typecheck 通过；pnpm test 209 通过、1 项真实模型 opt-in 跳过（56.06 秒）；前端镜像内 frozen install + build 通过。Docker 运行命令、镜像哈希和限制见 docker-acceptance.md。
+- 技能：docker-ops、git-delivery；沿用 backend-contracts 与 web-development 构建指南。无生产数据迁移改写、无凭证提交。Goal 继续 active。

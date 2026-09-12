@@ -112,3 +112,25 @@ scheduler node:test 38 passed. The new tests cover actual worker process death,
 structured section/hash compatibility, knowledge-only invite override,
 operator withdrawal and private-route isolation. Runtime provider quality and
 full-1M recall are not inferred from these engineering results.
+
+## v1.2 isolated full stack — 2026-09-13
+
+The earlier Python/Nginx registry blocker is resolved in this run. All three images built successfully:
+
+- andthen-memory:v12: sha256:615211d81469208b55e1582c3a5c05149f57099ef540502d2f09f76e4a2cc315
+- andthen-demo:v12: sha256:cd0cb3d615fa891da50a8a821785c4252ce83f788604bf64f7ebd210d6ed4ae1
+- andthen-backend:v12: sha256:fc02e5ace552738468c4b2457fab6156298edbc36a3e375a94b515103c977d90
+
+Frontend's initial build failed because unpinned Corepack selected pnpm 12 and esbuild had no build permission. demo/package.json now pins pnpm 11.19.0; demo/pnpm-workspace.yaml permits only esbuild. The subsequent frozen install and Vite build passed inside Docker.
+
+Use Docker Compose supporting !override (tested with 5.5.1). From the repository root:
+
+```powershell
+docker compose --env-file .env.local -p andthen-v12-demo -f docker-compose.yml -f docker-compose.demo.yml build
+docker compose --env-file .env.local -p andthen-v12-demo -f docker-compose.yml -f docker-compose.demo.yml up -d --no-build --wait --wait-timeout 60
+docker compose -p andthen-v12-demo -f docker-compose.yml -f docker-compose.demo.yml ps
+```
+
+This starts an independent empty database, not the existing local-process fixture database. Frontend: http://127.0.0.1:5174; API/docs: http://127.0.0.1:8082/docs. PostgreSQL has no host port. The dedicated volume is andthen-v12-demo-pgdata; memory uses the Compose project-prefixed volume. Existing 8080 andthen services and andthen-pgdata were preserved and remained healthy. Do not add the test DB overlay to this stack. Do not delete volumes to restart it. The Git-ignored .env.local supplies provider keys and the internal memory token; never print resolved Compose environments.
+
+Observed: migrations exited successfully; API, worker, database and memory healthy; frontend running and homepage HTTP 200. Nginx /api/stories returned the standard ok envelope; live OpenAPI includes interview retry. Browser showed the correct empty discovery page. A single explicitly fictional record completed real Bailian embedding, memU write/query and delete inside the memory container in 1303 ms. This is a vector smoke sample, not a complete Qwen interview or capacity measurement. Full two-account business acceptance in this new Docker database remains pending.

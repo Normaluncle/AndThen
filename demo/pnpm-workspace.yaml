@@ -1,2 +1,3 @@
+# Vite's pinned esbuild dependency validates its platform binary at install.
 allowBuilds:
   esbuild: true
