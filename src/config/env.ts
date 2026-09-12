@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { config as loadDotenv } from 'dotenv';
 import { z } from 'zod';
 
-loadDotenv({ quiet: true });
+// Unit/integration suites must never inherit real provider credentials.
+if (process.env.NODE_ENV !== 'test') loadDotenv({ path: ['.env.local', '.env'], quiet: true });
 
 const booleanish = z
   .enum(['true', 'false', '1', '0'])
@@ -27,6 +28,11 @@ const envSchema = z.object({
   LLM_BASE_URL: z.string().optional(),
   LLM_API_KEY: z.string().optional(),
   LLM_MODEL: z.string().optional(),
+  ZHIHU_ACCESS_SECRET: z.string().optional(),
+  ZHIHU_APP_ID: z.string().optional(),
+  ZHIHU_APP_KEY: z.string().optional(),
+  MEMORY_SERVICE_URL: z.string().url().optional(),
+  MEMORY_SERVICE_TOKEN: z.string().optional(),
   LLM_TIMEOUT_MS: z.coerce.number().int().min(1000).max(300_000).default(30_000),
   LLM_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(1),
   LLM_MAX_INPUT_BYTES: z.coerce.number().int().min(1024).max(1000000).default(131072),

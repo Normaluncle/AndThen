@@ -10,6 +10,9 @@ import { casesModule } from './cases/index.js';
 import { interviewsModule } from './interviews/index.js';
 import { followupsModule } from './followups/index.js';
 import { researchModule } from './research/index.js';
+import { memoryModule } from './memory/index.js';
+import { zhihuModule } from './zhihu/index.js';
+import { workbenchModule } from './workbench/index.js';
 
 /**
  * The module registry. Order matters only for route registration; paths are
@@ -23,6 +26,9 @@ export const modules: readonly ModuleDefinition[] = [
   interviewsModule,
   followupsModule,
   researchModule,
+  memoryModule,
+  zhihuModule,
+  workbenchModule,
 ];
 
 export function registerModuleJobHandlers(ctx: ModuleContext, registry: JobHandlerRegistry): void {

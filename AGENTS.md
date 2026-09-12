@@ -15,9 +15,10 @@ say which ones you read in your delivery report.
 
 ## 1. What this repository is
 
-Backend only. "然后呢？ (AndThen)" — a reader asks *"然后呢？"*, an author writes
+Backend and functional demo. "然后呢？ (AndThen)" — a reader asks *"然后呢？"*, an author writes
 *"后来"*. Pure Node 24 + TypeScript + Fastify 5 + Postgres 18 + Drizzle, Vitest,
-OpenAPI. No frontend. No dependency on any external platform API.
+OpenAPI. PRD v1.2 adds reusable React demo pages, official Zhihu adapters,
+Bailian runtime models and an internal Python memU service. Preserve the foundation.
 
 The foundation commit (identity + database + jobs) is done. Business modules have been integrated; historical agent worktrees remain preserved. **Do not rewrite the foundation to suit your
 module.**

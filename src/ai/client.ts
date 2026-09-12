@@ -82,6 +82,7 @@ export function createLlmClient(env: Env, logger: Logger, fetchImpl: typeof fetc
     if (request.temperature !== undefined) body.temperature = request.temperature;
     body.max_tokens = Math.min(request.maxTokens ?? env.LLM_MAX_OUTPUT_TOKENS, env.LLM_MAX_OUTPUT_TOKENS);
     if (request.json) body.response_format = { type: 'json_object' };
+    if ((request.model ?? model)?.startsWith('qwen3.8')) body.enable_thinking = false;
 
     let lastError: unknown;
     const maxRetries = Math.min(env.LLM_MAX_RETRIES, 1);

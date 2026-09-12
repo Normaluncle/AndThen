@@ -9,6 +9,11 @@ x-app-env: &app-env
   LLM_BASE_URL: ${LLM_BASE_URL:-}
   LLM_API_KEY: ${LLM_API_KEY:-}
   LLM_MODEL: ${LLM_MODEL:-}
+  ZHIHU_ACCESS_SECRET: ${ZHIHU_ACCESS_SECRET:-}
+  ZHIHU_APP_ID: ${ZHIHU_APP_ID:-}
+  ZHIHU_APP_KEY: ${ZHIHU_APP_KEY:-}
+  MEMORY_SERVICE_URL: http://memory:8090
+  MEMORY_SERVICE_TOKEN: ${MEMORY_SERVICE_TOKEN:-}
   LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-30000}
   LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-1}
   LLM_MAX_INPUT_BYTES: ${LLM_MAX_INPUT_BYTES:-131072}
@@ -20,6 +25,29 @@ x-app-env: &app-env
   LOGIN_TOKEN_TTL_SECONDS: "3600"
 
 services:
+  demo:
+    build: ./demo
+    ports: ["127.0.0.1:5173:80"]
+    networks: [internal]
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+  memory:
+    build: ./services/memory
+    environment:
+      MEMORY_SERVICE_TOKEN: ${MEMORY_SERVICE_TOKEN:-}
+      EMBEDDING_BASE_URL: ${EMBEDDING_BASE_URL:-https://dashscope.aliyuncs.com/compatible-mode/v1}
+      EMBEDDING_API_KEY: ${EMBEDDING_API_KEY:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-qwen3.7-text-embedding}
+    volumes: [andthen-memory:/data]
+    networks: [internal]
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
   db:
     # Pinned by digest: `18-alpine` alone is a floating tag.
     image: postgres:18-alpine@sha256:d3e1620b530c944afa6e887d22eb899824da68e19c52024bf98f5220c88a65b2
@@ -114,6 +142,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  andthen-memory:
   andthen-pgdata:
     name: andthen-pgdata
 

@@ -264,3 +264,12 @@ export function tokenHashEquals(a: string, b: string): boolean;
   no private draft-read permission; repeated withdrawal produces no new audit.
   Audit records actor, optional reason and operator flag. Private-retention
   expiry does not prevent withdrawal of a still-public version.
+# v1.2 additions (implementation in progress)
+
+`GET /api/integrations/zhihu/capabilities` reports real configuration boundaries.
+`GET /api/discovery/search?q=...` requires a session and returns official summaries and selected comments.
+`POST /api/sources/resolve {url}` registers an exact canonical URL, with `summary_available` or `pending_content`; never accepts supplied author identity.
+`GET /api/me/workbench` resolves verified own cases.
+`GET /api/me/memory`, `PUT /api/me/memory/consent {enabled}`, and `POST /api/me/memory/refresh` act only on the authenticated account.
+Memory processing additionally requires verified source ownership and source-specific external-model/private-interview consent.
+Private memU HTTP service uses a server-only token and UUID-scoped generation paths. PostgreSQL owns the active generation; SQLite is rebuildable. No embedding or credentials are returned to the browser.

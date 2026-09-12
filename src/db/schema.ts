@@ -38,6 +38,28 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
+export interface AuthorMemoryRecord {
+  name: string;
+  description: string;
+  content: string;
+  sourceId: string;
+  snapshotId: string;
+  contentHash: string;
+  preference: boolean;
+  evidenceText: string;
+}
+
+export const authorMemories = pgTable('author_memories', {
+  userId: uuid('user_id').primaryKey(),
+  enabled: boolean('enabled').notNull().default(false),
+  generation: uuid('generation').notNull().defaultRandom(),
+  status: text('status').notNull().default('empty'),
+  records: jsonb('records').$type<AuthorMemoryRecord[]>().notNull().default([]),
+  inputHash: text('input_hash'),
+  errorCode: text('error_code'),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
 /* -------------------------------------------------------------------------- */
 /* Enums                                                                       */
 /* -------------------------------------------------------------------------- */

@@ -11,6 +11,7 @@ const FRESH_DB = isolatedDatabaseName('migrations_fresh');
 const EXPECTED_TABLES = [
   'ai_runs',
   'audit_logs',
+  'author_memories',
   'author_verifications',
   'consents',
   'deletion_jobs',
