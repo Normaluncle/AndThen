@@ -1,9 +1,9 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COPY, DESKTOP_NAV, EMPTY_STATES, MOBILE_NAV, PAGE_SCREEN, SCREEN_REGIONS, TOKENS,
+  COPY, DESKTOP_NAV, EMPTY_STATES, MOBILE_NAV, PAGE_SCREEN, TOKENS,
   actionsFor, emptyKindFor, emptyState, errorStatusOf, interviewProgress, liveCount,
-  mapScreen, overlayPattern, sectionBlocks,
+  mapScreen, overlayPattern, sectionBlocks, visibleRegions, workbenchDefaultTab, workbenchTabs,
 } from './ui14.js';
 import {draftActions, interviewActions} from './workflow.js';
 
@@ -104,7 +104,10 @@ test('empty, withdrawn and timeout from 13 are selected from API/state fixtures'
   assert.equal(emptyKindFor({page: '我的关注', items: []}), 'following_empty');
   assert.equal(emptyState(emptyKindFor({page: '我的关注', items: []})).title, EMPTY_STATES.following_empty.title);
   assert.equal(emptyKindFor({page: '通知', notifications: []}), 'no_notifications');
-  assert.equal(emptyKindFor({page: '发现', items: []}), 'no_stories');
+  assert.equal(emptyKindFor({page: '发现', items: []}), 'discover_empty');
+  assert.notEqual(emptyState(emptyKindFor({page: '发现', items: []})).title, EMPTY_STATES.following_empty.title);
+  assert.doesNotMatch(emptyState(emptyKindFor({page: '发现', items: []})).title, /关注/);
+  assert.equal(emptyState(emptyKindFor({page: '发现', items: []})).ctaPage, '发现');
   assert.equal(emptyKindFor({page: '作者工作台', items: []}), 'workbench_empty');
   assert.equal(emptyKindFor({page: '更新', error: {status: 410}}), 'withdrawn');
   assert.equal(emptyKindFor({page: '更新', followup: {status: 'withdrawn'}}), 'withdrawn');
@@ -142,12 +145,39 @@ test('overlay pattern 14 picks modal, drawer, sheet, full sheet and toast from i
   assert.equal(mobileConfirm.overlay.pattern, 'sheet');
 });
 
-test('every screen 01-12 maps to named regions and 当时/后来/现在回看 stay intact', () => {
-  for (const [page, id] of Object.entries(PAGE_SCREEN)) {
-    const view = fixture(page, {items: [{source_id: 's'}], notifications: [{id: 'n'}], session: {questionsAsked: 1}, draft: {statements: []}, followup: {statements: []}});
-    assert.equal(view.screenId, id);
-    for (const region of SCREEN_REGIONS[id]) assert.ok(view.regionIds.includes(region), `${page} missing ${region}`);
-  }
+test('region visibility is derived from the same helpers the pages render', () => {
+  const emptyDiscover = fixture('发现', {items: []});
+  assert.equal(emptyDiscover.empty.kind, 'discover_empty');
+  assert.equal(emptyDiscover.regionIds.includes('feed'), false);
+  assert.ok(emptyDiscover.regionIds.includes('empty-discover_empty'));
+  assert.ok(emptyDiscover.regionIds.includes('hero'));
+  const filled = fixture('发现', {items: [{source_id: 's'}]});
+  assert.ok(filled.regionIds.includes('feed'));
+  assert.equal(filled.regionIds.includes('empty-discover_empty'), false);
+  assert.equal(filled.regionIds.includes('workbench-tabs'), false);
+  const ids = visibleRegions({page: '发现', items: []}).map((region) => region.id);
+  assert.deepEqual(emptyDiscover.regionIds, ids);
+
+  const items = [
+    {id: 'a', status: 'eligible'},
+    {id: 'b', status: 'accepted', interview_id: 'i1'},
+    {id: 'c', status: 'published', draft_id: 'd1'},
+  ];
+  const tabs = workbenchTabs(items);
+  assert.deepEqual(tabs.map((tab) => tab.label), ['等我回应', '正在写', '已发布']);
+  assert.equal(tabs[0].items[0].id, 'a');
+  assert.equal(tabs[1].items[0].id, 'b');
+  assert.equal(tabs[2].items[0].id, 'c');
+  assert.equal(workbenchDefaultTab(items), 'waiting');
+  assert.equal(workbenchDefaultTab(items.filter((item) => item.id !== 'a')), 'writing');
+  const workbench = fixture('作者工作台', {items});
+  assert.ok(workbench.regionIds.includes('workbench-tabs'));
+  assert.deepEqual(workbench.workbenchTabs.map((tab) => tab.label), ['等我回应', '正在写', '已发布']);
+  assert.deepEqual(workbench.workbenchTabs, tabs);
+  const emptyWorkbench = fixture('作者工作台', {items: []});
+  assert.ok(emptyWorkbench.regionIds.includes('workbench-tabs'));
+  assert.equal(emptyWorkbench.regionIds.includes('workbench-list'), false);
+
   const blocks = sectionBlocks([
     {id: 't', section: 'then', text: '当时'},
     {id: 'l', section: 'later', text: '后来'},

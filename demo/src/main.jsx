@@ -80,11 +80,13 @@ function App() {
     setPage(next); setItems([]); setNotice('');
     await run(async () => {
       if (next === '发现') {
-        const [stories, candidates] = await Promise.all([api('/stories'), hasSession() ? api('/discovery/feed') : Promise.resolve({items: []})]);
+        const stories = await api('/stories');
+        const candidates = hasSession() ? await api('/discovery/feed').catch(() => ({items: []})) : {items: []};
         setItems([...stories.items, ...candidates.items]);
       }
       if (next === '我的关注') {
-        const [stories, candidates] = await Promise.all([api('/me/following'), api('/discovery/following')]);
+        const stories = await api('/me/following').catch(() => ({items: []}));
+        const candidates = await api('/discovery/following').catch(() => ({items: []}));
         setItems([...stories.items.filter((item) => !candidates.items.some((candidate) => candidate.linked_source_id === item.source_id)), ...candidates.items]);
       }
       if (next === '通知') setItems((await api('/me/notifications')).items);
@@ -110,7 +112,7 @@ function App() {
   }, []);
   async function identify(data) {
     setReasonSource(null); setSession(null); setMessages([]); setStory(null); setDraft(null); setMemory(null); setNotifications([]);
-    setToken(true); setUser(data.user); setLogin(''); await enter('账号');
+    setToken(data.session_token || true); setUser(data.user); setLogin(''); await enter('账号');
   }
   async function readInterview(id) {
     const data = await api('/interviews/' + id);
@@ -169,6 +171,7 @@ function App() {
               setItems((current) => current.map((entry) => entry.candidate_id === item.candidate_id ? {...entry, interested: !entry.interested} : entry));
             }, item.interested ? '已取消关注。' : '已关注这篇内容的后续，后台将整理已有回访材料。')}
             onFillImport={() => { setPage('导入'); }}
+            onEmpty={(spec) => enter(spec.ctaPage || '发现')}
           />
         )}
         {page === '内容' && (
@@ -178,11 +181,12 @@ function App() {
             onUnfollow={() => run(() => api(`/stories/${sourceId}/interest`, 'PUT', {active: false}), '已取消关注。')}
           />
         )}
-        {page === '我的关注' && <FollowingPage items={items} busy={busy} emptyKind={emptyKind} onOpen={(id) => run(() => openStory(id))} onDiscover={() => enter('发现')} />}
+        {page === '我的关注' && <FollowingPage items={items} busy={busy} emptyKind={emptyKind} onOpen={(id) => run(() => openStory(id))} onDiscover={() => enter('发现')} onEmpty={(spec) => enter(spec.ctaPage || '发现')} />}
         {page === '通知' && (
           <NotificationsPage
             notifications={notifications} emptyKind={emptyKind} busy={busy} onDiscover={() => enter('发现')}
             onRead={(item) => run(async () => { await api(`/notifications/${item.id}/read`, 'POST'); const data = await api('/followups/' + item.followupVersionId); setFollowup(data); setPage('更新'); })}
+            onEmpty={(spec) => enter(spec.ctaPage || '发现')}
           />
         )}
         {page === '更新' && <FollowupPage followup={followup} emptyKind={emptyKind} onStory={(id) => run(() => openStory(id))} onDiscover={() => enter('发现')} />}
@@ -193,6 +197,7 @@ function App() {
             onInterview={(id) => run(() => readInterview(id))}
             onDraft={(id) => run(async () => { loadDraft(await api('/drafts/' + id)); setPage('草稿'); })}
             onDiscover={() => enter('发现')}
+            onEmpty={(spec) => enter(spec.ctaPage || '发现')}
           />
         )}
         {page === '回访' && (
@@ -265,7 +270,7 @@ function App() {
         {page === '导入' && <ImportPage url={url} busy={busy} sourceId={sourceId} notice={notice} onUrl={setUrl} onImport={() => run(async () => { const data = await api('/sources/resolve', 'POST', {url}); setSourceId(data.source_id); setNotice(data.status === 'pending_content' ? '已登记链接，官方渠道暂未取得该帖正文。' : '已取得官方摘要，等待作者核验与展示许可。'); })} role={user?.role} />}
         {page === '回访管理' && ['admin', 'researcher'].includes(user?.role) && <AdminPage role={user.role} pane="manage" />}
         {page === '官方数据' && user?.role === 'admin' && <AdminPage role={user.role} pane="official" />}
-        {!['发现', '内容', '我的关注', '通知', '更新', '作者工作台', '回访', '采访', '草稿', '账号', '资料与记忆', '提交资料', '导入', '回访管理', '官方数据'].includes(page) && <EmptyState kind="no_stories" onAction={() => enter('发现')} />}
+        {!['发现', '内容', '我的关注', '通知', '更新', '作者工作台', '回访', '采访', '草稿', '账号', '资料与记忆', '提交资料', '导入', '回访管理', '官方数据'].includes(page) && <EmptyState kind="discover_empty" onAction={(spec) => enter(spec.ctaPage || '发现')} />}
         <span hidden data-view={view.screenId} data-regions={view.regionIds.join(',')} data-overlay={view.overlay?.pattern || ''} />
       </main>
       <MobileTabBar page={page} onEnter={enter} busy={busy} notifications={notifications} />

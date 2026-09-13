@@ -13,7 +13,7 @@ function BrandMark() {
 export function AppHeader({page, user, notifications = [], query, onQuery, onSearch, onEnter, onBell, onAvatar, busy}) {
   const unread = notifications.filter((item) => !item.read_at && !item.readAt).length || (notifications.length && !notifications.some((item) => item.read_at || item.readAt) ? notifications.length : 0);
   return (
-    <header className="app-header">
+    <header className="app-header" data-region="chrome-header">
       <button type="button" className="brand-btn" onClick={() => onEnter('发现')} aria-label={TOKENS.brand}>
         <BrandMark />
       </button>
@@ -46,7 +46,7 @@ export function AppHeader({page, user, notifications = [], query, onQuery, onSea
 export function MobileTabBar({page, onEnter, busy, notifications = []}) {
   const unread = notifications.length;
   return (
-    <nav className="mobile-tabbar" aria-label="移动导航">
+    <nav className="mobile-tabbar" data-region="mobile-tabbar" aria-label="移动导航">
       {MOBILE_NAV.map((item) => {
         const active = page === item.page
           || (item.page === '作者工作台' && ['回访', '采访', '草稿'].includes(page))

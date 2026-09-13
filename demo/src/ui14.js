@@ -144,13 +144,12 @@ export const EMPTY_STATES = {
     ctaPage: '发现',
     illustration: '/empty/notifications.png',
   },
-  no_stories: {
-    kind: 'no_stories',
-    title: '暂无关注的故事',
-    body: '去发现更多真实的经历。关注后，当有新的后来时你会第一时间收到通知。',
-    cta: '去发现故事',
+  discover_empty: {
+    kind: 'discover_empty',
+    title: '暂时还没有可阅读的故事',
+    body: '浏览本站内容，或搜索、粘贴知乎链接，发现值得回访的经历。',
+    cta: '去搜索知乎',
     ctaPage: '发现',
-    illustration: '/empty/following.png',
   },
   workbench_empty: {
     kind: 'workbench_empty',
@@ -216,7 +215,7 @@ export function emptyKindFor(state = {}) {
   }
   if (state.busy) return null;
   const items = state.items || [];
-  if (state.page === '发现' && items.length === 0) return 'no_stories';
+  if (state.page === '发现' && items.length === 0) return 'discover_empty';
   if (state.page === '我的关注' && items.length === 0) return 'following_empty';
   if (state.page === '通知' && (state.notifications || items).length === 0) return 'no_notifications';
   if (state.page === '作者工作台' && items.length === 0) return 'workbench_empty';
@@ -317,6 +316,108 @@ export function interviewProgress(session) {
   return {current, total, label: `第 ${Math.max(current, 1)} / ${total}`};
 }
 
+export const WORKBENCH_TABS = [
+  {id: 'waiting', label: '等我回应'},
+  {id: 'writing', label: '正在写'},
+  {id: 'published', label: '已发布'},
+];
+
+export function workbenchBucket(item = {}) {
+  if (item.status === 'published' || item.followup_status === 'published' || item.draft_status === 'published') return 'published';
+  if (item.interview_id || item.draft_id || ['accepted', 'interviewing', 'in_progress', 'active'].includes(item.status)) return 'writing';
+  return 'waiting';
+}
+
+export function workbenchTabs(items = []) {
+  const buckets = {waiting: [], writing: [], published: []};
+  for (const item of items) buckets[workbenchBucket(item)].push(item);
+  return WORKBENCH_TABS.map((tab) => ({...tab, items: buckets[tab.id], count: buckets[tab.id].length}));
+}
+
+export function workbenchDefaultTab(items = []) {
+  return workbenchTabs(items).find((tab) => tab.count)?.id || 'waiting';
+}
+
+function addRegion(ids, id, on = true) {
+  if (on && id) ids.push(id);
+}
+
+export function visibleRegions(state = {}) {
+  const page = state.page || '发现';
+  const viewport = state.viewport === 'mobile' ? 'mobile' : 'desktop';
+  const screenId = PAGE_SCREEN[page] || '01';
+  const kind = emptyKindFor(state);
+  const items = state.items || [];
+  const notices = state.notifications || [];
+  const ids = [];
+  addRegion(ids, 'chrome-header');
+  addRegion(ids, 'mobile-tabbar');
+  if (screenId === '01') {
+    addRegion(ids, 'hero');
+    addRegion(ids, 'search');
+    addRegion(ids, 'import-link');
+    addRegion(ids, 'category-tabs');
+    addRegion(ids, 'feed', items.length > 0);
+    addRegion(ids, 'about', viewport === 'desktop');
+  } else if (screenId === '02') {
+    addRegion(ids, 'story-title', !!state.story);
+    addRegion(ids, 'story-body', !!state.story);
+    addRegion(ids, 'interest-panel', !!state.story);
+    addRegion(ids, 'reason-picker', !!state.story);
+    addRegion(ids, 'story-meta', !!state.story);
+  } else if (screenId === '03') {
+    addRegion(ids, 'following-tabs');
+    addRegion(ids, 'following-list', items.length > 0);
+    addRegion(ids, 'following-aside', viewport === 'desktop');
+  } else if (screenId === '04') {
+    addRegion(ids, 'notice-tabs');
+    addRegion(ids, 'notice-list', notices.length > 0 || items.length > 0);
+    addRegion(ids, 'notice-aside', viewport === 'desktop');
+  } else if (screenId === '05') {
+    addRegion(ids, 'workbench-hero');
+    addRegion(ids, 'workbench-tabs');
+    addRegion(ids, 'workbench-list', items.length > 0);
+    addRegion(ids, 'workbench-aside', viewport === 'desktop');
+  } else if (screenId === '06') {
+    addRegion(ids, 'interview-progress', !!state.session);
+    addRegion(ids, 'interview-question', !!state.session);
+    addRegion(ids, 'interview-composer', !!state.session);
+    addRegion(ids, 'interview-aside', viewport === 'desktop' && !!state.session);
+  } else if (screenId === '07') {
+    addRegion(ids, 'draft-sections', !!state.draft);
+    addRegion(ids, 'draft-preview', !!state.draft);
+    addRegion(ids, 'publish-options', !!state.draft);
+  } else if (screenId === '08') {
+    const open = !!state.followup && kind !== 'withdrawn';
+    addRegion(ids, 'followup-hero', open);
+    addRegion(ids, 'section-then', open);
+    addRegion(ids, 'section-later', open);
+    addRegion(ids, 'section-reflection', open);
+    addRegion(ids, 'followup-aside', open && viewport === 'desktop');
+  } else if (screenId === '09') {
+    addRegion(ids, 'zhihu-account');
+    addRegion(ids, 'author-identity');
+    addRegion(ids, 'memory');
+    addRegion(ids, 'consents');
+    addRegion(ids, 'privacy');
+  } else if (screenId === '10') {
+    addRegion(ids, 'admin-nav');
+    addRegion(ids, 'source-table');
+    addRegion(ids, 'research-panel', state.user?.role === 'admin' || page === '官方数据');
+  } else if (screenId === '11') {
+    addRegion(ids, 'invite-card');
+    addRegion(ids, 'invite-privacy');
+    addRegion(ids, 'invite-actions');
+  } else if (screenId === '12') {
+    addRegion(ids, 'import-form');
+    addRegion(ids, 'import-preview');
+    addRegion(ids, 'verify-status');
+  }
+  if (kind) addRegion(ids, `empty-${kind}`);
+  if (state.busy) addRegion(ids, 'loading');
+  return ids.map((id) => ({id, visible: true}));
+}
+
 export function mapScreen(state = {}) {
   const page = state.page || '发现';
   const viewport = state.viewport === 'mobile' ? 'mobile' : 'desktop';
@@ -325,9 +426,7 @@ export function mapScreen(state = {}) {
   const empty = emptyState(kind);
   const overlayIntent = state.overlayIntent;
   const overlay = overlayIntent ? overlayPattern(overlayIntent, viewport) : null;
-  const regions = SCREEN_REGIONS[screenId].map((id) => ({id, visible: true}));
-  if (empty) regions.push({id: `empty-${empty.kind}`, visible: true});
-  if (state.busy) regions.push({id: 'loading', visible: true});
+  const regions = visibleRegions(state);
   const notifications = state.notifications || [];
   return {
     screenId,
@@ -348,6 +447,7 @@ export function mapScreen(state = {}) {
     },
     loading: !!state.busy,
     interview: page === '采访' ? interviewProgress(state.session) : null,
+    workbenchTabs: page === '作者工作台' ? workbenchTabs(state.items || []) : null,
     sections: page === '草稿' || page === '更新' || page === '内容'
       ? sectionBlocks(state.draft?.statements || state.followup?.statements || state.story?.published_followup?.statements || [])
       : null,

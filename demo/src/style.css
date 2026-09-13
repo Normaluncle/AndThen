@@ -317,10 +317,20 @@ footer.app-footer { text-align: center; color: var(--muted); font-size: 13px; pa
 @media (max-width: 767px) {
   .app-header, .desktop-only { display: none; }
   .mobile-top, .mobile-tabbar { display: flex; }
-  .shell-body { width: 100%; padding: 12px 16px 96px; }
+  .shell-body { width: 100%; padding: 12px 16px calc(var(--tabbar-h) + 56px); }
   .hero { padding: 24px 18px; border-radius: 20px; grid-template-columns: 1fr; }
   .hero h1 { font-size: 28px; }
   .demo-bar { width: calc(100% - 24px); }
-  .shell-body { padding-bottom: 140px; }
+  .shell-body { padding-bottom: calc(var(--tabbar-h) + 56px); }
   .account-actions { flex-direction: column; }
+  .empty-art { width: min(180px, 48%); }
+  .empty-state { padding-bottom: calc(var(--tabbar-h) + 48px); }
+  .empty-actions {
+    position: sticky;
+    bottom: calc(var(--tabbar-h) + 36px);
+    z-index: 30;
+    margin-bottom: 12px;
+    padding: 8px 0 4px;
+    background: linear-gradient(180deg, transparent, #fff 35%);
+  }
 }
