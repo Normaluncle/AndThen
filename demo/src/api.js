@@ -1,9 +1,9 @@
-// Session remains in memory: refresh requires reauthentication, never logs credentials.
-let token = '';
-export function hasSession(){return !!token;}
-export function setToken(value) { token = value; }
+// Browser credentials live in an HttpOnly cookie. This flag is UI state only.
+let signedIn = false;
+export function hasSession(){return signedIn;}
+export function setToken(value) { signedIn = !!value; }
 export async function api(path, method = 'GET', body) {
-  const r = await fetch('/api' + path, {method,headers:{...(body===undefined?{}:{'Content-Type':'application/json'}),...(token ? {Authorization:'Bearer '+token}: {})},body:body===undefined?undefined:JSON.stringify(body)});
+  const r = await fetch('/api' + path, {method,credentials:'same-origin',headers:{'X-AndThen-Web':'1',...(body===undefined?{}:{'Content-Type':'application/json'})},body:body===undefined?undefined:JSON.stringify(body)});
   const data = await r.json();
   if (!r.ok) {
     const code=data.error?.code||data.error_code;

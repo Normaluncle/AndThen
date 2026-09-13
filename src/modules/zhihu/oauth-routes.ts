@@ -1,3 +1,4 @@
+import { issueWebCookie, setSessionCookie } from '../../http/session-cookie.js';
 import { z } from 'zod';
 import { eq, and,gt,isNull } from 'drizzle-orm';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -36,6 +37,8 @@ export async function registerOAuthRoutes(app: AppInstance, ctx: ModuleContext) 
   });
   r.get('/auth/zhihu/callback',{schema:{tags:['zhihu'],querystring:z.object({state:z.string().max(128).optional(),authorization_code:z.string().max(4096).optional(),code:z.string().max(4096).optional(),error:z.string().max(256).optional()}).strict(),response}},async (request,reply)=>{
     reply.header('Cache-Control','no-store').header('Referrer-Policy','no-referrer').header('Set-Cookie',`${cookieName}=; Max-Age=0${cookieAttributes}`);
+    const browser = request.headers.accept?.includes('text/html');
+    try {
     const application = configured();
     const state = request.query.state ?? '';
     const code = callbackCode(request.query,state);
@@ -45,7 +48,25 @@ export async function registerOAuthRoutes(app: AppInstance, ctx: ModuleContext) 
     const token=await exchangeCode(application,code);
     const identity=await authorizedProfile(token.access_token);
     const binding=await bindOAuthAccount(ctx.db,attempt.attemptId,identity,token,ctx.env.ZHIHU_TOKEN_ENCRYPTION_KEY!,ctx.now(),true);
+    if (browser) {
+      const session = await ctx.db.transaction(async tx => {
+        const [a] = await tx.select().from(zhihuOAuthAttempts).where(eq(zhihuOAuthAttempts.id,attempt.attemptId)).for('update');
+        if (!a?.completedUserId || a.deliveredAt) throw AppError.conflict('OAuth result already delivered');
+        const [u] = await tx.select().from(users).where(eq(users.id,a.completedUserId));
+        if (!u || u.disabledAt) throw AppError.unauthorized();
+        const issued = await createSession(tx,{userId:u.id,cohort:u.cohort,ttlSeconds:ctx.env.SESSION_TTL_SECONDS,now:ctx.now()});
+        await tx.update(zhihuOAuthAttempts).set({deliveredAt:ctx.now()}).where(eq(zhihuOAuthAttempts.id,a.id));
+        return issued;
+      });
+      setSessionCookie(reply,ctx.env,session.token);
+      return reply.redirect('/?oauth=success#account',303);
+    }
     return success(request.id,{...binding,message:'授权已绑定。请关闭此页，回到原页面刷新账号状态。资料处理同意仍需另行选择。'});
+    } catch (error) {
+      if (!browser) throw error;
+      ctx.logger.warn({requestId:request.id},'Browser OAuth did not complete');
+      return reply.redirect('/?oauth=failed#account',303);
+    }
   });
   r.post('/auth/zhihu/finish',{preHandler:[app.authenticate],schema:{tags:['zhihu'],body:z.object({attempt_id:z.string().uuid()}).strict(),response}},async (request,reply)=>{
     const auth=requireAuthContext(request);
@@ -60,6 +81,7 @@ export async function registerOAuthRoutes(app: AppInstance, ctx: ModuleContext) 
       await tx.update(zhihuOAuthAttempts).set({deliveredAt:ctx.now()}).where(eq(zhihuOAuthAttempts.id,attempt.id));
       return {ready:true,session_token:session.token,user:{id:user.id,role:user.role,cohort:user.cohort,display_name:user.displayName,email:user.email}};
     });
+    if (data.ready && data.session_token) issueWebCookie(request,reply,ctx.env,data.session_token);
     reply.header('Cache-Control','no-store');return success(request.id,data);
   });
   r.get('/me/zhihu',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response}},async request=>{

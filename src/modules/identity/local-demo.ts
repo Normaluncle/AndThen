@@ -1,3 +1,4 @@
+import { issueWebCookie } from '../../http/session-cookie.js';
 import { z } from 'zod';
 import { eq } from 'drizzle-orm';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -30,6 +31,7 @@ export async function registerLocalDemoRoutes(app: AppInstance, ctx: ModuleConte
       const session=await createSession(tx,{userId:user.id,cohort:user.cohort,ttlSeconds:7200});
       return {session_token:session.token,user:{id:user.id,role:user.role,cohort:user.cohort,display_name:user.displayName}};
     });
+    issueWebCookie(request,reply,ctx.env,result.session_token,7200);
     reply.header('cache-control','no-store');
     return success(request.id,result);
   });

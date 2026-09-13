@@ -3,6 +3,8 @@ import type { Database } from '../db/client.js';
 import { resolveSession } from '../modules/identity/service.js';
 import type { AppInstance, AuthContext } from '../shared/types.js';
 import { AppError } from './errors.js';
+import type { Env } from '../config/env.js';
+import { assertWebRequest, cookieToken } from './session-cookie.js';
 
 declare module 'fastify' {
   interface FastifyRequest {
@@ -27,11 +29,21 @@ export function parseBearerToken(header: string | undefined): string | null {
  * only its hash is stored server-side, and the role comes from the users table —
  * never from the request.
  */
-export function registerAuth(app: AppInstance, db: Database): void {
+export function registerAuth(app: AppInstance, db: Database, env: Env): void {
   app.decorateRequest('auth', null);
+  app.addHook('onSend', async (request, reply, payload) => {
+    if (request.auth || request.url.startsWith('/api/auth/')) reply.header('Cache-Control', 'no-store');
+    return payload;
+  });
+  app.addHook('onRequest', async request => {
+    if (!['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+        (request.headers['x-andthen-web'] !== undefined || (!request.headers.authorization && cookieToken(request, env)))) {
+      assertWebRequest(request, env);
+    }
+  });
 
   app.decorate('authenticate', async (request) => {
-    const token = parseBearerToken(request.headers.authorization);
+    const token = request.headers.authorization ? parseBearerToken(request.headers.authorization) : cookieToken(request, env);
     if (!token) throw AppError.unauthorized('Missing bearer token');
 
     const resolved = await resolveSession(db, token);
