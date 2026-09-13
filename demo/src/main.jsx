@@ -1,63 +1,282 @@
-import React, { useEffect, useState } from 'react';
+import React, {useEffect, useMemo, useState} from 'react';
 import {createRoot} from 'react-dom/client';
-import {api,setToken,hasSession} from './api';
+import {api, setToken, hasSession} from './api.js';
 import './style.css';
-import {OfficialData} from './OfficialData.jsx';
-import {Management} from './Management.jsx';
-import {DraftAssistant} from './DraftAssistant.jsx';
-import {DraftEvidence} from './DraftEvidence.jsx';
-import {MemoryMaterials} from './MemoryMaterials.jsx';
-import {ZhihuAccount} from './ZhihuAccount.jsx';
-import {SourceMaterials} from './SourceMaterials.jsx';
-import {Article} from './Article.jsx';
-import {ReasonPicker} from './ReasonPicker.jsx';
-import {formatParagraphs,articleLength} from './article-format.js';
-import {draftActions,interviewActions,poll} from './workflow.js';
+import {AppHeader, DemoBar, MobileTabBar, MobileTopBar} from './chrome.jsx';
+import {EmptyState, Overlay, Toast} from './overlays.jsx';
+import {
+  AccountPage, AdminPage, DiscoverPage, DraftPage, FollowupPage, FollowingPage,
+  ImportPage, InterviewPage, InvitePage, NotificationsPage, StoryPage, WorkbenchPage,
+} from './screens.jsx';
+import {draftActions, interviewActions, poll} from './workflow.js';
+import {COPY, emptyKindFor, mapScreen} from './ui14.js';
 
-function App(){
- const [reasonSource,setReasonSource]=useState(null),[reasonCandidate,setReasonCandidate]=useState(null);
- const [demoEnabled,setDemoEnabled]=useState(false),[notifications,setNotifications]=useState([]);
- useEffect(()=>{api('/auth/demo/status').then(d=>setDemoEnabled(d.enabled)).catch(()=>{});},[]);
- const [answerVisibility,setAnswerVisibility]=useState('public');
- const [draftJobPending,setDraftJobPending]=useState(false);
- const [page,setPage]=useState(location.hash==='#account'?'账号':sessionStorage.getItem('andthen.page')||'发现'),[user,setUser]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),[items,setItems]=useState([]),[query,setQuery]=useState(''),[url,setUrl]=useState(''),[login,setLogin]=useState(''),[story,setStory]=useState(null),[memory,setMemory]=useState(null),[session,setSession]=useState(null),[messages,setMessages]=useState([]),[answer,setAnswer]=useState(''),[draft,setDraft]=useState(null),[caseId,setCaseId]=useState(''),[sourceId,setSourceId]=useState(''),[notice,setNotice]=useState(''),[savedStatements,setSavedStatements]=useState(''),[followup,setFollowup]=useState(null),[storyComments,setStoryComments]=useState(null);
- useEffect(()=>{if(!user)return;const refresh=()=>api('/me/notifications');refresh().then(setNotificationsFromResponse).catch(()=>{});return poll(refresh,setNotificationsFromResponse,()=>{},2000);function setNotificationsFromResponse(d){setNotifications(d.items||[]);}},[user?.id]);
- const draftState=draftActions(draft,savedStatements),interviewState=interviewActions(session,messages);
- function loadDraft(value){setDraft(value);setSavedStatements(JSON.stringify(value.statements));}
- useEffect(()=>{if(busy)return;
-  if(page==='作者工作台'&&user)return poll(()=>api('/me/workbench'),d=>setItems(d.items),e=>setError(e.message));
-  if(page==='采访'&&session?.status==='active')return poll(()=>api('/interviews/'+session.id),d=>{setSession(d.session);setMessages(d.messages||[]);},e=>setError(e.message));
-  if(page==='资料与记忆'&&memory?.status==='pending')return poll(()=>api('/me/memory'),setMemory,e=>setError(e.message));
- },[page,session?.id,session?.status,memory?.status,busy,user?.id]);
- async function run(fn,message){setError('');setNotice('');setBusy(true);try{await fn();if(message)setNotice(message);}catch(e){setError(e.message);}finally{setBusy(false);}}
- async function enter(p){history.replaceState(null,'',location.pathname+location.search+(p==='账号'?'#account':''));sessionStorage.setItem('andthen.page',p);setPage(p);setItems([]);setNotice('');await run(async()=>{if(p==='发现'){const [stories,candidates]=await Promise.all([api('/stories'),hasSession()?api('/discovery/feed'):Promise.resolve({items:[]})]);setItems([...stories.items,...candidates.items]);}if(p==='我的关注'){const [stories,candidates]=await Promise.all([api('/me/following'),api('/discovery/following')]);setItems([...stories.items.filter(x=>!candidates.items.some(c=>c.linked_source_id===x.source_id)),...candidates.items]);}if(p==='通知')setItems((await api('/me/notifications')).items);if(p==='资料与记忆')setMemory(await api('/me/memory'));if(p==='作者工作台')setItems((await api('/me/workbench')).items);});}
- useEffect(()=>{(async()=>{
-  let restored=false;
-  try { const d=await api('/me');setToken(true);setUser(d.user);restored=true; }
-  catch(e){setToken(false);if(e.status!==401)setError('暂时无法恢复登录，请刷新重试。');}
-  const result=new URLSearchParams(location.search).get('oauth');
-  const target=result||location.hash==='#account'?'账号':sessionStorage.getItem('andthen.page')||'发现';
-  await enter(restored||['发现','账号'].includes(target)?target:'账号');
-  if(result){setNotice(result==='success'&&restored?'知乎登录成功，刷新页面后仍会保持登录。':'知乎授权未完成或已过期，请重试。');history.replaceState(null,'','/#account');}
- })();},[]);
- async function identify(data){setReasonSource(null);setSession(null);setMessages([]);setStory(null);setDraft(null);setMemory(null);setNotifications([]);setToken(true);setUser(data.user);setLogin('');await enter('账号');}
- async function readInterview(id){const d=await api('/interviews/'+id);setSession(d.session);setMessages(d.messages||[]);setPage('采访');}
- async function actionInterview(action){try{await api(`/interviews/${session.id}/${action}`,'POST',{expected_version:session.revision});}catch(e){if(e.status===409){await readInterview(session.id);throw new Error('采访已有更新，请查看最新问题后再次操作。');}throw e;}await readInterview(session.id);}
- async function openStory(id){const d=await api('/stories/'+id);setStory(d.story);setSourceId(id);setStoryComments(null);setPage('内容');setStoryComments(await api(`/stories/${id}/comments`));}
- return <><header><a href="#" onClick={()=>enter('发现')}>然后呢？</a><span>让认真留下的回答，等到它的后来。</span><small>{user?`${user.display_name||'当前用户'} · ${user.role}`:'尚未登录'}</small></header><nav>{['发现','我的关注','作者工作台','通知','资料与记忆','账号',...(['author','admin','researcher'].includes(user?.role)?['提交资料']:[]),...(user?.role==='admin'?['官方数据']:[]),...(['admin','researcher'].includes(user?.role)?['回访管理']:[])].map(p=><button key={p} disabled={busy} onClick={()=>enter(p)}>{p}{p==='通知'&&notifications.length>0?' ('+notifications.length+')':''}</button>)}</nav>{demoEnabled&&<aside className="demo-bar"><strong>本地试玩</strong><button disabled={busy} onClick={()=>run(()=>api('/auth/demo/reader','POST',{}).then(identify))}>切换为演示读者</button><button disabled={busy} onClick={()=>run(()=>api('/auth/demo/author','POST',{}).then(identify))}>切换为模拟作者</button><span>真实知乎内容仅作发现与关注；模拟作者只操作标记为演示的故事。切换身份后记录保留。</span></aside>}<main aria-busy={busy}>{error&&<p role="alert" className="error">{error}</p>}{busy&&<p role="status">处理中…</p>}{notice&&<p role="status">{notice}</p>}
- {page==='回访管理'&&['admin','researcher'].includes(user?.role)&&<Management role={user.role}/>}
- {page==='官方数据'&&user?.role==='admin'&&<OfficialData/>}
- {page==='账号'&&<section><h1>进入然后呢？</h1><p>读者会话用于保存关注记录；知乎登录用于确认你的平台身份。登录不会自动同意资料处理或公开发布。</p>{!user&&<><button disabled={busy} onClick={()=>run(async()=>{await identify(await api('/auth/readers','POST',{consent:{accepted:true,version:'v1'}}));const d=await api('/auth/zhihu/start','POST',{});location.assign(d.authorization_url);})}>同意建立读者会话并使用知乎登录</button><button disabled={busy} onClick={()=>run(async()=>identify(await api('/auth/readers','POST',{consent:{accepted:true,version:'v1'}})))}>暂不绑定知乎，仅进入读者会话</button></>}<label>一次性登录凭证<input type="password" value={login} onChange={e=>setLogin(e.target.value)}/></label><button disabled={busy} onClick={()=>run(async()=>identify(await api('/auth/sessions','POST',{login_token:login})))}>登录</button>{user&&<><button disabled={busy} onClick={()=>run(async()=>setUser((await api("/me")).user))}>刷新站内身份</button><ZhihuAccount key={user.id}/></>}{user&&<button onClick={()=>run(async()=>{await api('/auth/logout','POST');setToken('');setUser(null);})}>退出</button>}</section>}
- {page==='发现'&&<><h1>故事还在继续</h1><p>浏览本站内容，或通过知乎官方搜索发现值得回访的经历。</p><form onSubmit={e=>{e.preventDefault();run(async()=>setItems((await api('/discovery/search?q='+encodeURIComponent(query))).items));}}><input aria-label="搜索关键词" value={query} onChange={e=>setQuery(e.target.value)} placeholder="例如：转行、毕业之后"/><button disabled={busy}>搜索知乎</button></form><form onSubmit={e=>{e.preventDefault();run(async()=>{const d=await api('/sources/resolve','POST',{url});setSourceId(d.source_id);setNotice(d.status==='pending_content'?'已登记链接，官方渠道暂未取得该帖正文。':'已取得官方摘要，等待作者核验与展示许可。');});}}><input aria-label="知乎链接" value={url} onChange={e=>setUrl(e.target.value)} placeholder="粘贴知乎回答或文章链接"/><button disabled={busy}>导入链接</button></form></>}
- {['发现','我的关注'].includes(page)&&<section>{!items.length&&!busy&&<p>这里暂时没有内容。</p>}{items.map((x,i)=><article key={x.source_id||x.url||i}><h2>{x.title||'尚未命名的故事'}</h2>{x.author_name&&<p>{x.author_name} · 官方摘要</p>}{x.provenance==='test_fixture'&&<p>演示故事 · 可以切换模拟作者试写后续</p>}<p className="body">{x.text}</p>{x.source_id?<button onClick={()=>run(()=>openStory(x.source_id))}>查看故事</button>:<><p>资料范围：官方摘要，不代表完整原文。</p><details><summary>部分知乎评论</summary>{x.comments?.map((c,n)=><p key={n}>{c}</p>)}</details><a href={x.url} target="_blank" rel="noreferrer">在知乎查看原内容</a>{x.candidate_id&&<button disabled={busy} onClick={()=>run(async()=>{const result=await api(`/discovery/candidates/${x.candidate_id}/interest`,'PUT',{active:!x.interested});setReasonSource(x.interested?null:result.source_id);setReasonCandidate(x.candidate_id);setItems(current=>current.map(item=>item.candidate_id===x.candidate_id?{...item,interested:!x.interested}:item));},x.interested?'已取消关注。':'已关注这篇内容的后续，后台将整理已有回访材料。')}>{x.interested?'取消后续关注':'然后呢？关注后续'}</button>}{x.linked_source_id&&<button disabled={busy} onClick={()=>run(()=>openStory(x.linked_source_id))}>查看本站后续</button>}<button onClick={()=>{setUrl(x.url);}}>填入导入链接</button></>}{reasonSource&&(reasonSource===x.linked_source_id||x.candidate_id===reasonCandidate&&x.interested)&&<ReasonPicker key={reasonSource} sourceId={reasonSource}/>}</article>)}</section>}
- {page==='内容'&&story&&<article><h1>{story.title}</h1><p>{story.material_level==='exact_excerpt'?'原文片段':'材料摘要'} · {story.provenance==='test_fixture'?'测试材料':'来源材料'}</p><p className="body">{story.text}</p><button disabled={busy} onClick={()=>run(async()=>{await api(`/stories/${sourceId}/interest`,'PUT',{active:true});setReasonSource(sourceId);},'已关注，可以补充想了解的方向。')}>然后呢？</button><button disabled={busy} onClick={()=>run(()=>api(`/stories/${sourceId}/interest`,'PUT',{active:false}),'已取消关注。')}>取消关注</button>{reasonSource===sourceId&&<ReasonPicker key={sourceId} sourceId={sourceId}/>}<details><summary>已同步的知乎评论</summary><p>{storyComments?.synced_at?'最近同步：'+storyComments.synced_at:'尚未通过官方同步取得评论。'} 附带回复不保证覆盖全部楼中楼。</p>{storyComments?.items.map(c=><article key={c.id}><p>{c.text}</p>{c.author_url&&<a href={c.author_url} target="_blank" rel="noreferrer">评论作者的知乎主页</a>}</article>)}</details>{story.published_followup&&<><h2>后来</h2>{story.published_followup.statements.map(x=><Article key={x.id} statement={x}/>)}</>}</article>}
- {page==='通知'&&<><h1>更新通知</h1><p>每 2 秒自动检查新更新；作者发布后到达，不需要手动刷新。</p>{notifications.length===0&&<p>暂无更新。</p>}{notifications.map(x=><article key={x.id}><p>你关注的故事有了后来。</p><button onClick={()=>run(async()=>{await api(`/notifications/${x.id}/read`,'POST');const d=await api('/followups/'+x.followupVersionId);setFollowup(d);setPage('更新');})}>阅读更新</button></article>)}</>}
- {page==='更新'&&followup&&<article><h1>作者的后来</h1><p>由作者确认并在本站发布。</p>{followup.statements.map(x=><Article key={x.id} statement={x}/>)}<button onClick={()=>run(()=>openStory(followup.source_id))}>查看原故事</button></article>}
- {page==='提交资料'&&<SourceMaterials role={user?.role}/>} {page==='资料与记忆'&&<section><h1>用于提问的作者资料</h1><p>只使用你同意处理且已经核验归属的材料。不会把资料不足的部分补写成人物档案。</p><p>状态：{memory?.status||'尚未建立'}　更新：{memory?.updated_at||'暂无'}</p><button disabled={busy} onClick={()=>run(async()=>{await api('/me/memory/consent','PUT',{enabled:true});setMemory(await api('/me/memory'));})}>同意建立作者记忆</button><button disabled={busy} onClick={()=>run(async()=>{await api('/me/memory/refresh','POST');setMemory(await api('/me/memory'));})}>刷新资料</button><button disabled={busy} onClick={()=>run(async()=>{await api('/me/memory/consent','PUT',{enabled:false});setMemory(await api('/me/memory'));})}>撤销同意并删除记忆</button><MemoryMaterials materials={memory?.materials}/>{memory?.records.map(x=><article key={x.name}><p>{x.preference?'采访边界：':''}{x.content}</p><small>来源：{x.source_id}</small></article>)}</section>}
- {page==='作者工作台'&&<section><h1>写下后来</h1>{items.length===0&&<p>暂无可处理的回访。完成身份与内容核验后，回访会显示在这里。</p>}{items.map(x=><article key={x.id}><h2>{x.title||'回访'}</h2><p>{x.status} · {x.interest_count??0} 人点击了“然后呢？”（演示账号也计入此处，不能当作真实用户指标）</p><div>{x.reader_interests?.tags?.map(t=><p key={t.tag}>{t.tag}：{t.count} 人（{t.percentage}%）</p>)}</div><button onClick={()=>{setCaseId(x.id);setSourceId(x.source_id);setPage('回访');}}>处理回访</button>{x.interview_id&&<button onClick={()=>run(()=>readInterview(x.interview_id))}>继续采访</button>}{x.draft_id&&<button onClick={()=>run(async()=>{loadDraft(await api('/drafts/'+x.draft_id));setPage('草稿');})}>查看草稿</button>}</article>)}<label>回访编号<input value={caseId} onChange={e=>setCaseId(e.target.value)}/></label><button onClick={()=>setPage('回访')}>打开指定回访</button></section>}
- {page==='回访'&&<section><h1>接受一次时间回访</h1><p>你可以拒绝，也可以在采访中跳过任何问题。</p><label>原内容编号<input value={sourceId} onChange={e=>setSourceId(e.target.value)}/></label>{[['private_interview','同意私有采访'],['external_model_processing','同意将资料交给模型处理'],['demo_public_display','同意在本站展示']].map(([purpose,label])=><button key={purpose} disabled={busy} onClick={()=>run(()=>api(`/sources/${sourceId}/consents`,'POST',{purpose,version:'v1'}),'已保存这项同意。')}>{label}</button>)}<div><button onClick={()=>run(()=>api(`/cases/${caseId}/decision`,'POST',{decision:'accept'}),'已接受回访，可以开始采访。')}>接受回访</button><button onClick={()=>run(()=>api(`/cases/${caseId}/decision`,'POST',{decision:'decline'}),'已拒绝本次回访。')}>拒绝回访</button><button disabled={busy} onClick={()=>run(async()=>{const d=await api(`/cases/${caseId}/interviews`,'POST',{mode:'ai',confirms_own_content:true,confirms_old_state:true});await readInterview(d.session.id);})}>确认是我的内容，开始采访</button></div></section>}
- {page==='采访'&&session&&<section><h1>聊聊你的后来</h1><p>状态：{session.status} · 已问 {session.questionsAsked} / 5</p>{messages.map(x=><article key={x.id}><strong>{x.role==='ai'?'回访问题':'你的回答'}</strong><p className="body">{x.question||x.authorMessage||(x.skipped?'已跳过':'')}</p></article>)}<button disabled={busy} onClick={()=>run(()=>readInterview(session.id))}>刷新下一问</button>{session.mode==='manual'&&session.stopReason&&<p>AI 提问暂不可用，已保存的回答仍保留。可以继续手动补充，或重试 AI 提问。</p>}{interviewState.retry&&<button disabled={busy} onClick={()=>run(async()=>{await api(`/interviews/${session.id}/retry`,'POST',{expected_version:session.revision});await readInterview(session.id);})}>重试 AI 提问</button>}{interviewState.waiting&&<p role="status">回答已保存，正在准备下一问…</p>}<label>回答范围<select value={answerVisibility} onChange={e=>setAnswerVisibility(e.target.value)}><option value="public">可用于公开草稿（仍需确认发布）</option><option value="private">仅私有采访使用</option></select></label><p>这次最多五问。每一问都可以写成一小篇，按你自己的节奏讲清经历。</p><div><button disabled={busy||!answer} onClick={()=>setAnswer(formatParagraphs(answer))}>自动分段</button><button onClick={()=>setAnswer(answer+'\n\n## 小标题\n')}>插入小标题</button><button onClick={()=>setAnswer(answer+'\n- ')}>插入列表</button></div><label>你的回答<textarea rows={10} value={answer} onChange={e=>setAnswer(e.target.value)}/></label><p>本题 {Array.from(answer.trim()).length} 字 · 已保存 {messages.filter(m=>m.role==='author').reduce((n,m)=>n+(m.authorMessage?.length||0),0)} 字。可以讲经过、转折和感受，不必只回答结论。</p><button disabled={busy||!answer||!interviewState.answer} onClick={()=>run(async()=>{await api(`/interviews/${session.id}/messages`,'POST',{message:answer,visibility:answerVisibility,client_message_id:crypto.randomUUID(),expected_version:session.revision});setAnswer('');await readInterview(session.id);})}>保存回答</button><button disabled={busy||!interviewState.answer} onClick={()=>run(async()=>{await api(`/interviews/${session.id}/messages`,'POST',{skip:true,client_message_id:crypto.randomUUID(),expected_version:session.revision});await readInterview(session.id);})}>跳过</button>{['pause','resume','finish'].map((a,i)=><button key={a} disabled={busy||!interviewState[a]} onClick={()=>run(()=>actionInterview(a))}>{['暂停','继续','结束采访'][i]}</button>)}{session.status==='finished'&&<button disabled={busy} onClick={()=>run(async()=>{const d=await api(`/interviews/${session.id}/draft`,'POST');loadDraft(d);setPage('草稿');})}>整理草稿</button>}</section>}
- {page==='草稿'&&draft&&<section><h1>确认你的后来</h1><p>公开正文共 {articleLength(draft.statements)} 字；问题不计入字数。</p>{articleLength(draft.statements)<100&&<p role="status">目前仍是简短回答，还不足以讲清一段后来。请展开关键经历与前因后果，再确认发布；AI排版不会替你编造内容。</p>}<button disabled={busy||draftJobPending} onClick={()=>setDraft({...draft,statements:draft.statements.map(s=>({...s,text:formatParagraphs(s.text)}))})}>自动整理段落</button><DraftAssistant key={draft.id} draft={draft} dirty={draftState.dirty} disabled={busy} onDraft={loadDraft} onPending={setDraftJobPending}/><DraftEvidence key={draft.id+':evidence'} draft={draft}/><p>状态：{draft.status} · 版本 {draft.version}</p>{draftState.dirty&&<p role="status">有未保存的修改。保存后才能确认并发布这段新内容。</p>}{draft.statements?.map((s,i)=><article key={s.id}><label>采访问题（随此段一起公开，请核对是否涉及私密内容）<input value={s.question||''} readOnly/></label>{s.question&&<button disabled={busy||draftJobPending} onClick={()=>setDraft({...draft,statements:draft.statements.map((x,n)=>{if(n!==i)return x;const {question,...rest}=x;return rest;})})}>不公开这一问题</button>}<label>内容<textarea rows={8} disabled={draftJobPending} value={s.text} onChange={e=>setDraft({...draft,statements:draft.statements.map((x,n)=>n===i?{...x,text:e.target.value}:x)})}/></label><label>内容范围<select disabled={draftJobPending} value={s.visibility} onChange={e=>setDraft({...draft,statements:draft.statements.map((x,n)=>n===i?{...x,visibility:e.target.value}:x)})}><option value="public">可用于公开草稿</option><option value="private">仅自己可见</option></select></label><button disabled={busy||draftJobPending||draft.statements.length<=1} onClick={()=>setDraft({...draft,statements:draft.statements.filter((_,n)=>n!==i)})}>从草稿移除此项</button><small>依据：{s.evidence_refs?.join('、')}</small></article>)}<button disabled={busy||draftJobPending||!draftState.save} onClick={()=>run(async()=>loadDraft(await api(`/drafts/${draft.id}`,'PATCH',{expected_version:draft.version,statements:draft.statements})),'修改已保存，请重新确认。')}>保存修改</button><button disabled={busy||draftJobPending||!draftState.confirm||articleLength(draft.statements)<100} onClick={()=>run(async()=>{await api(`/drafts/${draft.id}/confirm`,'POST',{content_hash:draft.contentHash,statement_ids:draft.statements.map(x=>x.id)});loadDraft(await api('/drafts/'+draft.id));},'已确认当前版本，可以发布。')}>确认全部内容</button><button disabled={busy||draftJobPending||!draftState.publish||articleLength(draft.statements)<100} onClick={()=>run(async()=>{await api(`/drafts/${draft.id}/publish`,'POST',{content_hash:draft.contentHash,confirms_publication:true});loadDraft(await api('/drafts/'+draft.id));},'已发布到本站。关注者将收到站内更新通知。')}>确认发布到本站</button><button disabled={busy||draftJobPending||!draftState.withdraw} onClick={()=>run(async()=>{await api(`/followups/${draft.id}/withdraw`,'POST',{reason:'作者在页面主动撤回'});loadDraft(await api('/drafts/'+draft.id));},'已撤回，读者不能继续读取该版本。')}>撤回发布</button></section>}
- </main><footer>内容由作者确认后在本站发布。测试材料会明确标记。</footer></>;
+function useViewport() {
+  const [viewport, setViewport] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'mobile' : 'desktop');
+  useEffect(() => {
+    const media = window.matchMedia('(max-width: 767px)');
+    const update = () => setViewport(media.matches ? 'mobile' : 'desktop');
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  return viewport;
 }
-createRoot(document.getElementById('root')).render(<App/>);
+
+function App() {
+  const viewport = useViewport();
+  const [reasonSource, setReasonSource] = useState(null);
+  const [reasonCandidate, setReasonCandidate] = useState(null);
+  const [demoEnabled, setDemoEnabled] = useState(false);
+  const [notifications, setNotifications] = useState([]);
+  useEffect(() => { api('/auth/demo/status').then((data) => setDemoEnabled(data.enabled)).catch(() => {}); }, []);
+  const [answerVisibility, setAnswerVisibility] = useState('public');
+  const [draftJobPending, setDraftJobPending] = useState(false);
+  const [page, setPage] = useState(location.hash === '#account' ? '账号' : sessionStorage.getItem('andthen.page') || '发现');
+  const [user, setUser] = useState(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [items, setItems] = useState([]);
+  const [query, setQuery] = useState('');
+  const [url, setUrl] = useState('');
+  const [login, setLogin] = useState('');
+  const [story, setStory] = useState(null);
+  const [memory, setMemory] = useState(null);
+  const [session, setSession] = useState(null);
+  const [messages, setMessages] = useState([]);
+  const [answer, setAnswer] = useState('');
+  const [draft, setDraft] = useState(null);
+  const [caseId, setCaseId] = useState('');
+  const [sourceId, setSourceId] = useState('');
+  const [notice, setNotice] = useState('');
+  const [savedStatements, setSavedStatements] = useState('');
+  const [followup, setFollowup] = useState(null);
+  const [storyComments, setStoryComments] = useState(null);
+  const [overlay, setOverlay] = useState(null);
+  useEffect(() => {
+    if (!user) return;
+    const refresh = () => api('/me/notifications');
+    refresh().then(setNotificationsFromResponse).catch(() => {});
+    return poll(refresh, setNotificationsFromResponse, () => {}, 2000);
+    function setNotificationsFromResponse(data) { setNotifications(data.items || []); }
+  }, [user?.id]);
+  const draftState = draftActions(draft, savedStatements);
+  const interviewState = interviewActions(session, messages);
+  function loadDraft(value) { setDraft(value); setSavedStatements(JSON.stringify(value.statements)); }
+  useEffect(() => {
+    if (busy) return;
+    if (page === '作者工作台' && user) return poll(() => api('/me/workbench'), (data) => setItems(data.items), (err) => setError(err.message));
+    if (page === '采访' && session?.status === 'active') return poll(() => api('/interviews/' + session.id), (data) => { setSession(data.session); setMessages(data.messages || []); }, (err) => setError(err.message));
+    if (page === '资料与记忆' && memory?.status === 'pending') return poll(() => api('/me/memory'), setMemory, (err) => setError(err.message));
+  }, [page, session?.id, session?.status, memory?.status, busy, user?.id]);
+  async function run(fn, message) {
+    setError(''); setNotice(''); setBusy(true);
+    try { await fn(); if (message) setNotice(message); }
+    catch (err) { setError(err.message); }
+    finally { setBusy(false); }
+  }
+  async function enter(next) {
+    history.replaceState(null, '', location.pathname + location.search + (next === '账号' ? '#account' : ''));
+    sessionStorage.setItem('andthen.page', next);
+    setPage(next); setItems([]); setNotice('');
+    await run(async () => {
+      if (next === '发现') {
+        const [stories, candidates] = await Promise.all([api('/stories'), hasSession() ? api('/discovery/feed') : Promise.resolve({items: []})]);
+        setItems([...stories.items, ...candidates.items]);
+      }
+      if (next === '我的关注') {
+        const [stories, candidates] = await Promise.all([api('/me/following'), api('/discovery/following')]);
+        setItems([...stories.items.filter((item) => !candidates.items.some((candidate) => candidate.linked_source_id === item.source_id)), ...candidates.items]);
+      }
+      if (next === '通知') setItems((await api('/me/notifications')).items);
+      if (next === '资料与记忆' || next === '账号') {
+        if (hasSession()) setMemory(await api('/me/memory').catch(() => null));
+      }
+      if (next === '作者工作台') setItems((await api('/me/workbench')).items);
+    });
+  }
+  useEffect(() => {
+    (async () => {
+      let restored = false;
+      try { const data = await api('/me'); setToken(true); setUser(data.user); restored = true; }
+      catch (err) { setToken(false); if (err.status !== 401) setError('暂时无法恢复登录，请刷新重试。'); }
+      const result = new URLSearchParams(location.search).get('oauth');
+      const target = result || location.hash === '#account' ? '账号' : sessionStorage.getItem('andthen.page') || '发现';
+      await enter(restored || ['发现', '账号'].includes(target) ? target : '账号');
+      if (result) {
+        setNotice(result === 'success' && restored ? '知乎登录成功，刷新页面后仍会保持登录。' : '知乎授权未完成或已过期，请重试。');
+        history.replaceState(null, '', '/#account');
+      }
+    })();
+  }, []);
+  async function identify(data) {
+    setReasonSource(null); setSession(null); setMessages([]); setStory(null); setDraft(null); setMemory(null); setNotifications([]);
+    setToken(true); setUser(data.user); setLogin(''); await enter('账号');
+  }
+  async function readInterview(id) {
+    const data = await api('/interviews/' + id);
+    setSession(data.session); setMessages(data.messages || []); setPage('采访');
+  }
+  async function actionInterview(action) {
+    try { await api(`/interviews/${session.id}/${action}`, 'POST', {expected_version: session.revision}); }
+    catch (err) {
+      if (err.status === 409) { await readInterview(session.id); throw new Error('采访已有更新，请查看最新问题后再次操作。'); }
+      throw err;
+    }
+    await readInterview(session.id);
+  }
+  async function openStory(id) {
+    const data = await api('/stories/' + id);
+    setStory(data.story); setSourceId(id); setStoryComments(null); setPage('内容');
+    setStoryComments(await api(`/stories/${id}/comments`));
+  }
+  const view = useMemo(() => mapScreen({
+    page, viewport, user, items, story, session, messages, draft, savedStatements, followup, memory,
+    notifications, error: error ? {message: error} : null, busy, overlayIntent: overlay?.intent, answer,
+  }), [page, viewport, user, items, story, session, messages, draft, savedStatements, followup, memory, notifications, error, busy, overlay, answer]);
+  const emptyKind = emptyKindFor({page, items, notifications, story, session, followup, draft, error: error ? {message: error} : null, busy});
+
+  return (
+    <div className="shell">
+      <AppHeader
+        page={page} user={user} notifications={notifications} query={query} busy={busy}
+        onQuery={setQuery}
+        onSearch={() => run(async () => { setItems((await api('/discovery/search?q=' + encodeURIComponent(query))).items); setPage('发现'); })}
+        onEnter={enter}
+        onBell={() => enter('通知')}
+        onAvatar={() => enter('账号')}
+      />
+      <MobileTopBar page={page} user={user} notifications={notifications} onEnter={enter} onBell={() => enter('通知')} />
+      <DemoBar
+        enabled={demoEnabled} busy={busy}
+        onReader={() => run(() => api('/auth/demo/reader', 'POST', {}).then(identify))}
+        onAuthor={() => run(() => api('/auth/demo/author', 'POST', {}).then(identify))}
+      />
+      {busy && <div className="loading-bar" role="progressbar" aria-label="处理中" />}
+      <main className="shell-body" aria-busy={busy}>
+        {error && <p role="alert" className="error">{error}</p>}
+        {notice && <p role="status" className="desktop-only">{notice}</p>}
+        {page === '发现' && (
+          <DiscoverPage
+            items={items} query={query} url={url} busy={busy} emptyKind={emptyKind} reasonSource={reasonSource} reasonCandidate={reasonCandidate}
+            onQuery={setQuery} onUrl={setUrl}
+            onSearch={() => run(async () => setItems((await api('/discovery/search?q=' + encodeURIComponent(query))).items))}
+            onImport={() => run(async () => { const data = await api('/sources/resolve', 'POST', {url}); setSourceId(data.source_id); setPage('导入'); setNotice(data.status === 'pending_content' ? '已登记链接，官方渠道暂未取得该帖正文。' : '已取得官方摘要，等待作者核验与展示许可。'); })}
+            onOpen={(id) => run(() => openStory(id))}
+            onInterest={(item) => run(async () => {
+              const result = await api(`/discovery/candidates/${item.candidate_id}/interest`, 'PUT', {active: !item.interested});
+              setReasonSource(item.interested ? null : result.source_id);
+              setReasonCandidate(item.candidate_id);
+              setItems((current) => current.map((entry) => entry.candidate_id === item.candidate_id ? {...entry, interested: !entry.interested} : entry));
+            }, item.interested ? '已取消关注。' : '已关注这篇内容的后续，后台将整理已有回访材料。')}
+            onFillImport={() => { setPage('导入'); }}
+          />
+        )}
+        {page === '内容' && (
+          <StoryPage
+            story={story} sourceId={sourceId} storyComments={storyComments} busy={busy} reasonSource={reasonSource}
+            onInterest={() => run(async () => { await api(`/stories/${sourceId}/interest`, 'PUT', {active: true}); setReasonSource(sourceId); }, '已关注，可以补充想了解的方向。')}
+            onUnfollow={() => run(() => api(`/stories/${sourceId}/interest`, 'PUT', {active: false}), '已取消关注。')}
+          />
+        )}
+        {page === '我的关注' && <FollowingPage items={items} busy={busy} emptyKind={emptyKind} onOpen={(id) => run(() => openStory(id))} onDiscover={() => enter('发现')} />}
+        {page === '通知' && (
+          <NotificationsPage
+            notifications={notifications} emptyKind={emptyKind} busy={busy} onDiscover={() => enter('发现')}
+            onRead={(item) => run(async () => { await api(`/notifications/${item.id}/read`, 'POST'); const data = await api('/followups/' + item.followupVersionId); setFollowup(data); setPage('更新'); })}
+          />
+        )}
+        {page === '更新' && <FollowupPage followup={followup} emptyKind={emptyKind} onStory={(id) => run(() => openStory(id))} onDiscover={() => enter('发现')} />}
+        {page === '作者工作台' && (
+          <WorkbenchPage
+            items={items} busy={busy} emptyKind={emptyKind} caseId={caseId} onCaseId={setCaseId}
+            onOpen={(item) => { setCaseId(item.id); setSourceId(item.source_id); setPage('回访'); }}
+            onInterview={(id) => run(() => readInterview(id))}
+            onDraft={(id) => run(async () => { loadDraft(await api('/drafts/' + id)); setPage('草稿'); })}
+            onDiscover={() => enter('发现')}
+          />
+        )}
+        {page === '回访' && (
+          <InvitePage
+            sourceId={sourceId} caseId={caseId} busy={busy} onSourceId={setSourceId}
+            onConsent={(purpose) => run(() => api(`/sources/${sourceId}/consents`, 'POST', {purpose, version: 'v1'}), '已保存这项同意。')}
+            onAccept={() => run(() => api(`/cases/${caseId}/decision`, 'POST', {decision: 'accept'}), '已接受回访，可以开始采访。')}
+            onDecline={() => run(() => api(`/cases/${caseId}/decision`, 'POST', {decision: 'decline'}), '已拒绝本次回访。')}
+            onStart={() => run(async () => { const data = await api(`/cases/${caseId}/interviews`, 'POST', {mode: 'ai', confirms_own_content: true, confirms_old_state: true}); await readInterview(data.session.id); })}
+          />
+        )}
+        {page === '采访' && (
+          <InterviewPage
+            session={session} messages={messages} answer={answer} answerVisibility={answerVisibility} busy={busy} interviewState={interviewState}
+            onAnswer={setAnswer} onVisibility={setAnswerVisibility}
+            onSave={() => run(async () => { await api(`/interviews/${session.id}/messages`, 'POST', {message: answer, visibility: answerVisibility, client_message_id: crypto.randomUUID(), expected_version: session.revision}); setAnswer(''); await readInterview(session.id); })}
+            onSkip={() => run(async () => { await api(`/interviews/${session.id}/messages`, 'POST', {skip: true, client_message_id: crypto.randomUUID(), expected_version: session.revision}); await readInterview(session.id); })}
+            onPause={() => run(() => actionInterview('pause'))}
+            onResume={() => run(() => actionInterview('resume'))}
+            onFinish={() => run(() => actionInterview('finish'))}
+            onRetry={() => run(async () => { await api(`/interviews/${session.id}/retry`, 'POST', {expected_version: session.revision}); await readInterview(session.id); })}
+            onRefresh={() => run(() => readInterview(session.id))}
+            onDraft={() => run(async () => { const data = await api(`/interviews/${session.id}/draft`, 'POST'); loadDraft(data); setPage('草稿'); })}
+          />
+        )}
+        {page === '草稿' && (
+          <DraftPage
+            draft={draft} draftState={draftState} draftJobPending={draftJobPending} busy={busy}
+            onDraft={loadDraft} onPending={setDraftJobPending} onChange={setDraft}
+            onSave={() => run(async () => loadDraft(await api(`/drafts/${draft.id}`, 'PATCH', {expected_version: draft.version, statements: draft.statements})), '修改已保存，请重新确认。')}
+            onConfirm={() => run(async () => { await api(`/drafts/${draft.id}/confirm`, 'POST', {content_hash: draft.contentHash, statement_ids: draft.statements.map((item) => item.id)}); loadDraft(await api('/drafts/' + draft.id)); }, '已确认当前版本，可以发布。')}
+            onPublish={() => setOverlay({intent: 'confirm', title: COPY.confirmPublishQuestion, body: '发布后，所有人都可以看到这段来自未来的更新。你也可以在之后随时编辑或补充。', confirm: async () => { setOverlay(null); await run(async () => { await api(`/drafts/${draft.id}/publish`, 'POST', {content_hash: draft.contentHash, confirms_publication: true}); loadDraft(await api('/drafts/' + draft.id)); }, '已发布到本站。关注者将收到站内更新通知。'); }})}
+            onWithdraw={() => setOverlay({intent: 'destructive', title: '确定要撤回这则后来？', body: '撤回后读者不能继续读取该版本。', confirmLabel: '撤回', confirm: async () => { setOverlay(null); await run(async () => { await api(`/followups/${draft.id}/withdraw`, 'POST', {reason: '作者在页面主动撤回'}); loadDraft(await api('/drafts/' + draft.id)); }, '已撤回，读者不能继续读取该版本。'); }})}
+          />
+        )}
+        {page === '账号' && (
+          <AccountPage
+            user={user} login={login} busy={busy} memory={memory}
+            onLogin={setLogin}
+            onIdentifyReader={(mode) => run(async () => {
+              if (mode === 'token') await identify(await api('/auth/sessions', 'POST', {login_token: login}));
+              else await identify(await api('/auth/readers', 'POST', {consent: {accepted: true, version: 'v1'}}));
+            })}
+            onZhihu={() => run(async () => { await identify(await api('/auth/readers', 'POST', {consent: {accepted: true, version: 'v1'}})); const data = await api('/auth/zhihu/start', 'POST', {}); location.assign(data.authorization_url); })}
+            onRefresh={() => run(async () => setUser((await api('/me')).user))}
+            onLogout={() => run(async () => { await api('/auth/logout', 'POST'); setToken(''); setUser(null); })}
+            onConsent={() => run(async () => { await api('/me/memory/consent', 'PUT', {enabled: true}); setMemory(await api('/me/memory')); })}
+            onRefreshMemory={() => run(async () => { await api('/me/memory/refresh', 'POST'); setMemory(await api('/me/memory')); })}
+            onRevoke={() => run(async () => { await api('/me/memory/consent', 'PUT', {enabled: false}); setMemory(await api('/me/memory')); })}
+            onWorkbench={() => enter('作者工作台')}
+            onMaterials={() => enter('提交资料')}
+            onAdmin={() => enter('回访管理')}
+            onOfficial={() => enter('官方数据')}
+          />
+        )}
+        {page === '资料与记忆' && (
+          <AccountPage
+            user={user} login={login} busy={busy} memory={memory}
+            onLogin={setLogin} onIdentifyReader={() => {}} onZhihu={() => {}} onRefresh={() => {}} onLogout={() => {}}
+            onConsent={() => run(async () => { await api('/me/memory/consent', 'PUT', {enabled: true}); setMemory(await api('/me/memory')); })}
+            onRefreshMemory={() => run(async () => { await api('/me/memory/refresh', 'POST'); setMemory(await api('/me/memory')); })}
+            onRevoke={() => run(async () => { await api('/me/memory/consent', 'PUT', {enabled: false}); setMemory(await api('/me/memory')); })}
+            onWorkbench={() => enter('作者工作台')}
+            onMaterials={() => enter('提交资料')}
+            onAdmin={() => enter('回访管理')}
+            onOfficial={() => enter('官方数据')}
+          />
+        )}
+        {page === '提交资料' && <ImportPage url={url} busy={busy} sourceId={sourceId} notice={notice} onUrl={setUrl} onImport={() => run(async () => { const data = await api('/sources/resolve', 'POST', {url}); setSourceId(data.source_id); setNotice(data.status === 'pending_content' ? '已登记链接，官方渠道暂未取得该帖正文。' : '已取得官方摘要，等待作者核验与展示许可。'); })} role={user?.role} />}
+        {page === '导入' && <ImportPage url={url} busy={busy} sourceId={sourceId} notice={notice} onUrl={setUrl} onImport={() => run(async () => { const data = await api('/sources/resolve', 'POST', {url}); setSourceId(data.source_id); setNotice(data.status === 'pending_content' ? '已登记链接，官方渠道暂未取得该帖正文。' : '已取得官方摘要，等待作者核验与展示许可。'); })} role={user?.role} />}
+        {page === '回访管理' && ['admin', 'researcher'].includes(user?.role) && <AdminPage role={user.role} pane="manage" />}
+        {page === '官方数据' && user?.role === 'admin' && <AdminPage role={user.role} pane="official" />}
+        {!['发现', '内容', '我的关注', '通知', '更新', '作者工作台', '回访', '采访', '草稿', '账号', '资料与记忆', '提交资料', '导入', '回访管理', '官方数据'].includes(page) && <EmptyState kind="no_stories" onAction={() => enter('发现')} />}
+        <span hidden data-view={view.screenId} data-regions={view.regionIds.join(',')} data-overlay={view.overlay?.pattern || ''} />
+      </main>
+      <MobileTabBar page={page} onEnter={enter} busy={busy} notifications={notifications} />
+      <Overlay
+        intent={overlay?.intent} viewport={viewport} title={overlay?.title} body={overlay?.body}
+        confirmLabel={overlay?.confirmLabel} onConfirm={overlay?.confirm} onCancel={() => setOverlay(null)}
+      />
+      <Toast text={notice} onDone={() => setNotice('')} />
+      <footer className="app-footer">内容由作者确认后在本站发布。测试材料会明确标记。让认真留下的回答，等到它的后来。</footer>
+    </div>
+  );
+}
+
+createRoot(document.getElementById('root')).render(<App />);
