@@ -10,7 +10,9 @@ test('bodyless actions omit JSON content type; requests with bodies retain it', 
   setToken('test-fixture-session');
   await api('/interviews/fixture/draft','POST');
   assert.equal(calls[0].headers['Content-Type'],undefined);
-  assert.equal(calls[0].headers.Authorization,'Bearer test-fixture-session');
+  assert.equal(calls[0].headers.Authorization,undefined);
+  assert.equal(calls[0].credentials,'same-origin');
+  assert.equal(calls[0].headers['X-AndThen-Web'],'1');
   await api('/stories/fixture/interest','PUT',{active:true});
   assert.equal(calls[1].headers['Content-Type'],'application/json');
   assert.equal(calls[1].body,'{"active":true}');
