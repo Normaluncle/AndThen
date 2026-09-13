@@ -16,12 +16,17 @@ export async function registerOpenApi(app: AppInstance): Promise<void> {
         title: '然后呢？ (AndThen) API',
         description:
           'Hackathon prototype backend. All routes under /api are project-defined; ' +
-          'no external platform API is required.',
+          'Browser clients may use same-origin HttpOnly session cookies with X-AndThen-Web: 1 on writes; ' +
+          'Bearer clients remain supported. Zhihu OAuth browser callbacks return 303 to the account page.',
         version: '0.1.0',
       },
       servers: [{ url: '/', description: 'current host' }],
       components: {
         securitySchemes: {
+          browserSession: {
+            type: 'apiKey', in: 'cookie', name: '__Host-andthen_session',
+            description: 'HTTPS browser session. Local HTTP uses andthen_session. Writes require X-AndThen-Web: 1 and same-origin requests.',
+          },
           bearerAuth: {
             type: 'http',
             scheme: 'bearer',

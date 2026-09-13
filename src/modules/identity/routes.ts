@@ -1,3 +1,4 @@
+import { issueWebCookie, setSessionCookie } from '../../http/session-cookie.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { registerLocalDemoRoutes } from './local-demo.js';
@@ -86,13 +87,14 @@ export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContex
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { login_token } = request.body;
       const { user, session } = await exchangeLoginToken(ctx.db, login_token, {
         ttlSeconds: ctx.env.SESSION_TTL_SECONDS,
         userAgent: request.headers['user-agent'] ?? null,
       });
       ctx.logger.info({ userId: user.id, sessionId: session.id }, 'session established');
+      issueWebCookie(request, reply, ctx.env, session.token);
       return success(request.id, {
         session_token: session.token,
         token_prefix: session.tokenPrefix,
@@ -121,7 +123,7 @@ export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContex
         response: { 200: envelopeSchema(issuedSessionSchema), 400: errorEnvelopeSchema },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const { user, session } = await createReaderSession(ctx.db, {
         consentVersion: request.body.consent.version,
         ttlSeconds: ctx.env.SESSION_TTL_SECONDS,
@@ -131,6 +133,7 @@ export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContex
         { userId: user.id, sessionId: session.id, cohort: user.cohort },
         'anonymous reader session established',
       );
+      issueWebCookie(request, reply, ctx.env, session.token);
       return success(request.id, {
         session_token: session.token,
         token_prefix: session.tokenPrefix,
@@ -181,10 +184,11 @@ export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContex
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const auth = requireAuthContext(request);
       const revoked = await revokeSession(ctx.db, auth.sessionId);
       ctx.logger.info({ userId: auth.userId, sessionId: auth.sessionId }, 'session revoked');
+      setSessionCookie(reply, ctx.env, '', 0);
       return success(request.id, { revoked });
     },
   );
@@ -224,7 +228,7 @@ export async function registerIdentityRoutes(app: AppInstance, ctx: ModuleContex
         },
       },
     },
-    async (request) => {
+    async (request, reply) => {
       const auth = requireAuthContext(request);
       const { role, display_name, email, cohort } = request.body;
 

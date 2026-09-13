@@ -355,3 +355,12 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - Migration 0013 adds nullable reason choice/text/tag columns. `interest.classify` serializes per source, reuses identical text, classifies semantic equivalents, retries failures, and fences writes against deletion. No reader identity or raw reason is exposed in the aggregate. Interview context uses at most 12 highest-count tags.
 - Zhihu resolve `url` accepts up to 4000 characters of share text containing exactly one distinct supported URL. It never guesses among multiple URLs.
 - Paragraph formatting is presentation-only; no evidence rewriting. The Demo asks authors to expand public bodies shorter than 100 characters; backend publish validity remains the existing evidence, consent and confirmation contract.
+
+## 2026-09-13：浏览器登录持久化与知乎授权返回（增量）
+
+- 原有 Bearer 接口继续兼容。浏览器请求使用 `X-AndThen-Web: 1` 和同源 Cookie；会话仍在 PostgreSQL 中仅保存哈希。
+- `/auth/readers`、`/auth/sessions`、本地演示登录和 `/auth/zhihu/finish` 在 Web 请求中额外设置 HttpOnly、SameSite=Lax、有期限的会话 Cookie。HTTPS 使用 `__Host-andthen_session`，Secure、Path=/，不设置 Domain；本地 HTTP 使用 `andthen_session`。
+- Cookie 身份下的写操作要求 Web 自定义头，拒绝跨源 Origin / Sec-Fetch-Site。前端启动通过 `GET /api/me` 恢复身份；退出撤销服务端会话并清除 Cookie。不将令牌写入 localStorage、sessionStorage 或 URL。
+- 浏览器 `Accept: text/html` 的知乎回调在 state、浏览器关联和官方身份核验成功后直接签发站内 Cookie，并以 303 返回 `/?oauth=success#account`；失败返回 `/?oauth=failed#account`。地址只含结果标记，不含授权码或令牌。非浏览器 JSON 回调和原 finish 接口保留。
+- Demo 使用当前标签跳转授权，无需弹窗、手动刷新或领取登录结果。登录后留在账号页；普通导航位置只作为非敏感 UI 状态保存。
+- 资料处理同意仍为独立操作，登录不会自动启用记忆或授予公开发布权限。

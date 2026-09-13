@@ -117,7 +117,7 @@ export async function buildApp(options: BuildAppOptions): Promise<BuiltApp> {
   }
 
   registerRequestId(app);
-  registerAuth(app, db);
+  registerAuth(app, db, env);
 
   logLlmPolicy(env, logger);
 
