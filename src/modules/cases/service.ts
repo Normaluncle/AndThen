@@ -20,7 +20,7 @@ import { authorVerifications, followupCases, invitations, sources } from '../../
 import type { FollowupCaseRow, InvitationRow, SourceRow } from '../../db/schema.js';
 import { AppError } from '../../http/errors.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
-import { resolveSourceAccess, isVerifiedAuthor } from '../sources/access.js';
+import { resolveSourceAccess, isVerifiedAuthor, canActAsAuthor } from '../sources/access.js';
 import { writeAudit, writeResearchEvent } from '../sources/service.js';
 import { latestSnapshot } from '../sources/service.js';
 import { requireCurrentReview } from './review.js';
@@ -90,7 +90,7 @@ export async function createCase(
 
     if (auth.role === 'author') {
       const access = await resolveSourceAccess(tx, source, auth);
-      if (!access.isAuthor) {
+      if (!canActAsAuthor(access)) {
         throw AppError.forbidden('You may only open a case for a source you author');
       }
     }
@@ -120,7 +120,7 @@ export async function createCase(
     const access = await resolveSourceAccess(tx, source, auth);
     const [verifiedOwner] = await tx.select({userId:authorVerifications.userId}).from(authorVerifications)
       .where(and(eq(authorVerifications.sourceId,source.id),eq(authorVerifications.status,'verified'))).limit(1);
-    const authorUserId = access.isAuthor ? auth.userId : verifiedOwner?.userId ?? null;
+    const authorUserId = canActAsAuthor(access) ? auth.userId : verifiedOwner?.userId ?? null;
 
     const inserted = await tx
       .insert(followupCases)

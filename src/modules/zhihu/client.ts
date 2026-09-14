@@ -29,8 +29,13 @@ export function parseZhihuShare(raw: string): string {
   return [...urls][0]!;
 }
 
+// The official search response carries engagement numbers we used to drop on the
+// floor (only 7 of its fields were declared). They are parsed leniently: a missing
+// or malformed count becomes null rather than failing the whole item.
+const count = z.number().int().min(0).max(100_000_000).nullish().catch(null);
 const item = z.object({ Title: z.string(), Url: z.string(), ContentText: z.string(), AuthorName: z.string().default('知乎用户'),
-  EditTime: z.number().int().positive().max(253402300799).nullish().catch(null), AuthorAvatar: z.string().default(''), CommentInfoList: z.array(z.object({ Content: z.string() })).default([]) });
+  EditTime: z.number().int().positive().max(253402300799).nullish().catch(null), AuthorAvatar: z.string().default(''), CommentInfoList: z.array(z.object({ Content: z.string() })).default([]),
+  VoteUpCount: count, CommentCount: count, RankingScore: z.number().nullish().catch(null) });
 
 export async function officialSearch(secret: string | undefined, query: string, transport: typeof fetch = fetch): Promise<OfficialCandidate[]> {
   const parsed = await officialGet(secret, '/api/v1/content/zhihu_search', { Query: query, Count: '10' }, z.object({ Items: z.array(z.unknown()) }), transport);
@@ -40,7 +45,9 @@ export async function officialSearch(secret: string | undefined, query: string, 
     try {
       return [{ url: canonicalZhihuUrl(p.data.Url), title: p.data.Title, text: p.data.ContentText,
         author_name: p.data.AuthorName, author_avatar: /^https:\/\/[\w.-]+\.zhimg\.com\//.test(p.data.AuthorAvatar) ? p.data.AuthorAvatar : null,
-        upstream_updated_at: p.data.EditTime ? new Date(p.data.EditTime * 1000).toISOString() : null, author_url: null, material_level: 'api_summary' as const, comments: p.data.CommentInfoList.map(x => x.Content), comments_coverage: 'selected' as const }];
+        upstream_updated_at: p.data.EditTime ? new Date(p.data.EditTime * 1000).toISOString() : null,
+        vote_up_count: p.data.VoteUpCount ?? null, comment_count: p.data.CommentCount ?? null, ranking_score: p.data.RankingScore ?? null,
+        author_url: null, material_level: 'api_summary' as const, comments: p.data.CommentInfoList.map(x => x.Content), comments_coverage: 'selected' as const }];
     } catch { return []; }
   });
 }

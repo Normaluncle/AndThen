@@ -39,3 +39,19 @@ it('returns browser callback failures to the account page without logging or exp
  const r=await h.app.inject({url:'/api/auth/zhihu/callback?error=access_denied',headers:{accept:'text/html'}});
  expect(r.statusCode).toBe(303);expect(r.headers.location).toBe('/?oauth=failed#account');
 });
+it('surfaces the verified avatar and name on the account so the header is not a placeholder',async()=>{
+ const transport=vi.fn<typeof fetch>();vi.stubGlobal('fetch',transport);
+ const r=await reader();const initial=cookies(r);
+ // A reader who has not authorized has the fields but no values.
+ expect(r.json().data.user.avatar_url).toBeNull();
+ expect(r.json().data.user.display_name).toBeNull();
+ const started=await h.app.inject({method:'POST',url:'/api/auth/zhihu/start',headers:{cookie:initial,...web},payload:{}});
+ const state=new URL(started.json().data.authorization_url).searchParams.get('state');
+ transport.mockResolvedValueOnce(new Response(JSON.stringify({access_token:'fixture-secret',expires_in:3600,token_type:'Bearer'})))
+  .mockResolvedValueOnce(new Response('{"uid":"770077","fullname":"虚构头像作者","avatar_path":"https://pic.example.test/avatar/770077.jpg"}'));
+ const callback=await h.app.inject({url:'/api/auth/zhihu/callback?code=fixture-code&state='+state,headers:{cookie:initial+'; '+cookies(started),accept:'text/html'}});
+ expect(callback.statusCode).toBe(303);
+ const me=await h.app.inject({url:'/api/me',headers:{cookie:cookies(callback)}});
+ expect(me.json().data.user.avatar_url).toBe('https://pic.example.test/avatar/770077.jpg');
+ expect(me.json().data.user.display_name).toBe('虚构头像作者');
+});

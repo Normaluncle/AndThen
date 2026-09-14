@@ -36,7 +36,10 @@ export async function syncOAuthAuthor(ctx:ModuleContext,job:JobHandlerContext) {
    const existing=await tx.select({owner:authorVerifications.userId}).from(sources).innerJoin(authorVerifications,eq(authorVerifications.sourceId,sources.id))
     .where(and(eq(sources.originalUrl,item.url),eq(authorVerifications.status,'verified')));
    if(existing.some(x=>x.owner!==user.id))throw AppError.conflict('Official content conflicts with an existing verified owner');
-   const result=await importSource(nested,auth,{sourceType:'third_party_link',originalUrl:item.url,originalAccountRef:`zhihu:${account.uid}`,title:item.title,materialLevel:'api_summary',body:item.text,excerpt:null,excerptLocation:null,publishedAt:null,upstreamUpdatedAt:null,notes:'Official OAuth user contents; summary only',provenance:'official_api'});
+   const result=await importSource(nested,auth,{sourceType:'third_party_link',originalUrl:item.url,originalAccountRef:`zhihu:${account.uid}`,title:item.title,materialLevel:'api_summary',body:item.text,excerpt:null,excerptLocation:null,publishedAt:null,
+    // `user/contents` returns CreatedAt; it was dropped here, which left every
+    // synced story dateless.
+    upstreamUpdatedAt:item.created_at_seconds?new Date(Number(item.created_at_seconds)*1000):null,notes:'Official OAuth user contents; summary only',provenance:'official_api'});
    await tx.select().from(sources).where(eq(sources.id,result.source.id)).for('update');
    const links=await tx.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId,result.source.id),eq(authorVerifications.status,'verified')));
    if(links.some(x=>x.userId!==user.id))throw AppError.conflict('Source attribution changed during sync');

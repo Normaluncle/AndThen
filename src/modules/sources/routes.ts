@@ -10,6 +10,7 @@ import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { success } from '../../http/errors.js';
 import type { AppInstance, ModuleContext } from '../../shared/types.js';
 import {
+  claimAuthorship,
   grantConsent,
   importSource,
   listAuthorVerifications,
@@ -143,7 +144,7 @@ const consentSchema = z.object({
 const verificationSchema = z.object({
   id: z.string().uuid(),
   user_id: z.string().uuid(),
-  method: z.enum(['oauth', 'manual']),
+  method: z.enum(['oauth', 'manual', 'self_claim']),
   status: z.enum(['pending', 'verified', 'rejected']),
   evidence_ref: z.string().nullable(),
   verifier_user_id: z.string().uuid().nullable(),
@@ -470,6 +471,70 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         },
         source_permission_status: sourcePermissionStatus,
         cancelled_jobs: cancelledJobs,
+      });
+    },
+  );
+
+  /* ------------------------ author self-claim ------------------------ */
+
+  r.post(
+    '/sources/:id/author-claim',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['sources'],
+        summary: "Declare the imported link as the caller's own writing and attach the text",
+        security: [{ bearerAuth: [] }],
+        params: idParams,
+        body: z
+          .object({
+            excerpt: z.string().trim().min(1).max(20_000),
+            excerpt_location: z.string().max(512).nullable().optional(),
+            published_at: dateTimeSchema.nullable().optional(),
+            confirms_own_content: z.literal(true),
+          })
+          .strict(),
+        response: {
+          200: envelopeSchema(
+            z.object({
+              analysis_status: z.string(),
+              source: sourceSchema,
+              snapshot: snapshotSchema,
+              verification: verificationSchema,
+              deduped: z.boolean(),
+            }),
+          ),
+          403: errorEnvelopeSchema,
+          404: errorEnvelopeSchema,
+          409: errorEnvelopeSchema,
+          422: errorEnvelopeSchema,
+        },
+      },
+    },
+    async (request) => {
+      const auth = requireAuthContext(request);
+      const result = await claimAuthorship(ctx, auth, request.params.id, {
+        excerpt: request.body.excerpt,
+        excerptLocation: request.body.excerpt_location ?? null,
+        publishedAt: request.body.published_at ? new Date(request.body.published_at) : null,
+      });
+      return success(request.id, {
+        analysis_status: await queueEligibleAnalysis(ctx, result.source.id, auth.userId, request.id),
+        source: serializeSource(result.source),
+        snapshot: serializeSnapshot(result.snapshot),
+        verification: {
+          id: result.verification.id,
+          user_id: result.verification.userId,
+          method: result.verification.method,
+          status: result.verification.status,
+          evidence_ref: result.verification.evidenceRef,
+          verifier_user_id: result.verification.verifierUserId,
+          scope: result.verification.scope,
+          notes: result.verification.notes,
+          verified_at: result.verification.verifiedAt?.toISOString() ?? null,
+          created_at: result.verification.createdAt.toISOString(),
+        },
+        deduped: result.deduped,
       });
     },
   );

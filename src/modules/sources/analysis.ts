@@ -31,7 +31,10 @@ export async function requireModelSource(db: Executor, sourceId: string, hash: s
   if (!snapshot || snapshot.contentHash !== hash) throw AppError.conflict('Source snapshot changed');
   if (['pending', 'rejected','revoked'].includes(source.permissionStatus)) throw AppError.consentRequired();
   const [verification] = await db.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId, sourceId), eq(authorVerifications.status, 'verified'))).limit(1);
-  const owner = verification?.userId ?? (source.sourceType === 'author_paste' ? source.createdByUserId : null);
+  // A self-claim may run the model on the claimant's own material; the consent
+  // check below is what actually authorizes processing.
+  const [claim] = await db.select().from(authorVerifications).where(and(eq(authorVerifications.sourceId, sourceId), eq(authorVerifications.status, 'pending'), eq(authorVerifications.method, 'self_claim'))).limit(1);
+  const owner = verification?.userId ?? (source.sourceType === 'author_paste' ? source.createdByUserId : null) ?? claim?.userId ?? null;
   if (!owner || !await hasActiveConsent(db, sourceId, 'external_model_processing', owner)) throw AppError.consentRequired();
   const text = snapshot.body ?? snapshot.excerpt ?? '';
   if (!text.trim() || text.length > 64000) throw AppError.sourceIncomplete('Material empty or exceeds input budget');

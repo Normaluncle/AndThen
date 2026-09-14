@@ -43,6 +43,7 @@ import { invalidatePreparation } from '../memory/preparation.js';
 import { sha256 } from '../identity/tokens.js';
 import type { AuthContext, ModuleContext } from '../../shared/types.js';
 import {
+  canActAsAuthor,
   isExcludedCohort,
   isPubliclyVisible,
   isSourceAuthor,
@@ -292,6 +293,176 @@ export async function importSource(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Author self-claim                                                           */
+/* -------------------------------------------------------------------------- */
+
+export interface ClaimAuthorshipInput {
+  /** The author's own text. Required: a claim without material is not a claim. */
+  excerpt: string;
+  excerptLocation: string | null;
+  /** The original publication date, declared by the author. Never inferred. */
+  publishedAt: Date | null;
+}
+
+export interface ClaimAuthorshipResult {
+  source: SourceRow;
+  snapshot: SourceSnapshotRow;
+  verification: AuthorVerificationRow;
+  /** True when the same excerpt was already claimed before. */
+  deduped: boolean;
+}
+
+/** Only a link we resolved on the caller's behalf can be claimed. */
+const CLAIMABLE_SOURCE_TYPES: ReadonlySet<SourceType> = new Set<SourceType>([
+  'third_party_link',
+  'official_search',
+]);
+
+/**
+ * The author says "this is my own answer", and hands over the text to prove it.
+ *
+ * Why this is not a way to steal someone else's story: a claim is only ever
+ * available to the user who imported the link (never to a third party), it is
+ * recorded as `self_claim` + `pending` — a declaration, not a verification —
+ * and it unlocks private work only. Public display still requires a `verified`
+ * author link, which a login can never produce.
+ *
+ * What it does unlock is the point of the product: the author may now paste the
+ * rest of their own material, consent to a private interview, and let the model
+ * read their own text.
+ */
+export async function claimAuthorship(
+  ctx: ModuleContext,
+  auth: AuthContext,
+  sourceId: string,
+  input: ClaimAuthorshipInput,
+): Promise<ClaimAuthorshipResult> {
+  const excerpt = input.excerpt.trim();
+  if (!excerpt) throw AppError.sourceIncomplete('A self-claim requires the original text');
+
+  const now = ctx.now();
+  const contentHash = snapshotContentHash({
+    materialLevel: 'exact_excerpt',
+    body: null,
+    excerpt,
+    excerptLocation: input.excerptLocation,
+  });
+
+  return ctx.db.transaction(async (tx) => {
+    await tx.select({ id: sources.id }).from(sources).where(eq(sources.id, sourceId)).for('update');
+    const source = await findSourceById(tx, sourceId);
+    if (!source) throw AppError.notFound('Source not found');
+
+    const access = await resolveSourceAccess(tx, source, auth);
+    if (!access.isImporter && !access.isAdmin) {
+      throw AppError.forbidden('Only the user who registered this link may claim it');
+    }
+    if (!CLAIMABLE_SOURCE_TYPES.has(source.sourceType)) {
+      throw AppError.validation('This source is not a link import that can be claimed');
+    }
+    const boundOwner = await tx
+      .select({ userId: authorVerifications.userId })
+      .from(authorVerifications)
+      .where(and(eq(authorVerifications.sourceId, sourceId), eq(authorVerifications.status, 'verified')))
+      .limit(1);
+    if (boundOwner[0] && boundOwner[0].userId !== auth.userId) {
+      throw AppError.conflict('This source is already verified to a different author');
+    }
+
+    const existing = await tx
+      .select()
+      .from(sourceSnapshots)
+      .where(and(eq(sourceSnapshots.sourceId, sourceId), eq(sourceSnapshots.contentHash, contentHash)))
+      .limit(1);
+
+    let snapshot = existing[0];
+    if (!snapshot) {
+      const maxRow = await tx
+        .select({ max: sql<number>`coalesce(max(${sourceSnapshots.version}), 0)::int` })
+        .from(sourceSnapshots)
+        .where(eq(sourceSnapshots.sourceId, sourceId));
+      const inserted = await tx
+        .insert(sourceSnapshots)
+        .values({
+          sourceId,
+          version: (maxRow[0]?.max ?? 0) + 1,
+          materialLevel: 'exact_excerpt',
+          body: null,
+          excerpt,
+          excerptLocation: input.excerptLocation,
+          contentHash,
+          publishedAt: input.publishedAt,
+          upstreamUpdatedAt: null,
+          acquiredAt: now,
+          createdByUserId: auth.userId,
+        })
+        .returning();
+      snapshot = inserted[0];
+      if (!snapshot) throw AppError.internal('Failed to create source snapshot');
+    }
+
+    const existingClaim = await tx
+      .select()
+      .from(authorVerifications)
+      .where(
+        and(
+          eq(authorVerifications.sourceId, sourceId),
+          eq(authorVerifications.userId, auth.userId),
+          eq(authorVerifications.method, 'self_claim'),
+        ),
+      )
+      .limit(1);
+    let verification = existingClaim[0];
+    if (!verification) {
+      const inserted = await tx
+        .insert(authorVerifications)
+        .values({
+          sourceId,
+          userId: auth.userId,
+          method: 'self_claim',
+          status: 'pending',
+          evidenceRef: null,
+          verifierUserId: null,
+          scope: 'importer self-declaration; identity not independently verified',
+          notes: null,
+          verifiedAt: null,
+        })
+        .returning();
+      verification = inserted[0];
+      if (!verification) throw AppError.internal('Failed to record the author claim');
+    }
+
+    let updated = source;
+    if (source.permissionStatus === 'pending') {
+      const rows = await tx
+        .update(sources)
+        .set({ permissionStatus: 'private_only', updatedAt: now })
+        .where(eq(sources.id, sourceId))
+        .returning();
+      updated = rows[0] ?? source;
+    }
+
+    await invalidatePreparation(ctx, tx, sourceId);
+    await invalidateAuthorMemory(ctx, tx, auth.userId);
+    await writeAudit(tx, {
+      actorUserId: auth.userId,
+      action: 'source.author_claimed',
+      subjectType: 'source',
+      subjectId: sourceId,
+      properties: {
+        method: 'self_claim',
+        status: verification.status,
+        material_level: 'exact_excerpt',
+        has_declared_published_at: Boolean(input.publishedAt),
+        source_permission_status: updated.permissionStatus,
+      },
+    });
+
+    return { source: updated, snapshot, verification, deduped: Boolean(existing[0]) };
+  });
+}
+
+/* -------------------------------------------------------------------------- */
 /* Read                                                                        */
 /* -------------------------------------------------------------------------- */
 
@@ -373,7 +544,7 @@ export async function grantConsent(
   if (!source) throw AppError.notFound('Source not found');
 
   const access = await resolveSourceAccess(tx, source, auth);
-  if (!access.isAuthor) {
+  if (!canActAsAuthor(access)) {
     throw AppError.forbidden('Only the source author may grant a consent for it');
   }
 
@@ -463,7 +634,7 @@ export async function revokeConsent(
   const access = await resolveSourceAccess(tx, source, auth);
   // The author may revoke their own consent; an admin may revoke for incident
   // response. A researcher can never sign (or unsign) on the author's behalf.
-  if (!access.isAuthor && !access.isAdmin) {
+  if (!canActAsAuthor(access) && !access.isAdmin) {
     throw AppError.forbidden('Only the source author or an admin may revoke a consent');
   }
 
@@ -849,12 +1020,20 @@ export async function listPublicStories(
         sql`((${consents.expiresAt} is null and ${consents.grantedAt} > now() - interval '90 days') or ${consents.expiresAt} > now())`,
       ),
     );
-  const publishedDate=sql`(select ss.published_at from source_snapshots ss where ss.source_id=${sources.id} order by ss.version desc limit 1)`;
+  const snapshotField=(column:'published_at'|'upstream_updated_at'|'acquired_at')=>sql`(select ss.${sql.raw(column)} from source_snapshots ss where ss.source_id=${sources.id} order by ss.version desc limit 1)`;
+  /**
+   * One story time, most trustworthy first: the upstream publish date, else the
+   * upstream update date, else when we captured it. `acquired_at` is NOT NULL on
+   * every snapshot, so this always resolves — a date range can no longer empty the
+   * list just because the provider omitted a field. The response still reports the
+   * three raw fields separately, so the UI can say which one it is showing.
+   */
+  const storyTime=sql`coalesce(${snapshotField('published_at')}, ${snapshotField('upstream_updated_at')}, ${snapshotField('acquired_at')})`;
   const searchable=sql`coalesce(${sources.title},'') || ' ' || coalesce((select coalesce(ss.excerpt,ss.body,'') from source_snapshots ss where ss.source_id=${sources.id} order by ss.version desc limit 1),'')`;
   const where = and(
     search.q ? sql`position(lower(${search.q}) in lower(${searchable})) > 0` : undefined,
-    search.from ? sql`${publishedDate} >= ${search.from}::date` : undefined,
-    search.to ? sql`${publishedDate} < ${search.to}::date + interval '1 day'` : undefined,
+    search.from ? sql`${storyTime} >= ${search.from}::date` : undefined,
+    search.to ? sql`${storyTime} < ${search.to}::date + interval '1 day'` : undefined,
     eq(sources.permissionStatus, 'public_approved'),
     exists(revokedConsent),
     isNull(sources.deletedAt),
@@ -868,7 +1047,7 @@ export async function listPublicStories(
     .select()
     .from(sources)
     .where(where)
-    .orderBy(search.sort==='oldest'?sql`${publishedDate} asc nulls last`:search.sort==='newest'?sql`${publishedDate} desc nulls last`:desc(sources.createdAt),sources.id)
+    .orderBy(search.sort==='oldest'?sql`${storyTime} asc`:search.sort==='newest'?sql`${storyTime} desc`:desc(sources.createdAt),sources.id)
     .limit(limit)
     .offset(offset);
 

@@ -334,3 +334,9 @@ footer.app-footer { text-align: center; color: var(--muted); font-size: 13px; pa
     background: linear-gradient(180deg, transparent, #fff 35%);
   }
 }
+
+/* A verified OAuth avatar fills the same circular slot as the initial
+   placeholder, so the header looks identical whether or not a picture exists. */
+.d-profile-photo { object-fit: cover; }
+.avatar-btn { overflow: hidden; }
+.avatar-btn .d-profile-photo { display: block; width: 100%; height: 100%; border-radius: 50%; }

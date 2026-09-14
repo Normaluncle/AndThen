@@ -29,6 +29,7 @@ describe('business routes appear in the OpenAPI document', () => {
       '/api/sources/{id}/consents',
       '/api/sources/{id}/consents/{purpose}',
       '/api/sources/{id}/author-verifications',
+      '/api/sources/{id}/author-claim',
       '/api/stories',
       '/api/stories/{id}',
       '/api/stories/{id}/interest',

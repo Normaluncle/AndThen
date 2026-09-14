@@ -1,0 +1,1 @@
+ALTER TYPE "public"."verification_method" ADD VALUE 'self_claim';

@@ -7,6 +7,10 @@
  *    database and `request.auth.userId`.
  *  - A source is "authored" by a user only when that user self-imported it as
  *    `author_paste`, or holds a `verified` `author_verifications` row for it.
+ *  - A `self_claim` row is a declaration, not evidence. It grants the claimant
+ *    the *private* rights of an author (open a case, consent to a private
+ *    interview and to model processing, run analysis on their own material) and
+ *    nothing more: public display still requires `verified`.
  *  - A researcher may access a source only if they are the one responsible for
  *    it (importer or creator of a case on it) — never every source.
  *  - Consent is separate from login: it lives in `consents`, per purpose.
@@ -59,6 +63,30 @@ export async function isVerifiedAuthor(
 }
 
 /**
+ * A pending `self_claim` by this user: they said the material is their own
+ * writing, and nobody has verified it yet. Never evidence of identity.
+ */
+export async function isSelfClaimedAuthor(
+  db: Executor,
+  sourceId: string,
+  userId: string,
+): Promise<boolean> {
+  const rows = await db
+    .select({ id: authorVerifications.id })
+    .from(authorVerifications)
+    .where(
+      and(
+        eq(authorVerifications.sourceId, sourceId),
+        eq(authorVerifications.userId, userId),
+        eq(authorVerifications.method, 'self_claim'),
+        eq(authorVerifications.status, 'pending'),
+      ),
+    )
+    .limit(1);
+  return rows.length > 0;
+}
+
+/**
  * True when the user is the source's author: a self-imported `author_paste`
  * (they bound only themselves at import time) or a verified author link.
  */
@@ -90,6 +118,7 @@ export interface SourceAccess {
   isImporter: boolean;
   isAuthor: boolean;
   isVerifiedAuthor: boolean;
+  isSelfClaimedAuthor: boolean;
   isAssignedResearcher: boolean;
 }
 
@@ -100,6 +129,7 @@ export async function resolveSourceAccess(
 ): Promise<SourceAccess> {
   const isImporter = source.createdByUserId === auth.userId;
   const verified = await isVerifiedAuthor(db, source.id, auth.userId);
+  const selfClaimed = await isSelfClaimedAuthor(db, source.id, auth.userId);
   const isAuthor = (source.sourceType === 'author_paste' && isImporter) || verified;
   const assignedResearcher =
     auth.role === 'researcher' && (await isAssignedResearcher(db, source.id, auth.userId));
@@ -108,8 +138,18 @@ export async function resolveSourceAccess(
     isImporter,
     isAuthor,
     isVerifiedAuthor: verified,
+    isSelfClaimedAuthor: selfClaimed,
     isAssignedResearcher: assignedResearcher,
   };
+}
+
+/**
+ * The private rights of an author. A self-claim reaches these; only a verified
+ * author may publish. Use this for case creation, private consents and analysis
+ * — never for `demo_public_display`.
+ */
+export function canActAsAuthor(access: SourceAccess): boolean {
+  return access.isAuthor || access.isSelfClaimedAuthor;
 }
 
 /** Any of owner/importer/author/assigned-researcher/admin may read a private source. */

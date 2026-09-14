@@ -26,6 +26,31 @@ it('uses conservative evidence rules and a Shanghai calendar day',()=>{
  expect(screenCandidate({...item(1),title:'知识',text:'这是一篇纯知识解释文章，讲解基础理论与方法，不包含个人时间线以及具体实践记录。'}).decision).toBe('held');
  expect(discoveryWindow(new Date('2026-09-14T16:01:00Z'),60).dayStart.toISOString()).toBe('2026-09-14T16:00:00.000Z');
 });
+it('shows the official engagement as heat on the card, separate from site counters',async()=>{
+ const h=await createHarness();try{
+ Object.assign(h.moduleCtx.env,{DISCOVERY_AI_ENABLED:true,LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['具体经历与时间线'],year:null,caption:'我辞职转行学新技能'})}}]})));
+ // The counts the official search response returns next to the summary.
+ await execute(h.moduleCtx,async()=>[{...item(51),vote_up_count:18,comment_count:3,ranking_score:1.39}]);
+ const card=(await h.app.inject({url:'/api/discovery/local-preview'})).json().data.items[0];
+ expect(card).toMatchObject({vote_up_count:18,comment_count:3,ranking_score:1.39,heat:24});
+ // The heat is the platform's number. This candidate is not a story on this site, so
+ // it carries no site counters — the card must not copy the heat into them.
+ expect(card.site_counts).toBeUndefined();
+ // Every card can be dated: the preview records when it was captured.
+ expect(typeof card.acquired_at).toBe('string');
+ }finally{vi.restoreAllMocks();await h.close();}
+});
+it('leaves the heat unknown instead of inventing a zero when no counts came back',async()=>{
+ const h=await createHarness();try{
+ Object.assign(h.moduleCtx.env,{DISCOVERY_AI_ENABLED:true,LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['具体经历与时间线'],year:null,caption:'我辞职转行学新技能'})}}]})));
+ await execute(h.moduleCtx,async()=>[item(52)]);
+ const card=(await h.app.inject({url:'/api/discovery/local-preview'})).json().data.items[0];
+ expect(card.heat).toBeNull();
+ expect(card.vote_up_count).toBeNull();
+ }finally{vi.restoreAllMocks();await h.close();}
+});
 it('publishes only model-approved summaries, records real usage, and never creates an author story',async()=>{
  const h=await createHarness();try{
  const ctx=h.moduleCtx;Object.assign(ctx.env,{DISCOVERY_AI_ENABLED:true,PUBLIC_BASE_URL:'https://example.com',LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
