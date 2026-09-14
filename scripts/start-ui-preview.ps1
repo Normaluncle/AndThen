@@ -6,7 +6,7 @@ $previewRoot = Split-Path $PSScriptRoot -Parent
 $previousIntegrationValues = @{}
 try {
   foreach ($line in Get-Content -LiteralPath (Join-Path $previewRoot '.env.local')) {
-    if ($line -match '^(ZHIHU_[A-Z_]+)=(.*)$') {
+    if ($line -match '^((?:ZHIHU|LLM|EMBEDDING|MEMORY)_[A-Z_]+)=(.*)$') {
       $key = $Matches[1]
       $previousIntegrationValues[$key] = [Environment]::GetEnvironmentVariable($key,'Process')
       $value = $Matches[2].Trim().Trim('"').Trim("'")

@@ -127,3 +127,14 @@
 .d-account-drawer-nav svg{width:20px;height:20px;flex-shrink:0}
 .d-account-drawer-nav small{margin-left:auto;font-size:10px}
 @media(max-width:767px){.d-account-drawer-handle{position:fixed;left:0;top:38%;z-index:35;display:flex;flex-direction:column;align-items:center;gap:8px;width:30px;padding:13px 6px;border:1px solid #d5e8ff;border-left:0;border-radius:0 12px 12px 0;background:#eaf5ff;color:#087bff;box-shadow:3px 2px 12px #294d7d14}.d-account-drawer-handle>span:last-child{writing-mode:vertical-rl;font-size:12px;letter-spacing:2px}}
+/* One workbench layout for every account, with a full-height hero and text-safe illustration. */
+.d-work-hero{overflow:hidden;position:relative}
+.d-work-hero>.d-art{position:absolute;right:0;top:0;bottom:0;height:100%;margin:0;max-height:none;width:72%;mask-image:linear-gradient(to right,transparent,#000 16%);}
+.d-work-hero>div:first-child{position:relative;z-index:1}
+.d-work-quote{position:relative;min-height:170px;background:#eff8ff;overflow:hidden;padding:0!important}
+.d-work-quote>img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:center}
+.d-work-quote>div{position:relative;padding:36px 10px 20px;width:66%;font-size:11px;line-height:1.7}
+.d-work-quote>div p{margin:0 0 10px}
+@media(max-width:767px){.d-work-hero>.d-art{width:55%;opacity:.55}.d-work-hero h1,.d-work-hero p{position:relative;z-index:1}}
+
+.home-cover-link{padding:0;border:0;background:transparent;align-self:start;cursor:pointer}.home-cover-link .story-cover{width:100%}.d-workflow>.d-panel{padding:24px;min-width:0}.d-workflow h1{font-size:24px;line-height:1.6}.d-workflow textarea,.d-workflow select{width:100%;border:1px solid #dbe5f3;border-radius:8px;padding:12px;font:inherit}.d-workflow article{padding:12px 0}.d-workflow .interview-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:16px}

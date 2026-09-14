@@ -147,16 +147,17 @@ function validateMaterial(input: ImportSourceInput): void {
   }
 }
 
-function naturalSourceKey(input: ImportSourceInput): string {
+function naturalSourceKey(input: ImportSourceInput, ownerId: string): string {
   const identity = input.originalUrl
     ? `url:${input.originalUrl}`
     : `acct:${input.originalAccountRef ?? ''}|title:${input.title ?? ''}`;
-  return `${input.sourceType}|${identity}`;
+  return `${input.sourceType}|${input.sourceType==='author_paste'&&!input.originalUrl?ownerId:''}|${identity}`;
 }
 
 async function findExistingSource(
   db: Executor,
   input: ImportSourceInput,
+  ownerId: string,
 ): Promise<SourceRow | undefined> {
   const conditions = [eq(sources.sourceType, input.sourceType)];
   if (input.originalUrl) {
@@ -169,6 +170,7 @@ async function findExistingSource(
       input.title ? eq(sources.title, input.title) : isNull(sources.title),
     );
   }
+  if(input.sourceType==='author_paste'&&!input.originalUrl)conditions.push(eq(sources.createdByUserId,ownerId));
   const rows = await db
     .select()
     .from(sources)
@@ -195,12 +197,12 @@ export async function importSource(
 
   const now = ctx.now();
   const contentHash = snapshotContentHash(input);
-  const lockKey = naturalSourceKey(input);
+  const lockKey = naturalSourceKey(input,auth.userId);
 
   return ctx.db.transaction(async (tx) => {
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${lockKey}))`);
 
-    let source = await findExistingSource(tx, input);
+    let source = await findExistingSource(tx, input,auth.userId);
     if (source) {
       const [locked] = await tx.select().from(sources).where(eq(sources.id, source.id)).for('update');
       if (!locked || locked.deletedAt || ['revoked', 'rejected'].includes(locked.permissionStatus)) throw AppError.withdrawn('Source is unavailable');

@@ -419,3 +419,11 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - 原始 250 项文件、规范化目录和联网记录在 assets/cover-library-250。scripts/import-cdn-covers.mjs 可复核生成 seed-cdn-covers.sql；不得覆盖已应用的迁移。封面仅为主题配图，非原作者照片。
 
 - 前端入口修正：标准 URL 固定使用 DesignApp，demo 登录开关或接口错误不再决定视觉入口；只有显式 mode=live 进入旧功能界面。手机个人中心横向标签换成左侧纵向抽屉，使用同一 personalTabs 路由表。
+
+## 2026-09-14 release contract additions
+
+- `GET /api/discovery/candidates/:id` exposes the same official summary used in discovery with its stable candidate ID and presentation. Missing/deleted/revoked linked sources return 404. It does not grant author identity or publication permission.
+- `DISCOVERY_AI_ENABLED=true` enables operator-authorized classification of official search summaries on local or public installations. The durable queue schedules the next tick before calling providers. `DISCOVERY_DAILY_LIMIT` (maximum 50) bounds admitted candidates, not a promise that 50 suitable new answers exist. `DISCOVERY_DAILY_SEARCH_LIMIT` bounds search runs. Defaults are 60 minutes / 50 candidates / 12 searches per Shanghai calendar day.
+- Model classification uses `ai_runs.task=ai_a_extract` with `prompt_version=discovery-summary-2026-09-14.1` and `output.scope=official_summary_classification`. This separate output contains decision, reasons, extractive caption, candidate URL and summary hash; it is not a source `analysisResultSchema` or an author profile. Selection records retain the run ID/model/caption. Invalid output is held, never replaced by fabricated success; one invalid item does not discard other valid candidates.
+- `/api/discovery/local-preview` retains its compatible URL. With AI discovery enabled it returns `ai_enabled=true` and only model-approved official candidates. Old rule-only selections are excluded. Source permission revocation still hides linked candidates. Full source analysis, memories, interviews and publication continue to require their existing independent consent gates.
+- Pasted material without an original URL deduplicates within its importing author, preventing different authors with the same title from sharing private source identity.

@@ -58,10 +58,10 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
   let failureCode: string | null = null;
   try {
     const readerInterests = await reasonSummary(ctx.db,p.source_id);
-    const serialized = JSON.stringify({ reader_interests:{...readerInterests,tags:readerInterests.tags.slice(0,12)}, evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), remaining_questions: 5 - input.session.questionsAsked,
+    const serialized = JSON.stringify({ reader_interests:{...readerInterests,tags:readerInterests.tags.slice(0,12)}, evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), question_number: input.session.questionsAsked + 1, remaining_questions: Math.min(5,input.session.budgetMainQuestions) - input.session.questionsAsked,
       history: input.history.map(m => ({ role: m.role, question: m.question, answer: m.authorMessage, skipped: m.skipped })) });
     if (serialized.length > 64000) throw AppError.sourceIncomplete('Authorized input exceeds the task budget');
-    completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
+    completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview + `\n本次明确生成第${input.session.questionsAsked+1}问（总预算${Math.min(5,input.session.budgetMainQuestions)}问）。${input.session.questionsAsked+1===Math.min(5,input.session.budgetMainQuestions)?'这是最后一问。结合作者最近的回答，选择尚未回答的开放收尾角度，不重复历史问题；若建议已经说过，邀请补充尚未谈到的个人感受。':'这不是最后一问，禁止使用最后、收尾等结束措辞。继续围绕未讲清的经历展开。'}` }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
     turn = turnSchema.parse(JSON.parse(completion.content));
     if (turn.basis_refs.some(ref => !evidence.some(e => e.id === ref))) throw AppError.sourceIncomplete('Unsupported interview reference');
     if ((turn.question.match(/[?？]/g) ?? []).length > 1 || input.history.some(m => m.question && questionKey(m.question) === questionKey(turn!.question))) throw AppError.conflict('Repeated or multiple questions');

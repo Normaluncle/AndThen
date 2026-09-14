@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { oauthReady, registerOAuthRoutes } from './oauth-routes.js';
 import {syncOAuthAuthor} from './oauth-sync.js';
 import { eq } from 'drizzle-orm';
-import { sources, zhihuCommentSyncs } from '../../db/schema.js';
+import { sources, zhihuCommentSyncs,discoveryCandidates } from '../../db/schema.js';
 import { storeCandidates,candidateFeed,followCandidate } from './discovery.js';
 import { syncCommentPage } from './comments.js';
 import { requirePublicStory } from '../sources/service.js';
@@ -34,6 +34,12 @@ export const zhihuModule: ModuleDefinition = {
       search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: oauthReady(ctx), oauth_reason: oauthReady(ctx) ? 'available' : ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
     }));
     r.get('/discovery/search', { schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await presentCandidates(await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q))) }));
+    r.get('/discovery/candidates/:id',{schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),response:{200:envelopeSchema(z.object({candidate}))}}},async request=>{
+      const [row]=await ctx.db.select().from(discoveryCandidates).where(eq(discoveryCandidates.id,request.params.id));
+      if(!row)throw AppError.notFound();
+      if(row.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,row.sourceId));if(!source||source.deletedAt||['rejected','revoked'].includes(source.permissionStatus))throw AppError.notFound();}
+      return success(request.id,{candidate:(await presentCandidates([{...row.data,candidate_id:row.id}]))[0]!});
+    });
     r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request)))}));
     r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request),true))}));
     r.put('/discovery/candidates/:id/interest',{preHandler:[app.authenticate],schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),body:z.object({active:z.boolean()}).strict(),response:{200:envelopeSchema(z.record(z.unknown()))}}},async request=>success(request.id,await followCandidate(ctx,requireAuthContext(request),request.params.id,request.body.active)));

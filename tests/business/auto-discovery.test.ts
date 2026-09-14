@@ -1,7 +1,7 @@
 import {it,expect,vi} from 'vitest';
 import {eq} from 'drizzle-orm';
 import {createHarness,auth,seedUser,seedPublishedStory} from './helpers.js';
-import {discoveryRuns,discoverySelections,discoveryCandidates,sources,jobs,type OfficialCandidate} from '../../src/db/schema.js';
+import {aiRuns,discoveryRuns,discoverySelections,discoveryCandidates,sources,jobs,type OfficialCandidate} from '../../src/db/schema.js';
 import {scanDiscovery,seedDiscovery,screenCandidate,discoveryKind,discoveryWindow} from '../../src/modules/zhihu/auto-discovery.js';
 import type {ModuleContext} from '../../src/shared/types.js';
 import type {officialSearch} from '../../src/modules/zhihu/client.js';
@@ -25,6 +25,28 @@ it('uses conservative evidence rules and a Shanghai calendar day',()=>{
  expect(screenCandidate({...item(1),url:'https://example.com/answer/1'}).reason).toBe('invalid_source_url');
  expect(screenCandidate({...item(1),title:'知识',text:'这是一篇纯知识解释文章，讲解基础理论与方法，不包含个人时间线以及具体实践记录。'}).decision).toBe('held');
  expect(discoveryWindow(new Date('2026-09-14T16:01:00Z'),60).dayStart.toISOString()).toBe('2026-09-14T16:00:00.000Z');
+});
+it('publishes only model-approved summaries, records real usage, and never creates an author story',async()=>{
+ const h=await createHarness();try{
+ const ctx=h.moduleCtx;Object.assign(ctx.env,{DISCOVERY_AI_ENABLED:true,PUBLIC_BASE_URL:'https://example.com',LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
+ const mock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({model:'fixture',usage:{prompt_tokens:20,completion_tokens:10},choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['具体经历与时间线'],caption:'开始学习新的技能'})}}]})));
+ await execute(ctx,async()=>[item(31)]);
+ expect(mock).toHaveBeenCalledTimes(1);
+ const feed=(await h.app.inject({url:'/api/discovery/local-preview'})).json().data;
+ expect(feed.ai_enabled).toBe(true);expect(feed.items).toHaveLength(1);expect(feed.items[0].cover_caption).toBe('开始学习新的技能');
+ expect((await h.app.inject({url:'/api/discovery/candidates/'+feed.items[0].candidate_id})).statusCode).toBe(200);
+ expect(await ctx.db.select().from(sources)).toHaveLength(0);
+ const runs=await ctx.db.select().from(aiRuns);expect(runs[0]?.status).toBe('succeeded');expect(runs[0]?.inputTokens).toBe(20);
+ }finally{vi.restoreAllMocks();await h.close();}
+});
+it('rejects invented AI captions and leaves the public feed empty',async()=>{
+ const h=await createHarness();try{
+ Object.assign(h.moduleCtx.env,{DISCOVERY_AI_ENABLED:true,LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['经历'],caption:'赚了100万'})}}]})));
+ await execute(h.moduleCtx,async()=>[item(32)]);
+ expect((await h.app.inject({url:'/api/discovery/local-preview'})).json().data.items).toHaveLength(0);
+ expect((await h.ctx.db.select().from(aiRuns))[0]?.status).toBe('failed');
+ }finally{vi.restoreAllMocks();await h.close();}
 });
 it('deduplicates slots and URLs, caps daily admission, keeps publication separate and gates local exposure',async()=>{
  const h=await createHarness({enableDocs:true});try{

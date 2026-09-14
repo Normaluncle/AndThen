@@ -1,0 +1,1 @@
+ALTER TABLE "discovery_selections" ADD COLUMN "analysis" jsonb;

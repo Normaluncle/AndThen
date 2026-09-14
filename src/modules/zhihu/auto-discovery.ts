@@ -7,11 +7,12 @@ import {discoveryRuns, discoverySelections, discoveryCandidates, sources, type O
 import {success, AppError} from '../../http/errors.js';
 import {envelopeSchema} from '../../http/envelope.js';
 import {officialSearch, canonicalZhihuUrl} from './client.js';
+import {reviewDiscovery} from './discovery-analysis.js';
 import {sourcePresentation} from '../sources/presentation.js';
 
 export const discoveryKind = 'zhihu.discovery.scan';
 export function localDiscoveryEnabled(ctx: ModuleContext) {
-  return ctx.env.LOCAL_DISCOVERY_PREVIEW && ['localhost','127.0.0.1','[::1]'].includes(new URL(ctx.env.PUBLIC_BASE_URL).hostname);
+  return ctx.env.DISCOVERY_AI_ENABLED || ctx.env.LOCAL_DISCOVERY_PREVIEW && ['localhost','127.0.0.1','[::1]'].includes(new URL(ctx.env.PUBLIC_BASE_URL).hostname);
 }
 export function discoveryWindow(now: Date, minutes: number) {
   const interval = minutes * 60000;
@@ -32,7 +33,7 @@ export function screenCandidate(item: OfficialCandidate) {
 export async function seedDiscovery(ctx: ModuleContext) {
   if (!localDiscoveryEnabled(ctx)) return;
   const {slot} = discoveryWindow(ctx.now(),ctx.env.DISCOVERY_INTERVAL_MINUTES);
-  return ctx.jobs.enqueue({kind:discoveryKind,dedupeKey:`discovery:${slot}`,maxAttempts:1});
+  return ctx.jobs.enqueue({kind:discoveryKind,dedupeKey:`discovery:${ctx.env.DISCOVERY_AI_ENABLED?'ai:':''}${slot}`,maxAttempts:1});
 }
 
 export async function scanDiscovery(ctx: ModuleContext, job: JobHandlerContext, search = officialSearch) {
@@ -41,15 +42,15 @@ export async function scanDiscovery(ctx: ModuleContext, job: JobHandlerContext, 
   // Persist the successor before external IO: provider failure must not stop future ticks.
   const run=await job.withFence(async tx=>{
     await tx.execute(sql`select pg_advisory_xact_lock(hashtext('andthen-discovery-admission'))`);
-    await ctx.jobs.enqueue({kind:discoveryKind,dedupeKey:`discovery:${discoveryWindow(window.next,ctx.env.DISCOVERY_INTERVAL_MINUTES).slot}`,runAt:window.next,maxAttempts:1},tx);
+    await ctx.jobs.enqueue({kind:discoveryKind,dedupeKey:`discovery:${ctx.env.DISCOVERY_AI_ENABLED?'ai:':''}${discoveryWindow(window.next,ctx.env.DISCOVERY_INTERVAL_MINUTES).slot}`,runAt:window.next,maxAttempts:1},tx);
     const previous=await tx.select().from(discoveryRuns).where(gte(discoveryRuns.startedAt,window.dayStart));
-    if(previous.some(r=>r.slot===window.slot))return null;
+    if(previous.some(r=>r.slot===`${ctx.env.DISCOVERY_AI_ENABLED?'ai:':''}${window.slot}`))return null;
     const selected=await tx.select({id:discoverySelections.id}).from(discoverySelections).where(and(gte(discoverySelections.createdAt,window.dayStart),eq(discoverySelections.decision,'preview')));
     if(previous.length>=ctx.env.DISCOVERY_DAILY_SEARCH_LIMIT || selected.length>=ctx.env.DISCOVERY_DAILY_LIMIT)return null;
     const queries=ctx.env.DISCOVERY_QUERIES.split('|').map(q=>q.trim().slice(0,300)).filter(Boolean);
     const query=queries[previous.length%queries.length];
     if(!query)return null;
-    const [row]=await tx.insert(discoveryRuns).values({slot:window.slot,query,status:'running',startedAt:now}).onConflictDoNothing().returning();
+    const [row]=await tx.insert(discoveryRuns).values({slot:`${ctx.env.DISCOVERY_AI_ENABLED?'ai:':''}${window.slot}`,query,status:'running',startedAt:now}).onConflictDoNothing().returning();
     return row;
   });
   if(!run)return {data:{skipped:true}};
@@ -59,6 +60,15 @@ export async function scanDiscovery(ctx: ModuleContext, job: JobHandlerContext, 
     const items=await search(ctx.env.ZHIHU_ACCESS_SECRET,run.query);
     await job.heartbeat();
     if(job.signal.aborted)throw AppError.conflict('Discovery cancelled');
+    const reviews=new Map<string,Awaited<ReturnType<typeof reviewDiscovery>>|{decision:string;reason:string;analysis:null}>();
+    if(ctx.env.DISCOVERY_AI_ENABLED){
+      for(const item of items){
+        if(reviews.has(item.url)||screenCandidate(item).decision!=='preview')continue;
+        const [old]=await ctx.db.select({id:discoverySelections.id}).from(discoverySelections).where(eq(discoverySelections.url,item.url));
+        if(old)continue;
+        try{reviews.set(item.url,await reviewDiscovery(ctx,job,item));}catch(error){if(job.signal.aborted)throw error;reviews.set(item.url,{decision:'held',reason:'ai_review_failed',analysis:null});}
+      }
+    }
     const counts=await job.withFence(async tx=>{
       await tx.execute(sql`select pg_advisory_xact_lock(hashtext('andthen-discovery-admission'))`);
       const selected=await tx.select({id:discoverySelections.id}).from(discoverySelections).where(and(gte(discoverySelections.createdAt,window.dayStart),eq(discoverySelections.decision,'preview')));
@@ -67,7 +77,7 @@ export async function scanDiscovery(ctx: ModuleContext, job: JobHandlerContext, 
       for(const item of items){
         const [old]=await tx.select({id:discoverySelections.id}).from(discoverySelections).where(eq(discoverySelections.url,item.url));
         if(old){result.duplicate++;continue;}
-        const review=screenCandidate(item);
+        const review=reviews.get(item.url)||screenCandidate(item);
         if(review.decision==='preview' && remaining<=0){result.capped++;continue;}
         let candidateId: string|null=null;
         if(review.decision==='preview'){
@@ -97,15 +107,15 @@ export async function registerDiscoveryRoutes(app: AppInstance,ctx: ModuleContex
     const rows=await ctx.db.select().from(discoverySelections).where(eq(discoverySelections.decision,'preview')).orderBy(desc(discoverySelections.createdAt)).limit(50);
     const items=[];
     for(const row of rows){
-      if(!row.candidateId)continue;
+      if(!row.candidateId||(ctx.env.DISCOVERY_AI_ENABLED&&!row.analysis))continue;
       const [candidate]=await ctx.db.select().from(discoveryCandidates).where(eq(discoveryCandidates.id,row.candidateId));
       if(!candidate)continue;
       if(candidate.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,candidate.sourceId));if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus))continue;}
       items.push({...row.data,comments:[],candidate_id:row.candidateId,provenance:'official_api',discovery_reason:row.reason,
-        display_status:'local_candidate_preview',analysis_status:'awaiting_model_consent',
-        ...await sourcePresentation(ctx.db,row.url,row.data.title+' '+row.data.text)});
+        display_status:ctx.env.DISCOVERY_AI_ENABLED?'official_candidate':'local_candidate_preview',analysis_status:row.analysis?'ai_reviewed':'awaiting_model_consent',
+        ...await sourcePresentation(ctx.db,row.url,row.data.title+' '+row.data.text),...(row.analysis?.caption?{cover_caption:row.analysis.caption}:{})});
     }
-    return success(request.id,{enabled:true,items});
+    return success(request.id,{enabled:true,ai_enabled:ctx.env.DISCOVERY_AI_ENABLED,items});
   });
   const guard=[app.authenticate,app.requireRole('admin')];
   r.post('/admin/discovery/run',{preHandler:guard,schema:{tags:['zhihu'],body:z.object({}).strict(),response}},async request=>{

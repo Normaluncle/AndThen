@@ -23,6 +23,9 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       if (providerMode === '429') { res.statusCode = 429; res.end('provider-private-error'); return; }
       if (providerMode === 'bad_json') { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ choices: [{ message: { content: 'not json' } }] })); return; }
       const input = JSON.parse(JSON.parse(raw).messages[1].content);
+      expect(input.question_number).toBe(input.history.filter((m:{role:string})=>m.role==='ai').length+1);
+      expect(input.remaining_questions+input.question_number).toBe(6);
+      expect(JSON.parse(raw).messages[0].content).toContain(`第${input.question_number}问`);
       const last = input.history.filter((m: { role: string }) => m.role === 'author').at(-1);
       const answer = last?.answer ?? '';
       const question = providerMode === 'sequence' ? `请补充第${input.history.filter((m: { role: string }) => m.role === 'ai').length + 1}项后续？` : providerMode === 'repeat' ? input.history.find((m: { role: string }) => m.role === 'ai')?.question ?? '后来发生了什么？' : answer.includes('已完成') ? '完成后有什么变化？' : answer.includes('已停止') ? '停止后有什么变化？' : answer.includes('仍在进行') ? '现在进展如何？' : '后来发生了什么？';

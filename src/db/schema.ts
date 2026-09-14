@@ -905,6 +905,7 @@ export const discoverySelections = pgTable('discovery_selections', {
   runId: uuid('run_id').notNull().references(()=>discoveryRuns.id),
   candidateId: uuid('candidate_id').references(()=>discoveryCandidates.id,{onDelete:'cascade'}),
   data: jsonb('data').$type<OfficialCandidate>().notNull(),
+  analysis: jsonb('analysis').$type<{run_id:string;caption:string|null;reasons:string[];model:string}>(),
   decision: text('decision').notNull(),
   reason: text('reason').notNull(),
   createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
