@@ -1,3 +1,7 @@
+import {queueEligibleAnalysis} from './analysis.js';
+import {coverCatalog} from '../../db/schema.js';
+import {presentationShape} from './presentation-schema.js';
+import {sourcePresentation} from './presentation.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import type { SourceRow, SourceSnapshotRow } from '../../db/schema.js';
@@ -108,6 +112,8 @@ const publicFollowupSchema = z.object({
 });
 
 const publicStorySchema = z.object({
+  site_counts:z.array(z.number()),
+  ...presentationShape,
   source_id: z.string().uuid(),
   title: z.string().nullable(),
   source_type: sourceTypeSchema,
@@ -154,6 +160,9 @@ const followingUpdateSchema = z.object({
 });
 
 const followingItemSchema = z.object({
+  site_counts:z.array(z.number()).optional(),
+  ...z.object(presentationShape).partial().shape,
+  text:z.string().nullable(),
   source_id: z.string().uuid(),
   available: z.boolean(),
   followed_at: z.string(),
@@ -235,6 +244,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         response: {
           200: envelopeSchema(
             z.object({
+              analysis_status:z.string(),
               source_id: z.string().uuid(),
               snapshot_id: z.string().uuid(),
               version: z.number().int(),
@@ -269,6 +279,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         provenance: body.provenance,
       });
       return success(request.id, {
+        analysis_status:await queueEligibleAnalysis(ctx,result.source.id,auth.userId,request.id),
         source_id: result.source.id,
         snapshot_id: result.snapshot.id,
         version: result.snapshot.version,
@@ -280,6 +291,8 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
       });
     },
   );
+
+  r.get('/covers',{schema:{tags:['sources'],response:{200:envelopeSchema(z.object({items:z.array(z.object({id:z.string(),category:z.string(),tags:z.array(z.string()),alt:z.string(),sourceUrl:z.string().nullable(),imageUrl:z.string().nullable(),status:z.string()}))}))}}},async request=>success(request.id,{items:await ctx.db.select().from(coverCatalog)}));
 
   /* ------------------------------ read ------------------------------ */
 
@@ -293,7 +306,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         security: [{ bearerAuth: [] }],
         params: idParams,
         response: {
-          200: envelopeSchema(z.object({ source: sourceSchema, snapshots: z.array(snapshotSchema) })),
+          200: envelopeSchema(z.object({ source: sourceSchema, presentation:z.object(presentationShape), snapshots: z.array(snapshotSchema) })),
           404: errorEnvelopeSchema,
         },
       },
@@ -304,6 +317,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
       const snapshots = await listSourceSnapshots(ctx.db, source.id);
       return success(request.id, {
         source: serializeSource(source),
+        presentation:await sourcePresentation(ctx.db,source.id,source.title,snapshots[0]),
         snapshots: snapshots.map(serializeSnapshot),
       });
     },
@@ -379,7 +393,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         body: z.object({ purpose: consentPurposeSchema, version: z.string().min(1).max(64).default('v1'), expires_at: z.string().datetime({ offset: true }).optional() }).strict(),
         response: {
           200: envelopeSchema(
-            z.object({ consent: consentSchema, source_permission_status: permissionStatusSchema }),
+            z.object({ analysis_status:z.string(), consent: consentSchema, source_permission_status: permissionStatusSchema }),
           ),
           403: errorEnvelopeSchema,
           404: errorEnvelopeSchema,
@@ -397,6 +411,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
         request.body.expires_at ? new Date(request.body.expires_at) : undefined,
       );
       return success(request.id, {
+        analysis_status:await queueEligibleAnalysis(ctx,request.params.id,auth.userId,request.id),
         consent: {
           id: consent.id,
           purpose: consent.purpose,
@@ -559,7 +574,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
       schema: {
         tags: ['sources'],
         summary: 'List publicly licensed stories',
-        querystring: paginationQuery,
+        querystring: paginationQuery.extend({q:z.string().trim().max(300).optional(),from:z.string().date().optional(),to:z.string().date().optional(),sort:z.enum(['relevance','newest','oldest']).optional()}),
         response: {
           200: envelopeSchema(
             z.object({
@@ -574,7 +589,7 @@ export async function registerSourcesRoutes(app: AppInstance, ctx: ModuleContext
     },
     async (request) => {
       const { limit, offset } = request.query;
-      const page = await listPublicStories(ctx.db, limit, offset);
+      const page = await listPublicStories(ctx.db, limit, offset,request.query);
       return success(request.id, {
         items: page.items,
         total: page.total,

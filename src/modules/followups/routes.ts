@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { attachInterviewQuestions } from './questions.js';
-import { interviewMessages } from '../../db/schema.js';
+import {requirePublicStory} from '../sources/service.js';
+import { followupCases, interviewMessages } from '../../db/schema.js';
 import { and, desc, eq } from 'drizzle-orm';
 import { notifications, interviewSessions, followupVersions } from '../../db/schema.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
@@ -32,7 +33,14 @@ export const registerFollowupRoutes: ModuleRegistrar = (app, ctx) => {
   });
   for (const path of ['/notifications', '/me/notifications']) api.get(path, { ...hooks, schema: { tags: ['notifications'], response, security: base.security, summary: 'List own notification metadata; bodies are read through the authorized public endpoint' } }, async req => {
     const items = await ctx.db.select().from(notifications).where(eq(notifications.readerKey, requireAuthContext(req).userId)).orderBy(desc(notifications.createdAt)).limit(100);
-    return success(req.id, { items });
+    const enriched=await Promise.all(items.map(async item=>{
+      if(item.status==='withdrawn')return {...item,title:'这条后续已撤回',excerpt:'内容不再公开提供。'};
+      const [entry]=await ctx.db.select({sourceId:followupCases.sourceId}).from(followupCases).where(eq(followupCases.id,item.caseId));
+      if(!entry)return {...item,title:'故事暂不可用'};
+      try{const story=await requirePublicStory(ctx.db,entry.sourceId);return {...item,title:story.title,excerpt:'作者补充了新的后续，看看这段经历后来的变化。'};}
+      catch(e){if(!(e instanceof AppError)||e.code!=='not_found')throw e;return {...item,title:'故事暂不可用',excerpt:'原内容当前不再公开提供。'};}
+    }));
+    return success(req.id, { items:enriched });
   });
   api.post('/notifications/:id/read', { ...hooks, schema: { ...base, summary: 'Mark own notification read' } }, async req => {
     const [item] = await ctx.db.select().from(notifications).where(and(eq(notifications.id, req.params.id), eq(notifications.readerKey, requireAuthContext(req).userId)));

@@ -30,7 +30,7 @@ export function SourceMaterials({role}) {
       <p>处理同意只能由有权作者授予；记忆建档和采访还需要单独完成作者核验。</p>
       {consents.map(c=><p key={c.id}>{c.purpose} · {c.status}</p>)}
       {[['private_interview','私有采访'],['external_model_processing','模型处理'],['demo_public_display','本站展示']].map(([purpose,label])=><div key={purpose}>
-        <button disabled={busy} onClick={()=>run(async()=>{await api(`/sources/${detail.source.id}/consents`,'POST',{purpose,version:'v1'});await read(detail.source.id);setNotice('已保存本项同意。');})}>同意{label}</button>
+        <button disabled={busy} onClick={()=>run(async()=>{const result=await api(`/sources/${detail.source.id}/consents`,'POST',{purpose,version:'v1'});await read(detail.source.id);setNotice(result.analysis_status==='queued'?'已保存同意，正在分析回访价值与封面文案。':'已保存本项同意。');})}>同意{label}</button>
         <button disabled={busy} onClick={()=>run(async()=>{await api(`/sources/${detail.source.id}/consents/${purpose}`,'DELETE');await read(detail.source.id);setNotice('已撤销本项同意，相关使用将受限制。');})}>撤销{label}同意</button>
       </div>)}
     </article>}

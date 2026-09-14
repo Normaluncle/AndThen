@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { aiRuns } from '../db/schema.js';
 import { AppError } from '../http/errors.js';
 import { JobLeaseLostError } from '../jobs/transaction.js';
+import { communityModule } from './community/index.js';
 import { identityModule } from './identity/index.js';
 import { sourcesModule } from './sources/index.js';
 import { casesModule } from './cases/index.js';
@@ -29,6 +30,7 @@ export const modules: readonly ModuleDefinition[] = [
   memoryModule,
   zhihuModule,
   workbenchModule,
+  communityModule,
 ];
 
 export function registerModuleJobHandlers(ctx: ModuleContext, registry: JobHandlerRegistry): void {

@@ -364,3 +364,58 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - 浏览器 `Accept: text/html` 的知乎回调在 state、浏览器关联和官方身份核验成功后直接签发站内 Cookie，并以 303 返回 `/?oauth=success#account`；失败返回 `/?oauth=failed#account`。地址只含结果标记，不含授权码或令牌。非浏览器 JSON 回调和原 finish 接口保留。
 - Demo 使用当前标签跳转授权，无需弹窗、手动刷新或领取登录结果。登录后留在账号页；普通导航位置只作为非敏感 UI 状态保存。
 - 资料处理同意仍为独立操作，登录不会自动启用记忆或授予公开发布权限。
+
+## 2026-09-14：站内互动与发现搜索
+
+以下接口统一使用 success(request.id, payload) / AppError。站内互动不包含知乎原平台指标。
+
+| 接口 | 身份与载荷 | 返回 / 行为 |
+| --- | --- | --- |
+| GET /api/stories/:id/community | 公开来源；offset 默认 0 | likes、saves、comments、items（每页 10 条）、liked/saved=false |
+| GET /api/me/stories/:id/community | 当前认证用户 | 同上，附当前用户的 liked/saved；评论 mine 标记 |
+| PUT /api/stories/:id/community | 当前认证用户；严格 {liked?:boolean,saved?:boolean}，至少一个 | 按用户和来源唯一幂等更新，未传字段保持不变；返回当前计数 |
+| POST /api/stories/:id/site-comments | 当前认证用户；{body:1..2000字符,client_message_id:UUID,confirms_publication:true} | {id}；同用户相同 key 同正文重试幂等，不同内容 409 |
+| DELETE /api/site-comments/:id | 仅评论本人 | {deleted:true}；已删除重试成功，不能删除他人评论 |
+| GET /api/me/saved-stories | 当前认证用户 | {items:[{source_id,title,text}]}，按收藏更新时间降序；已撤销公开许可的来源不展示 |
+| POST /api/stories/:id/reports | 当前认证用户；{reason:2..1000字符,client_message_id:UUID} | {id,status:'received'}；重复 key 不生成多份举报 |
+| GET /api/admin/site-reports | 服务端 admin；offset 默认 0 | {items:[{id,source_id,reason,created_at}]}，每页 10 条，不公开举报者身份 |
+
+- 写操作在事务内检查公开许可、来源状态及用户状态；用户身份来自 request.auth，不接受 body/query 声明身份。举报、评论、反应与读者活动删除共用 advisory lock。
+- Migration 0014 只新增 story_reactions、site_comments、site_reports；用户/来源物理删除通过 FK cascade 清理；现有 reader_activity 删除同时清理自身互动，保留其他读者数据。
+- GET /api/stories 增加 q（<=300 字符）、from/to（YYYY-MM-DD，原回答发布时间，结束日包含当天）、sort=relevance|newest|oldest。保留原 limit/offset/total。默认顺序仍为收录顺序；关键词为标题及当前可展示材料的子串检索，并非语义排序。日期未知的来源不匹配日期范围。
+- GET /api/discovery/search 仍调用既有知乎官方接口，现在允许游客读取，仍由服务端持有开发者凭据；一次最多 10 条摘要，现有上游无分页游标，不能伪造第二页。日期/排序筛选目前仅应用本站结果。
+- 本轮未新增 AI 输出字段。前端 StoryCover 接受可选 cover_caption；实际 AI 首次理解时生成、溯源和持久化该短句需后续后端契约。不得将私有 memU 原始资料直接当作公开封面字幕。
+
+## 2026-09-14：评论回复、试运营反馈与统一资料展示
+
+- Migration 0015 新增 `site_comments.reply_to` 与 `site_feedback`，不改写已有迁移。评论提交允许可选 `reply_to: UUID`，必须指向同一公开故事的现存评论；可回复回复。幂等比较包含回复目标。列表补充 `reply_to/reply_author/reply_body`；被删除父评论只显示缺失状态。@昵称目前是评论文本，不会自动投递提及通知。
+- `POST /api/feedback` 无需登录，严格载荷 `{client_message_id:UUID,category:bug|interface|suggestion,body:2..4000字符,page?:string}`；page 只允许本站 screen/story/source/tab 白名单路由，不收集任意查询串。返回 `{id,status:received}`；同 key 不同内容返回 409。
+- `GET /api/admin/feedback?offset=0` 仅服务端 admin，分页 10 条，返回 id/category/body/page/created_at。产品反馈与内容举报独立存储。
+- `/me/following` 增加已授权原回答的 text 摘要；撤销许可时不返回正文。`/me/notifications` 增加公开许可检查后的故事标题和提示；撤回或不可用时不得泄漏原材料标题。
+- `/discovery/search` 游客可用。服务端开发者密钥不会进入前端。导入、关注、私有作者资料和管理接口保留既有认证及角色检查。
+
+## 2026-09-14：前后端收尾 — 图库与帖子结构化展示
+
+- Migration 0016 新增 `cover_catalog`，以 CF001–CF150 为稳定主键；150 条分类、标签、描述及候选出处来自用户提供的 ZIP 清单。压缩包没有实际图像，全部初始 `pending_asset`，`image_url=null`。不存在的图片不生成伪造路径。`GET /api/covers` 提供可读全量目录。
+- `GET /api/stories`、`GET /api/stories/:id`、`GET /api/me/following`、`GET /api/me/workbench` 追加 `category,tags,cover_id,cover_url,cover_caption,cover_status`；不可用关注记录允许省略。私有 `GET /api/sources/:id` 返回同一 `presentation`，仍按来源归属鉴权。工作台补充原回答发布时间与摘要。
+- `AI-A.analysisResult.presentation?` 是向后兼容的可选字段：`{category,tags,caption,evidence_refs}`。沿用 AI-A 的回访建议和审计，不增加价值分数，不改 AI-B/C/D 输出结构。新提示版本 `2026-09-14.1`；caption 从原文挑选 2–20 字连续短句，引用必须命中当前 snapshot，不能编写结果或日期。缺少依据或敏感材料可没有 caption。
+- 原有 `ai_runs.output` 保存 presentation，记录模型、提示版本、tokens、耗时与 snapshot_hash。公开投影不暴露分析全文，只读取同一快照并再验证短句和引用；旧分析、无模型输出或缺失字段时只进行本地关键词/标签匹配，`cover_caption=null`。日期始终来自原发布时间。
+- `POST /api/sources` 和授予来源 consent 后追加 `analysis_status`，满足既有许可和外部模型处理同意时自动排队；缺同意为 `awaiting_model_consent`，不因此自动授予权限。幂等队列键包含账号、source 与 snapshot；生成前后均重新检查来源、许可与任务租约。外部模型未配置时返回 `model_unconfigured`。
+- 官方搜索、候选关注及链接解析在服务器做本地主题匹配，不将未授权的搜索材料送给 AI。导入后的模型分析仍需独立的模型处理同意。
+- 公开故事和可用关注追加 `site_counts:[likes,comments,saves]`，只统计本站；不借用知乎数据。
+- Migration 0017 新增 `story_reads`。`PUT /api/stories/:id/read`（登录，严格空对象）按当前用户/来源幂等记录访问；`GET /api/me/history?offset=0` 返回当前用户最近 100 条可公开阅读记录。退出后游客仍是本次会话的本地浏览记录。读者活动删除同时清理本人浏览历史。
+- 图片安装工具：`node scripts/install-cover-images.mjs <图片目录>`，文件名为 CF001.jpg/png/webp 至 CF150；校验图像签名，生成本地路径与 `assets/cover-library-150/activate-images.sql`。执行该 SQL 后图库记录可用于后端匹配，重建前端后本地图片可访问。不接受用户 API 请求提供任意图像 URL。
+
+## 2026-09-14：本地自动发现最小验证与 CDN 配图
+
+- Migration 0018 新增 discovery_runs / discovery_selections。时间槽唯一、候选 URL 唯一；批次保存查询、时间、状态、过滤原因及 fetched/preview/held/duplicate/capped，不记录凭据或上游异常正文。
+- worker 模块生命周期注册 zhihu.discovery.scan：启用后启动一次，并在外部请求前通过任务事务安排下一时间槽。失败不阻断后续批次；同一槽重启不重复请求。每槽仅一次官方搜索，失败保留记录，下一槽重试发现；暂不做同槽重试。
+- LOCAL_DISCOVERY_PREVIEW 默认 false，并且 PUBLIC_BASE_URL 必须为 localhost/127.0.0.1/[::1] 才可运行及展示。仅本地验证，不给部署配置增加公网收录许可。
+- DISCOVERY_INTERVAL_MINUTES 默认 60，DISCOVERY_DAILY_LIMIT 默认 50，DISCOVERY_DAILY_SEARCH_LIMIT 默认 12；上海时区日额度通过数据库事务串行核验。DISCOVERY_QUERIES 使用竖线分隔。专用 docker-compose.discovery-local.yml 限制为每天 5 条候选、3 次搜索，默认每小时检查。
+- GET /api/discovery/local-preview 无需登录；关闭返回 enabled:false,items:[]；开启返回最多 50 条通过本地规则的官方摘要候选，含 existing presentation 字段、display_status=local_candidate_preview、analysis_status=awaiting_model_consent。已关联来源删除或撤销后隐藏。原始搜索记录与选中摘要分别保存。
+- POST /api/admin/discovery/run 仅 admin、严格空对象，按同一时间槽去重；GET /api/admin/discovery/runs 仅 admin，返回最近 30 批和配置。默认模块注册路由，未修改 app.ts 或 worker.ts。
+- 本轮采用规则筛选（材料完整度、经历和时间线索、敏感内容保留审核），没有调用模型判断未授权摘要。不会创建作者授权、公开来源、后来或通知，不是 AI 回访质量验收。原有授权 AI-A 流程保持独立。
+- Migration 0019 新增 IMG001–IMG250 CDN 目录，保留旧 CF001–CF150 未安装项。category/tags 规范化，ready 项优先；后端只返回 URL，浏览器直连 https://img.cc0.cn，懒加载、无 Referer，错误退回占位图。没有图片上传、下载缓存或 API 图片转发功能。
+- 原始 250 项文件、规范化目录和联网记录在 assets/cover-library-250。scripts/import-cdn-covers.mjs 可复核生成 seed-cdn-covers.sql；不得覆盖已应用的迁移。封面仅为主题配图，非原作者照片。
+
+- 前端入口修正：标准 URL 固定使用 DesignApp，demo 登录开关或接口错误不再决定视觉入口；只有显式 mode=live 进入旧功能界面。手机个人中心横向标签换成左侧纵向抽屉，使用同一 personalTabs 路由表。

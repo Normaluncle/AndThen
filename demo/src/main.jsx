@@ -5,11 +5,14 @@ import './style.css';
 import {AppHeader, DemoBar, MobileTabBar, MobileTopBar} from './chrome.jsx';
 import {EmptyState, Overlay, Toast} from './overlays.jsx';
 import {
-  AccountPage, AdminPage, DiscoverPage, DraftPage, FollowupPage, FollowingPage,
+  AccountPage, AdminPage, DraftPage, FollowupPage, FollowingPage,
   ImportPage, InterviewPage, InvitePage, NotificationsPage, StoryPage, WorkbenchPage,
 } from './screens.jsx';
 import {draftActions, interviewActions, poll} from './workflow.js';
 import {COPY, emptyKindFor, mapScreen} from './ui14.js';
+import {Home, HomeHeader} from './Home.jsx';
+import DesignApp from './design/DesignApp.jsx';
+import {frontendEntry} from './frontend-entry.js';
 
 function useViewport() {
   const [viewport, setViewport] = useState(typeof window !== 'undefined' && window.matchMedia('(max-width: 767px)').matches ? 'mobile' : 'desktop');
@@ -23,12 +26,13 @@ function useViewport() {
 }
 
 function App() {
+  const [entry]=useState(()=>frontendEntry(location.search));
   const viewport = useViewport();
   const [reasonSource, setReasonSource] = useState(null);
   const [reasonCandidate, setReasonCandidate] = useState(null);
-  const [demoEnabled, setDemoEnabled] = useState(false);
+  const [demoEnabled, setDemoEnabled] = useState(null);
   const [notifications, setNotifications] = useState([]);
-  useEffect(() => { api('/auth/demo/status').then((data) => setDemoEnabled(data.enabled)).catch(() => {}); }, []);
+  useEffect(() => { api('/auth/demo/status').then((data) => setDemoEnabled(data.enabled)).catch(() => setDemoEnabled(false)); }, []);
   const [answerVisibility, setAnswerVisibility] = useState('public');
   const [draftJobPending, setDraftJobPending] = useState(false);
   const [page, setPage] = useState(location.hash === '#account' ? '账号' : sessionStorage.getItem('andthen.page') || '发现');
@@ -102,7 +106,12 @@ function App() {
       try { const data = await api('/me'); setToken(true); setUser(data.user); restored = true; }
       catch (err) { setToken(false); if (err.status !== 401) setError('暂时无法恢复登录，请刷新重试。'); }
       const result = new URLSearchParams(location.search).get('oauth');
+      if(entry==='current'){
+        if(result){history.replaceState(null,'','/?screen=09&tab=settings');window.dispatchEvent(new PopStateEvent('popstate'));}
+        return;
+      }
       const target = result || location.hash === '#account' ? '账号' : sessionStorage.getItem('andthen.page') || '发现';
+      if (new URLSearchParams(location.search).get('mode') !== 'live' && !result) return;
       await enter(restored || ['发现', '账号'].includes(target) ? target : '账号');
       if (result) {
         setNotice(result === 'success' && restored ? '知乎登录成功，刷新页面后仍会保持登录。' : '知乎授权未完成或已过期，请重试。');
@@ -137,19 +146,20 @@ function App() {
   }), [page, viewport, user, items, story, session, messages, draft, savedStatements, followup, memory, notifications, error, busy, overlay, answer]);
   const emptyKind = emptyKindFor({page, items, notifications, story, session, followup, draft, error: error ? {message: error} : null, busy});
 
+  if (entry==='current') return <DesignApp user={user} onUser={setUser} connectionError={error} />;
   return (
-    <div className="shell">
-      <AppHeader
+    <div className={`shell${page === '发现' ? ' home-shell' : ''}`}>
+      {page === '发现' ? <HomeHeader onEnter={enter} query={query} onQuery={setQuery} onSearch={() => document.querySelector('.home-search')?.requestSubmit()} /> : <AppHeader
         page={page} user={user} notifications={notifications} query={query} busy={busy}
         onQuery={setQuery}
         onSearch={() => run(async () => { setItems((await api('/discovery/search?q=' + encodeURIComponent(query))).items); setPage('发现'); })}
         onEnter={enter}
         onBell={() => enter('通知')}
         onAvatar={() => enter('账号')}
-      />
-      <MobileTopBar page={page} user={user} notifications={notifications} onEnter={enter} onBell={() => enter('通知')} />
+      />}
+      {page !== '发现' && <MobileTopBar page={page} user={user} notifications={notifications} onEnter={enter} onBell={() => enter('通知')} />}
       <DemoBar
-        enabled={demoEnabled} busy={busy}
+        enabled={demoEnabled && page !== '发现'} busy={busy}
         onReader={() => run(() => api('/auth/demo/reader', 'POST', {}).then(identify))}
         onAuthor={() => run(() => api('/auth/demo/author', 'POST', {}).then(identify))}
       />
@@ -158,7 +168,7 @@ function App() {
         {error && <p role="alert" className="error">{error}</p>}
         {notice && <p role="status" className="desktop-only">{notice}</p>}
         {page === '发现' && (
-          <DiscoverPage
+          <Home preview={demoEnabled}
             items={items} query={query} url={url} busy={busy} emptyKind={emptyKind} reasonSource={reasonSource} reasonCandidate={reasonCandidate}
             onQuery={setQuery} onUrl={setUrl}
             onSearch={() => run(async () => setItems((await api('/discovery/search?q=' + encodeURIComponent(query))).items))}

@@ -16,7 +16,7 @@ import { createLlmClient } from '../../ai/client.js';
 import { PROMPTS, PROMPT_VERSION } from '../../ai/prompts.js';
 import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
 
-const candidateSchema = analysisResultSchema.pick({ case_type: true, claims: true, missing_information: true, safety: true, safety_reasons: true, recommended_action: true, action_reasons: true, reviewer_required: true }).strict();
+const candidateSchema = analysisResultSchema.pick({ presentation:true, case_type: true, claims: true, missing_information: true, safety: true, safety_reasons: true, recommended_action: true, action_reasons: true, reviewer_required: true }).strict();
 
 /** A conservative deterministic screen, not a claim of complete risk detection. */
 export function sourceRisk(text: string): string[] {
@@ -88,6 +88,7 @@ export function registerAnalysisJobs(ctx: ModuleContext, registry: JobHandlerReg
         completion = await createLlmClient(ctx.env, ctx.logger).complete({ json: true, maxTokens: 3000, temperature: 0, signal: job.signal,
           messages: [{ role: 'system', content: PROMPTS.ai_a_extract }, { role: 'user', content: JSON.stringify({ evidence: [{ id: evidenceId, text: state.text }], material_level: state.snapshot.materialLevel, published_at: state.snapshot.publishedAt }) }] });
         candidate = candidateSchema.parse(JSON.parse(completion.content));
+        if(candidate.presentation&&(!state.text.includes(candidate.presentation.caption)||candidate.presentation.evidence_refs.some(id=>id!==evidenceId)))throw AppError.sourceIncomplete('Unsupported cover caption');
         if (candidate.claims.length > 50) throw AppError.sourceIncomplete('Too many claims');
         for (const claim of candidate.claims) {
           if (!claim.text.trim() || !state.text.includes(claim.text) || !claim.evidence_refs.length || claim.evidence_refs.some(id => id !== evidenceId)) throw AppError.sourceIncomplete('Unsupported claim or reference');
@@ -116,4 +117,17 @@ export function registerAnalysisJobs(ctx: ModuleContext, registry: JobHandlerReg
     });
     return { data: { analysis_id: runId, analysis_status: errorCode ? 'failed' : 'succeeded', error_code: errorCode, fallback_mode: errorCode ? 'manual_review' : null } };
   });
+}
+
+/** Automatic analysis is an authorized, best-effort continuation; importing never grants model consent. */
+export async function queueEligibleAnalysis(ctx:ModuleContext,sourceId:string,userId:string,requestId:string):Promise<string>{
+ try{return await ctx.db.transaction(async tx=>{
+   const snapshot=await latestSnapshot(tx,sourceId);if(!snapshot)return 'awaiting_material';
+   const state=await requireModelSource(tx,sourceId,snapshot.contentHash);
+   if(!sourceRisk(state.text).length&&!createLlmClient(ctx.env,ctx.logger).configured)return 'model_unconfigured';
+   const previous=await tx.select({output:aiRuns.output}).from(aiRuns).where(and(eq(aiRuns.sourceId,sourceId),eq(aiRuns.task,'ai_a_extract'),eq(aiRuns.status,'succeeded')));
+   if(previous.some(run=>run.output?.snapshot_hash===snapshot.contentHash&&run.output?.presentation))return 'available';
+   await ctx.jobs.enqueue({kind:AI_JOB_KINDS.extract,dedupeKey:`analyze:${userId}:${sourceId}:${snapshot.contentHash}`,maxAttempts:1,payload:{source_id:sourceId,snapshot_hash:snapshot.contentHash,owner_user_id:userId,request_id:requestId}},tx);
+   return 'queued';
+ });}catch(error){if(error instanceof AppError)return error.code==='consent_required'?'awaiting_model_consent':error.code;throw error;}
 }

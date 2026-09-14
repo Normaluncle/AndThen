@@ -1,3 +1,6 @@
+import {sourcePresentation} from '../sources/presentation.js';
+import {seedDiscovery,scanDiscovery,discoveryKind,registerDiscoveryRoutes} from './auto-discovery.js';
+import {presentationShape} from '../sources/presentation-schema.js';
 import { z } from 'zod';
 import { oauthReady, registerOAuthRoutes } from './oauth-routes.js';
 import {syncOAuthAuthor} from './oauth-sync.js';
@@ -16,19 +19,23 @@ import { importSource } from '../sources/service.js';
 
 import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js';
 
-const candidate = z.object({ candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
+const candidate = z.object({...z.object(presentationShape).partial().shape, candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
 export const zhihuModule: ModuleDefinition = {
   name: 'zhihu',
-  registerJobHandlers(ctx,registry) { registry.register('zhihu.comments.sync',job=>syncCommentPage(ctx,job)); registry.register('zhihu.author.sync',job=>syncOAuthAuthor(ctx,job)); },
+  onWorkerStart: async ctx=>{await seedDiscovery(ctx);},
+  registerJobHandlers(ctx,registry) { registry.register(discoveryKind,job=>scanDiscovery(ctx,job)); registry.register('zhihu.comments.sync',job=>syncCommentPage(ctx,job)); registry.register('zhihu.author.sync',job=>syncOAuthAuthor(ctx,job)); },
   async registerRoutes(app, ctx) {
     await registerOAuthRoutes(app, ctx);
+    await registerDiscoveryRoutes(app, ctx);
     const r = app.withTypeProvider<ZodTypeProvider>();
+    async function presentCandidates<T extends {url:string;title:string;text:string}>(items:T[]){return Promise.all(items.map(async item=>({...item,...await sourcePresentation(ctx.db,item.url,item.title+' '+item.text)})));}
+
     r.get('/integrations/zhihu/capabilities', { schema: { tags: ['zhihu'], response: { 200: envelopeSchema(z.object({ search: z.boolean(), creator_account_reads: z.boolean(), comment_sync_scope: z.literal('access_secret_owner_only'), oauth: z.boolean(), oauth_reason: z.string(), arbitrary_fulltext: z.literal(false), comments: z.literal('selected_search_comments') })) } } }, async request => success(request.id, {
       search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: oauthReady(ctx), oauth_reason: oauthReady(ctx) ? 'available' : ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
     }));
-    r.get('/discovery/search', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q)) }));
-    r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request))}));
-    r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await candidateFeed(ctx,requireAuthContext(request),true)}));
+    r.get('/discovery/search', { schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await presentCandidates(await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q))) }));
+    r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request)))}));
+    r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request),true))}));
     r.put('/discovery/candidates/:id/interest',{preHandler:[app.authenticate],schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),body:z.object({active:z.boolean()}).strict(),response:{200:envelopeSchema(z.record(z.unknown()))}}},async request=>success(request.id,await followCandidate(ctx,requireAuthContext(request),request.params.id,request.body.active)));
     r.post('/sources/resolve', { preHandler: [app.authenticate], schema: { tags: ['zhihu'], body: z.object({ url: z.string().min(1).max(4000) }).strict(), response: { 200: envelopeSchema(z.object({ source_id: z.string().uuid(), status: z.enum(['summary_available', 'pending_content']), candidate: candidate.nullable() })) } } }, async request => {
       const auth = requireAuthContext(request);
@@ -39,7 +46,7 @@ export const zhihuModule: ModuleDefinition = {
       const imported = await importSource(ctx, auth, { sourceType: 'third_party_link', originalUrl: url, originalAccountRef: null,
         title: match?.title ?? null, materialLevel: 'api_summary', body: match?.text ?? null, excerpt: null, excerptLocation: null,
         publishedAt: null, upstreamUpdatedAt: null, notes: 'Official exact URL resolution; ownership not established', provenance: 'official_api' });
-      return success(request.id, { source_id: imported.source.id, status: match ? 'summary_available' : 'pending_content', candidate: match ?? null });
+      return success(request.id, { source_id: imported.source.id, status: match ? 'summary_available' : 'pending_content', candidate: match ? (await presentCandidates([match]))[0] ?? null : null });
     });
     // These routes operate only for trusted administrators on the configured
     // credential's account. A local author login is never a substitute for OAuth.

@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleRegistrar } from '../../shared/types.js';
-import { deletionJobs, interests, notifications, researchEvents, outbox, idempotencyKeys, auditLogs, sources } from '../../db/schema.js';
+import { storyReads, storyReactions, siteComments, siteReports, deletionJobs, interests, notifications, researchEvents, outbox, idempotencyKeys, auditLogs, sources } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { success } from '../../http/errors.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
@@ -24,6 +24,10 @@ export const registerReaderDeletionRoutes: ModuleRegistrar = (app, ctx) => {
       const [existing] = await tx.select().from(deletionJobs).where(and(eq(deletionJobs.scope, 'user'), eq(deletionJobs.subjectId, auth.userId), eq(deletionJobs.reason, reason)));
       if (existing) return existing;
       const cutoff = ctx.now();
+      await tx.delete(storyReads).where(eq(storyReads.userId,auth.userId));
+      await tx.delete(storyReactions).where(and(eq(storyReactions.userId,auth.userId),sql`${storyReactions.updatedAt} <= ${cutoff}`));
+      await tx.delete(siteComments).where(and(eq(siteComments.userId,auth.userId),sql`${siteComments.createdAt} <= ${cutoff}`));
+      await tx.delete(siteReports).where(and(eq(siteReports.userId,auth.userId),sql`${siteReports.createdAt} <= ${cutoff}`));
       // Follow/notification/research writers also take the source lock. Remove the
       // reader from frozen outbox recipients so an old publication cannot replay.
       await tx.select({ id: sources.id }).from(sources).where(sql`

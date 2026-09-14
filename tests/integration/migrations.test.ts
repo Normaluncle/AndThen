@@ -16,6 +16,8 @@ const EXPECTED_TABLES = [
   'consents',
   'deletion_jobs',
   'discovery_candidates',
+  'discovery_runs',
+  'discovery_selections',
   'followup_cases',
   'followup_versions',
   'idempotency_keys',
@@ -29,6 +31,12 @@ const EXPECTED_TABLES = [
   'outbox',
   'research_events',
   'sessions',
+  'story_reactions',
+  'site_comments',
+  'site_reports',
+  'site_feedback',
+  'cover_catalog',
+  'story_reads',
   'source_preparations',
   'source_snapshots',
   'sources',
@@ -47,6 +55,11 @@ const EXPECTED_INDEXES = [
   'sessions_token_hash_uq',
   'interview_sessions_case_active_uq',
   'idempotency_scope_key_uq',
+  'story_reactions_source_user_uq',
+  'site_comments_message_uq',
+  'site_reports_message_uq',
+  'site_feedback_message_uq',
+  'story_reads_user_source_uq',
 ];
 
 describe('database migrations (real Postgres)', () => {

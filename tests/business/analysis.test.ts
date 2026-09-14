@@ -21,7 +21,7 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
       calls++;
       lastRequest = JSON.parse(body);
       const input = JSON.parse(JSON.parse(body).messages[1].content);
-      const candidate = { case_type: caseType, claims: [{ id: 'c1', text: input.evidence[0].text, kind: 'plan', evidence_refs: [invalid ? 'invented' : input.evidence[0].id], time_anchor: null, time_anchor_basis: null }], missing_information: ['later outcome'], safety: 'clear_for_pilot', safety_reasons: [], recommended_action: 'invite', action_reasons: ['author outcome unknown'], reviewer_required: false };
+      const candidate = { presentation:{category:'职场发展',tags:['职场发展'],caption:input.evidence[0].text.slice(0,12),evidence_refs:[input.evidence[0].id]}, case_type: caseType, claims: [{ id: 'c1', text: input.evidence[0].text, kind: 'plan', evidence_refs: [invalid ? 'invented' : input.evidence[0].id], time_anchor: null, time_anchor_basis: null }], missing_information: ['later outcome'], safety: 'clear_for_pilot', safety_reasons: [], recommended_action: 'invite', action_reasons: ['author outcome unknown'], reviewer_required: false };
       res.setHeader('content-type', 'application/json');
       res.end(JSON.stringify({ model: 'test_fixture', choices: [{ message: { content: JSON.stringify(attemptTool ? { ...candidate, publish: true } : candidate), ...(attemptTool ? { tool_calls: [{ type: 'function', function: { name: 'publish', arguments: '{}' } }] } : {}) } }], usage: { prompt_tokens: 20, completion_tokens: 30 } }));
     });
@@ -51,6 +51,13 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
       }
     } finally { caseType = 'plan'; }
   });
+  it('queues analysis after model consent and emits current cover metadata without a second manual step',async()=>{
+    const author=await seedUser(h,'author','test_fixture');const story=await seedPublishedStory(h,{author:author.user,verifyAuthor:true,excerpt:'我开始了新的职业计划，准备学习编程。'});
+    const granted=await h.app.inject({method:'POST',url:`/api/sources/${story.source.id}/consents`,headers:auth(author.token),payload:{purpose:'external_model_processing',version:'v1'}});
+    expect(granted.statusCode,granted.body).toBe(200);expect(granted.json().data.analysis_status).toBe('queued');await runJob(h.moduleCtx,'ai.extract');
+    const result=(await h.app.inject({url:`/api/stories/${story.source.id}`})).json().data.story;expect(result.cover_caption).toBe(story.snapshot.excerpt?.slice(0,12));
+    const repeated=await h.app.inject({method:'POST',url:`/api/sources/${story.source.id}/consents`,headers:auth(author.token),payload:{purpose:'external_model_processing',version:'v1'}});expect(repeated.json().data.analysis_status).toBe('available');
+  });
   it('checks permission before requests, binds citations to snapshot and never changes case state', async () => {
     const author = await seedUser(h, 'author', 'test_fixture');
     const outsider = await seedUser(h, 'author', 'test_fixture');
@@ -71,6 +78,8 @@ describe('AI-A source analysis with simulated HTTP provider', () => {
     const read = await h.app.inject({ method: 'GET', url: `/api/sources/${story.source.id}/analysis`, headers: auth(author.token) });
     expect(read.statusCode, read.body).toBe(200);
     expect(read.json().data.analysis.snapshot_hash).toBe(story.snapshot.contentHash);
+    const publicStory=(await h.app.inject({url:`/api/stories/${story.source.id}`})).json().data.story;
+    expect(publicStory.cover_caption).toBe(story.snapshot.excerpt?.slice(0,12));expect(publicStory.category).toBe('职场发展');expect(publicStory.cover_id).toMatch(/^IMG/);expect(publicStory.cover_url).toMatch(/^https:\/\/img\.cc0\.cn\//);
     expect(read.json().data.analysis.claims[0].evidence_refs).toEqual([`snapshot:${story.snapshot.id}`]);
     expect((await h.ctx.db.select().from(followupCases).where(eq(followupCases.id, story.followupCase.id)))[0]?.status).toBe('published');
     const runs = await h.ctx.db.select().from(aiRuns).where(eq(aiRuns.sourceId, story.source.id));

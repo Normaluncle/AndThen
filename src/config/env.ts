@@ -22,6 +22,11 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   PUBLIC_BASE_URL: z.string().url().default('http://127.0.0.1:8080'),
   LOCAL_DEMO_LOGIN: booleanish.default('false'),
+  LOCAL_DISCOVERY_PREVIEW: booleanish.default('false'),
+  DISCOVERY_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),
+  DISCOVERY_DAILY_LIMIT: z.coerce.number().int().min(1).max(50).default(50),
+  DISCOVERY_DAILY_SEARCH_LIMIT: z.coerce.number().int().min(1).max(50).default(12),
+  DISCOVERY_QUERIES: z.string().default('辞职 转行 后来|考研 经历 后来|创业 经历 后来|搬家 城市 生活'),
 
   DATABASE_URL: z.string().min(1, 'DATABASE_URL is required'),
   DB_POOL_MAX: z.coerce.number().int().min(1).max(100).default(10),

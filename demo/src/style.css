@@ -112,7 +112,7 @@ img { max-width: 100%; }
 .tab-plus span:last-child { color: var(--primary); }
 
 /* Buttons */
-main section button, main article button {
+:where(main:not(.d-content)) section button, :where(main:not(.d-content)) article button {
   padding: 10px 16px; border: 1px solid #bfdbfe; border-radius: 12px; background: #fff; color: var(--primary); margin: 4px 4px 4px 0;
 }
 .btn-primary, .btn-secondary, .btn-ghost, .btn-danger, .btn-disabled {

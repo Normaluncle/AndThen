@@ -887,6 +887,28 @@ export const discoveryCandidates = pgTable('discovery_candidates', {
   snapshotId: uuid('snapshot_id').references(()=>sourceSnapshots.id,{onDelete:'set null'}),
   updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
 });
+
+/** Local discovery audit. Never confers source processing or publication consent. */
+export const discoveryRuns = pgTable('discovery_runs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  slot: text('slot').notNull().unique(),
+  query: text('query').notNull(),
+  status: text('status').notNull(),
+  counts: jsonb('counts').$type<Record<string, number>>().notNull().default({}),
+  errorCode: text('error_code'),
+  startedAt: timestamp('started_at', {withTimezone:true}).notNull().defaultNow(),
+  finishedAt: timestamp('finished_at', {withTimezone:true}),
+});
+export const discoverySelections = pgTable('discovery_selections', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  url: text('url').notNull().unique(),
+  runId: uuid('run_id').notNull().references(()=>discoveryRuns.id),
+  candidateId: uuid('candidate_id').references(()=>discoveryCandidates.id,{onDelete:'cascade'}),
+  data: jsonb('data').$type<OfficialCandidate>().notNull(),
+  decision: text('decision').notNull(),
+  reason: text('reason').notNull(),
+  createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+});
 /** Post-scoped preparation is not an author profile and has no nickname identity. */
 export const sourcePreparations = pgTable('source_preparations', {
   sourceId: uuid('source_id').primaryKey().references(()=>sources.id,{onDelete:'cascade'}),
@@ -923,7 +945,56 @@ export const zhihuAccounts = pgTable('zhihu_accounts', {
   lastSyncAt: timestamp('last_sync_at', { withTimezone: true }),
 });
 
+export const storyReactions = pgTable('story_reactions', {
+ id: uuid('id').primaryKey().defaultRandom(),
+ sourceId: uuid('source_id').notNull().references(()=>sources.id,{onDelete:'cascade'}),
+ userId: uuid('user_id').notNull().references(()=>users.id,{onDelete:'cascade'}),
+ liked: boolean('liked').notNull().default(false),
+ saved: boolean('saved').notNull().default(false),
+ updatedAt: timestamp('updated_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex('story_reactions_source_user_uq').on(t.sourceId,t.userId)]);
+export const siteComments = pgTable('site_comments', {
+  replyTo: uuid('reply_to'),
+ id: uuid('id').primaryKey().defaultRandom(),
+ sourceId: uuid('source_id').notNull().references(()=>sources.id,{onDelete:'cascade'}),
+ userId: uuid('user_id').notNull().references(()=>users.id,{onDelete:'cascade'}),
+ clientMessageId: uuid('client_message_id').notNull(),
+ body: text('body').notNull(),
+ createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex('site_comments_message_uq').on(t.userId,t.clientMessageId),index('site_comments_source_idx').on(t.sourceId,t.createdAt)]);
+export const siteReports = pgTable('site_reports', {
+ id: uuid('id').primaryKey().defaultRandom(),
+ sourceId: uuid('source_id').notNull().references(()=>sources.id,{onDelete:'cascade'}),
+ userId: uuid('user_id').notNull().references(()=>users.id,{onDelete:'cascade'}),
+ clientMessageId: uuid('client_message_id').notNull(),
+ reason: text('reason').notNull(),
+ createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex('site_reports_message_uq').on(t.userId,t.clientMessageId)]);
+
+export const siteFeedback = pgTable('site_feedback', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  clientMessageId: uuid('client_message_id').notNull(),
+  category: text('category').notNull(),
+  body: text('body').notNull(),
+  page: text('page').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+}, table => [uniqueIndex('site_feedback_message_uq').on(table.clientMessageId)]);
+
+export const coverCatalog = pgTable('cover_catalog', {
+ id:text('id').primaryKey(),category:text('category').notNull(),tags:jsonb('tags').$type<string[]>().notNull(),
+ alt:text('alt').notNull(),sourceUrl:text('source_url'),imageUrl:text('image_url'),status:text('status').notNull().default('pending_asset'),
+});
+
+export const storyReads = pgTable('story_reads', {
+ userId:uuid('user_id').notNull().references(()=>users.id,{onDelete:'cascade'}),
+ sourceId:uuid('source_id').notNull().references(()=>sources.id,{onDelete:'cascade'}),
+ readAt:timestamp('read_at',{withTimezone:true}).notNull().defaultNow(),
+},t=>[uniqueIndex('story_reads_user_source_uq').on(t.userId,t.sourceId)]);
+
 export const schema = {
+  storyReads,
+  coverCatalog,
+  storyReactions, siteComments, siteReports, siteFeedback,
   zhihuAccounts,
   zhihuOAuthAttempts,
   users,

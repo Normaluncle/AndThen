@@ -1,3 +1,6 @@
+import {siteCounts} from '../community/counts.js';
+import {sourcePresentation} from './presentation.js';
+import type {Presentation} from './presentation-schema.js';
 /**
  * Sources module service (PRD §7, FR-01..FR-06, FR-10, FR-12 partial).
  *
@@ -709,7 +712,8 @@ export interface PublicFollowup {
   attribution: 'author_reported';
 }
 
-export interface PublicStory {
+export interface PublicStory extends Presentation {
+  site_counts:number[];
   source_id: string;
   title: string | null;
   source_type: SourceType;
@@ -797,6 +801,8 @@ export async function buildPublicStory(
 
   const isExact = snapshot?.materialLevel === 'exact_excerpt';
   return {
+    ...await sourcePresentation(db,source.id,source.title,snapshot),
+    site_counts:await siteCounts(db,source.id),
     source_id: source.id,
     title: source.title,
     source_type: source.sourceType,
@@ -823,6 +829,7 @@ export async function listPublicStories(
   db: Executor,
   limit: number,
   offset: number,
+  search: {q?:string;from?:string;to?:string;sort?:string} = {},
 ): Promise<StoryListPage> {
   // A revoked public-display consent removes the source from the public list
   // immediately, even before the publish module updates `permission_status`.
@@ -837,7 +844,12 @@ export async function listPublicStories(
         sql`((${consents.expiresAt} is null and ${consents.grantedAt} > now() - interval '90 days') or ${consents.expiresAt} > now())`,
       ),
     );
+  const publishedDate=sql`(select ss.published_at from source_snapshots ss where ss.source_id=${sources.id} order by ss.version desc limit 1)`;
+  const searchable=sql`coalesce(${sources.title},'') || ' ' || coalesce((select coalesce(ss.excerpt,ss.body,'') from source_snapshots ss where ss.source_id=${sources.id} order by ss.version desc limit 1),'')`;
   const where = and(
+    search.q ? sql`position(lower(${search.q}) in lower(${searchable})) > 0` : undefined,
+    search.from ? sql`${publishedDate} >= ${search.from}::date` : undefined,
+    search.to ? sql`${publishedDate} < ${search.to}::date + interval '1 day'` : undefined,
     eq(sources.permissionStatus, 'public_approved'),
     exists(revokedConsent),
     isNull(sources.deletedAt),
@@ -851,7 +863,7 @@ export async function listPublicStories(
     .select()
     .from(sources)
     .where(where)
-    .orderBy(desc(sources.createdAt))
+    .orderBy(search.sort==='oldest'?sql`${publishedDate} asc nulls last`:search.sort==='newest'?sql`${publishedDate} desc nulls last`:desc(sources.createdAt),sources.id)
     .limit(limit)
     .offset(offset);
 
@@ -943,7 +955,9 @@ export async function setInterest(
   });
 }
 
-export interface FollowingItem {
+export interface FollowingItem extends Partial<Presentation> {
+  site_counts?:number[];
+  text: string | null;
   source_id: string;
   available: boolean;
   followed_at: string;
@@ -994,6 +1008,7 @@ export async function listFollowing(
       items.push({
         source_id: source.id,
         available: false,
+        text:null,
         followed_at: interest.updatedAt.toISOString(),
         title: null,
         source_type: null,
@@ -1041,6 +1056,9 @@ export async function listFollowing(
     items.push({
       source_id: source.id,
       available: true,
+      ...await sourcePresentation(db,source.id,source.title,snapshot),
+    site_counts:await siteCounts(db,source.id),
+      text:snapshot?.excerpt||snapshot?.body||null,
       followed_at: interest.updatedAt.toISOString(),
       title: source.title,
       source_type: source.sourceType,

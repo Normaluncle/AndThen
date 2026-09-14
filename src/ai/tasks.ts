@@ -1,3 +1,4 @@
+import {coverAnalysisSchema} from '../modules/sources/presentation-schema.js';
 import { z } from 'zod';
 
 /**
@@ -45,6 +46,7 @@ export const claimSchema = z.object({
 });
 
 export const analysisResultSchema = z.object({
+  presentation: coverAnalysisSchema.optional(),
   analysis_id: z.string(),
   schema_version: z.string(),
   source_id: z.string().uuid(),
