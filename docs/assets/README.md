@@ -2,8 +2,8 @@
 
 现已收录 **25 张原图：15 张前端设计参考 + 10 张视觉素材**。
 
-- [完整界面预览（供 UI 负责人查看）](../../AndThen_UI_and_Assets_24/UI_14/README.md)
-- [全部素材与用途索引](../../AndThen_UI_and_Assets_24/README.md)
+- [完整界面预览（供 UI 负责人查看）](../../assets/design/UI_14/README.md)
+- [全部素材与用途索引](../../assets/design/README.md)
 
 README 采用 `03_GitHub社交预览.png` 作为头图，采用 05、06、07 三张概念图展示发现、采访和后来阅读流程。其余主视觉、Logo 与空状态素材供前端复用。
 

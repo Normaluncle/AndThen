@@ -11,7 +11,7 @@
 - `demo/src/home-data.js`：设计稿三则故事、日期、统计；全部 `provenance: test_fixture`，只供本地演示模式，不能触发真实回访。
 - `demo/src/home-data.test.js`：筛选和演示/真实操作边界测试。
 - `demo/src/main.jsx`：仅发现页使用上述组件；其他页面继续使用原组件。
-- `demo/public/home/reference.png`：原始 `AndThen_UI_and_Assets_24/UI_14/01_发现页_首页.png` 的逐字节副本。以 CSS 区域显示图片，未将整张页面当作网页。无额外生图消耗。
+- `demo/public/home/reference.png`：原始 `assets/design/UI_14/01_发现页_首页.png` 的逐字节副本。以 CSS 区域显示图片，未将整张页面当作网页。无额外生图消耗。
 
 图片坐标为原图 1536×1024 下的 x/y/w/h：
 

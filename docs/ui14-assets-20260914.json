@@ -1,7 +1,7 @@
 [
   {
     "screen": "02",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\02_故事详情页_读者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\02_故事详情页_读者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\02.png",
     "sha256": "da329faf77caea411820ff8b81814b66d4433102026e9665e797b2da9a3a22d5",
     "size": [
@@ -11,7 +11,7 @@
   },
   {
     "screen": "03",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\03_我的关注页_读者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\03_我的关注页_读者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\03.png",
     "sha256": "501bb4a8e5c80cc848f6c93afffdbbb0937fcd8ba53dd09ed5d5536bf880ce75",
     "size": [
@@ -21,7 +21,7 @@
   },
   {
     "screen": "04",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\04_通知页_读者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\04_通知页_读者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\04.png",
     "sha256": "7f509636ffaabe2540d050a34a544d51398d67f383cbae2336c5bf72ba8711f7",
     "size": [
@@ -31,7 +31,7 @@
   },
   {
     "screen": "05",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\05_写下后来_作者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\05_写下后来_作者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\05.png",
     "sha256": "b35d84a0f7550de0e6507f6a904d476bce575ef51ac1871a27c985ac4fa5b4fe",
     "size": [
@@ -41,7 +41,7 @@
   },
   {
     "screen": "06",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\06_AI回访采访页_作者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\06_AI回访采访页_作者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\06.png",
     "sha256": "293712d7ecd4925031f0360691da50e91f1956dc7e18f80e1db08028291a4360",
     "size": [
@@ -51,7 +51,7 @@
   },
   {
     "screen": "07",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\07_确认与发布页_作者端.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\07_确认与发布页_作者端.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\07.png",
     "sha256": "fb2ec315b909078df0c93dfdf935ab4c3a1d62afde4d594b9da2b5411fa6c22c",
     "size": [
@@ -61,7 +61,7 @@
   },
   {
     "screen": "08",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\08_公开后来页_阅读页.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\08_公开后来页_阅读页.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\08.png",
     "sha256": "edc8707d12edbeafa5d6bef0c13167aaf824f47bd8306d1c1c9b281ad8f3ba19",
     "size": [
@@ -71,7 +71,7 @@
   },
   {
     "screen": "09",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\09_我的页_设置与资料.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\09_我的页_设置与资料.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\09.png",
     "sha256": "a5a93caf8049afd9c51ae53aa6f2cef5cc0b21676cf91d23df7db75fc3c120f8",
     "size": [
@@ -81,7 +81,7 @@
   },
   {
     "screen": "10",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\10_管理后台_内部.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\10_管理后台_内部.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\10.png",
     "sha256": "26f7217a3fbc68930efc1939310d537d9c5a8b6922d327bb1a1e5e41790fe1d2",
     "size": [
@@ -91,7 +91,7 @@
   },
   {
     "screen": "11",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\11_作者邀请与参与确认.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\11_作者邀请与参与确认.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\11.png",
     "sha256": "4c98b6be5fda2d71401f959496e75dfdd6d67604e905102db5122709a263ea9b",
     "size": [
@@ -101,7 +101,7 @@
   },
   {
     "screen": "12",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\12_链接导入与来源核验.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\12_链接导入与来源核验.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\12.png",
     "sha256": "72e2cfd0fb9ad621e247696bd65d2b76a1d81223ec6c34f6a7af3a25308229ec",
     "size": [
@@ -111,7 +111,7 @@
   },
   {
     "screen": "13",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\13_状态与空态规范.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\13_状态与空态规范.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\13.png",
     "sha256": "401d1d00e0e8ed3098171103eeffe3ef65b3594f927f02bc4150ba5309384e4f",
     "size": [
@@ -121,7 +121,7 @@
   },
   {
     "screen": "14",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\14_弹窗_BottomSheet_Drawer规范.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\14_弹窗_BottomSheet_Drawer规范.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\14.png",
     "sha256": "fdec29b20819d9bce65c16c64f7051fee263e5791b6bc9f92d106181aa5c76bd",
     "size": [
@@ -131,7 +131,7 @@
   },
   {
     "screen": "15",
-    "source": "D:\\AndThen\\AndThen_UI_and_Assets_24\\UI_14\\15_DesignSystem_组件总览.png",
+    "source": "D:\\AndThen\\assets\\design\\UI_14\\15_DesignSystem_组件总览.png",
     "asset": "D:\\AndThen\\demo\\public\\design\\15.png",
     "sha256": "c33655d14246ba8b1e8952544e1064958f145d8403fb9084f6db6328d3dabf99",
     "size": [
