@@ -37,6 +37,7 @@ const EXPECTED_TABLES = [
   'site_feedback',
   'cover_catalog',
   'story_reads',
+  'site_visits',
   'source_preparations',
   'source_snapshots',
   'sources',
@@ -60,6 +61,7 @@ const EXPECTED_INDEXES = [
   'site_reports_message_uq',
   'site_feedback_message_uq',
   'story_reads_user_source_uq',
+  'site_visits_event_uq',
 ];
 
 describe('database migrations (real Postgres)', () => {

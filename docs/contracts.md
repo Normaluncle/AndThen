@@ -437,3 +437,10 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - Model classification uses `ai_runs.task=ai_a_extract` with `prompt_version=discovery-summary-2026-09-14.1` and `output.scope=official_summary_classification`. This separate output contains decision, reasons, extractive caption, candidate URL and summary hash; it is not a source `analysisResultSchema` or an author profile. Selection records retain the run ID/model/caption. Invalid output is held, never replaced by fabricated success; one invalid item does not discard other valid candidates.
 - `/api/discovery/local-preview` retains its compatible URL. With AI discovery enabled it returns `ai_enabled=true` and only model-approved official candidates. Old rule-only selections are excluded. Source permission revocation still hides linked candidates. Full source analysis, memories, interviews and publication continue to require their existing independent consent gates.
 - Pasted material without an original URL deduplicates within its importing author, preventing different authors with the same title from sharing private source identity.
+
+## 2026-09-14：站点访问、管理概览与封面年份
+
+- Migration 0021 新增 `site_visits`。`POST /api/telemetry/page-view` 无需登录，严格载荷 `{client_event_id,page,source_id?,followup_id?,dwell_ms}`；page 仅允许本站 `/?screen=` 白名单。访客 cookie 只存哈希。同 key 重复上报只提高 `dwell_ms`。
+- `GET /api/admin/overview` 仅服务端 admin。返回真实 `visitors`（去重访客）、`authorized_users`（未撤销的知乎绑定）、`authorized_reads`（这些账号的阅读次数）、按近 14 天半衰期计算的 `heat_score`，以及当前样本列表。热度：点进 +4，授权阅读 +6，停留 ln(1+秒)×2，同一访客再次进入 +3。不返回虚构的 1203 等演示数字。
+- 本地 `POST /api/auth/demo/admin` 必须提交 `password`，与控制台 scrypt 摘要比对；错误返回 401。密码不明文入库、不写日志。
+- 公开 presentation 增加 `cover_year`。AI-A / 发现筛选必须阅读完整原文，输出 `{year,caption}`：年份单独一行，caption 为 4–28 字的具体短句，允许改写但必须能在原文中找到依据，禁止抽象凑数。提示版本 `2026-09-14.3` 与 `discovery-summary-2026-09-14.2`。不合格 caption 不得进入发现候选。

@@ -3,7 +3,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleRegistrar } from '../../shared/types.js';
-import { storyReads, storyReactions, siteComments, siteReports, deletionJobs, interests, notifications, researchEvents, outbox, idempotencyKeys, auditLogs, sources } from '../../db/schema.js';
+import { storyReads, storyReactions, siteComments, siteReports, siteVisits, deletionJobs, interests, notifications, researchEvents, outbox, idempotencyKeys, auditLogs, sources } from '../../db/schema.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { success } from '../../http/errors.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
@@ -25,6 +25,7 @@ export const registerReaderDeletionRoutes: ModuleRegistrar = (app, ctx) => {
       if (existing) return existing;
       const cutoff = ctx.now();
       await tx.delete(storyReads).where(eq(storyReads.userId,auth.userId));
+      await tx.delete(siteVisits).where(eq(siteVisits.userId,auth.userId));
       await tx.delete(storyReactions).where(and(eq(storyReactions.userId,auth.userId),sql`${storyReactions.updatedAt} <= ${cutoff}`));
       await tx.delete(siteComments).where(and(eq(siteComments.userId,auth.userId),sql`${siteComments.createdAt} <= ${cutoff}`));
       await tx.delete(siteReports).where(and(eq(siteReports.userId,auth.userId),sql`${siteReports.createdAt} <= ${cutoff}`));

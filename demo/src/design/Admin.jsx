@@ -1,20 +1,112 @@
-import React,{useState} from 'react';
-import {Art,Button,Panel,Tag,Icon,Modal} from './shared.jsx';
-export const samples=[
- ['1','辞职去做自己真正喜欢的事情，值得吗？','林下的风','2021','职场发展','已回访','1,503','2/3','2024-06-12',[270,493,40,35]],
- ['2','从双非到顶尖高校读研，我踩过哪些坑？','匿名用户','2020','学习成长','回访中','976','1/3','2024-05-20',[270,541,40,37]],
- ['3','和相恋 8 年的 TA 分手后…','夏天','2022','情感关系','待回访','643','0/3','2024-04-18',[270,590,40,36]],
- ['4','工作五年，我开始重新思考…','陈同学','2019','人生选择','已回访','892','3/3','2024-01-03',[270,639,40,37]],
- ['5','30 岁开始转行做设计，…','设计小李','2022','创业思考','回访中','276','1/3','2024-03-22',[270,689,40,36]],
- ['6','从大厂离职后，我回到家乡…','北方','2020','职场发展','待回访','412','0/3','2024-03-10',[270,738,40,37]],
-];
-import {filterSamples} from './logic.js';
-export function Admin({navigate,toast}){
- const [tab,setTab]=useState('全部样本 (1,203)'),[query,setQuery]=useState(''),[year,setYear]=useState('全部年份'),[category,setCategory]=useState('全部分类'),[status,setStatus]=useState('全部状态'),[menu,setMenu]=useState('样本库'),[selection,setSelection]=useState([]),[modal,setModal]=useState(null),[newTitle,setNewTitle]=useState(''),[rows,setRows]=useState(samples);
- const visible=filterSamples(rows,query,year,category,tab.startsWith('待回访')?'待回访':tab.startsWith('已回访')?'已回访':status);
- function exportRows(){const body='\uFEFF'+['标题,作者,年份,分类,状态',...visible.map(r=>r.slice(1,6).map(v=>'"'+v.replaceAll('"','""')+'"').join(','))].join('\n');const url=URL.createObjectURL(new Blob([body],{type:'text/csv;charset=utf-8'}));const a=document.createElement('a');a.href=url;a.download='AndThen-design-samples.csv';a.click();URL.revokeObjectURL(url);toast('已导出设计稿演示样本');}
- return <div className="d-admin" data-screen="10"><nav className="d-admin-nav">{['样本库','回访管理','研究数据','官方数据','接口状态','内容审核','团队管理','系统设置'].map((label,i)=><button className={menu===label?'active':''} key={label} onClick={()=>{setMenu(label);if(i>0)setModal(label);}}><Icon name={['book','calendar','chart','clock','comment','shield','users','settings'][i]}/>{label}</button>)}<div className="d-blue-box">让真实的回答<br/>被时间看见。<br/>　—— 然后呢？</div></nav><div className="d-admin-main"><div className="d-admin-heading"><div><h1>样本库</h1><p>管理已收录的故事样本，跟踪回访进度与研究状态。</p></div><Button onClick={()=>setModal('添加样本')}>＋ 添加样本</Button><Button kind="ghost" onClick={exportRows}>↓ 导出数据</Button><Button kind="ghost" onClick={()=>setModal('批量操作')}>···</Button></div><div className="d-admin-mobile-title"><h1>管理后台</h1><p>研究真实人生的长期变化。</p><nav>{['样本库','回访管理','研究数据','接口状态'].map(t=><button className={t===menu?'active':''} key={t} onClick={()=>{setMenu(t);if(t!=='样本库')setModal(t);}}>{t}</button>)}</nav></div><div className="d-admin-stats"><h3 className="d-admin-overview-title">数据概览<button className="d-link" onClick={()=>toast('已刷新演示数据')}>本周更新 →</button></h3>{[['book','1,203','故事样本总数','↑ +12 本周新增'],['author','317','已回访样本','26.3% 回访率'],['ai','892','待回访样本','↑ +28 较上周'],['heart','5,826','关注过研究的用户','↑ +6% 较上月']].map(([icon,value,label,trend])=><Panel key={label}><Icon name={icon}/><div><b className={value==='5,826'?'d-stat-desktop-value':''}>{value}</b>{value==='5,826'&&<b className="d-stat-mobile-value">26.3%</b>}<span className={value==='5,826'?'d-stat-desktop-value':''}>{label}</span>{value==='5,826'&&<span className="d-stat-mobile-value">回访率</span>}<small>{trend}</small></div></Panel>)}</div><Panel className="d-admin-table-panel"><div className="d-admin-tabs">{['全部样本 (1,203)','待回访 (892)','已回访 (317)','标记关注 (86)'].map(t=><button className={tab===t?'active':''} key={t} onClick={()=>setTab(t)}>{t}</button>)}<input aria-label="搜索样本" placeholder="搜索标题、作者或标签…" value={query} onChange={e=>setQuery(e.target.value)}/></div><div className="d-admin-filters"><Button kind="ghost" onClick={()=>setModal('提取路径')}><Icon name="link"/> 提取路径</Button>{[[year,setYear,['全部年份','2022','2021','2020','2019'],'年份'],[category,setCategory,['全部分类','职场发展','学习成长','情感关系','人生选择','创业思考'],'分类'],[status,setStatus,['全部状态','已回访','回访中','待回访'],'状态']].map(([value,set,options,label])=><select key={label} aria-label={label} value={value} onChange={e=>set(e.target.value)}>{options.map(o=><option key={o}>{o}</option>)}</select>)}</div><div className="d-table-scroll"><table><thead><tr><th><input type="checkbox" aria-label="选择全部样本" checked={visible.length>0&&visible.every(r=>selection.includes(r[0]))} onChange={e=>setSelection(e.target.checked?visible.map(r=>r[0]):[])}/></th>{['标题','年份','分类','当前状态','关注人数','回访进度','最近更新','操作'].map(x=><th key={x}>{x}</th>)}</tr></thead><tbody>{visible.map(r=><tr key={r[0]}><td><input type="checkbox" aria-label={`选择${r[1]}`} checked={selection.includes(r[0])} onChange={e=>setSelection(e.target.checked?[...selection,r[0]]:selection.filter(id=>id!==r[0]))}/></td><td><button className="d-sample-title" onClick={()=>navigate('02')}><Art sheet="10" size={[1448,1086]} crop={r[9]}/><span><b>{r[1]}</b><small>{r[2]}</small></span></button></td><td>{r[3]}</td><td><Tag>{r[4]}</Tag></td><td><Tag tone={r[5]==='已回访'?'green':r[5]==='待回访'?'orange':'blue'}>● {r[5]}</Tag></td><td>{r[6]}</td><td>{r[7]}<div className="d-mini-progress"><i style={{width:`${Number(r[7][0])/3*100}%`}}/></div></td><td>{r[8]}</td><td><button className="d-link" aria-label={`样本操作：${r[1]}`} onClick={()=>setModal(r[1])}>···</button></td></tr>)}</tbody></table></div>{!visible.length&&<p className="d-muted">没有符合筛选条件的样本。</p>}<div className="d-admin-pagination"><span>共 1,203 条，每页 10 条</span><button onClick={()=>toast('已在第一页')}>‹</button>{[1,2,3,4,5].map(n=><button className={n===1?'active':''} key={n} onClick={()=>toast(`第 ${n} 页为设计稿演示，仅展示已提供的样本`)}>{n}</button>)}<span>…　121</span><button onClick={()=>toast('当前展示设计稿第一页')}>›</button></div></Panel><div className="d-admin-mobile-lists">{[['待回访样本（892）',[samples[2],samples[5],samples[4]]],['最近更新',[samples[0],samples[1],samples[3]]]].map(([title,entries])=><Panel key={title}><h3 className="d-between">{title}<button className="d-link" onClick={()=>setModal(title)}>查看全部 →</button></h3>{entries.map(r=><button key={r[0]} onClick={()=>navigate('02')}><Art sheet="10" size={[1448,1086]} crop={r[9]}/><span><b>{r[1]}</b><small>{r[3]} · {r[4]}</small></span><Tag tone={r[5]==='已回访'?'green':'orange'}>{r[5]}</Tag></button>)}</Panel>)}</div></div><div className="d-admin-bottom"><Panel><h3 className="d-between">接口状态<button className="d-link" onClick={()=>setModal('接口状态')}>查看详情 →</button></h3>{[['知乎 API','320ms'],['数据同步服务','560ms'],['AI 回访助手','780ms'],['邮件推送服务','210ms']].map(([label,latency])=><div className="d-service" key={label}><i/><span>{label}<small>正常运行</small></span><span>响应 {latency}<small>最近检查 1 分钟前</small></span></div>)}</Panel><Panel className="d-desktop"><h3 className="d-between">内容审核与备注<button className="d-link" onClick={()=>setModal('内容审核')}>查看全部 →</button></h3><div className="d-admin-review-stats"><span>3<small>待审核内容</small></span><span>12<small>需补充信息</small></span><span>5<small>存在争议</small></span></div>{['关于“大厂离职”的后续经历','标题表达需要优化','补充回访问题'].map((t,i)=><button className="d-menu-row" key={t} onClick={()=>setModal(t)}>{t}<small>{i+2} 小时前</small></button>)}</Panel><Panel className="d-desktop"><h3>研究进展</h3><div className="d-research-progress"><div><b>26.3%</b><small>回访完成率</small></div><span>● 317　已回访<br/>● 892　待回访<br/>● 1,203　样本总数</span></div><div className="d-blue-box">本地新增 12 个样本<br/><small>主要来自「职场发展」和「人生选择」方向。</small></div></Panel></div>{modal&&<Modal kind={modal==='添加样本'?'modal':'drawer'} title={modal} onClose={()=>setModal(null)} actions={modal==='添加样本'?<Button disabled={!newTitle.trim()} onClick={()=>{setRows([...rows,[`new-${rows.length}`,newTitle,'演示作者','2026','人生选择','待回访','0','0/3','2026-09-14',[270,493,40,35]]]);setNewTitle('');setModal(null);toast('样本已添加到本次演示');}}>添加样本</Button>:undefined}>{modal==='添加样本'?<label>故事标题<input className="d-input" value={newTitle} onChange={e=>setNewTitle(e.target.value)} placeholder="输入要添加的演示故事标题"/></label>:<><p className="d-muted">内部管理界面演示。以下内容不会改变真实研究数据或接口状态。</p><p>已选择 {selection.length} 个样本</p><Button kind="secondary" onClick={()=>{setModal(null);toast('已保存本次演示操作');}}>确认</Button></>}</Modal>}</div>;
+import React, { useEffect, useState } from 'react';
+import { api } from '../api.js';
+import { Button, Panel, Tag, Icon, Modal } from './shared.jsx';
+import { StoryCover } from '../StoryCover.jsx';
+
+function formatCount(value) {
+  return new Intl.NumberFormat('zh-CN').format(Number(value) || 0);
 }
 
-
-
+export function Admin({ navigate }) {
+  const [menu, setMenu] = useState('样本库');
+  const [data, setData] = useState(null);
+  const [error, setError] = useState('');
+  const [query, setQuery] = useState('');
+  const [tab, setTab] = useState('全部');
+  const [modal, setModal] = useState(null);
+  useEffect(() => {
+    let live = true;
+    setError('');
+    api('/admin/overview').then((value) => { if (live) setData(value); }).catch((err) => { if (live) setError(err.message); });
+    return () => { live = false; };
+  }, []);
+  const samples = (data?.samples || []).filter((row) => {
+    const haystack = `${row.title || ''} ${row.category || ''}`.toLowerCase();
+    if (query && !haystack.includes(query.toLowerCase())) return false;
+    if (tab === '待回访') return row.status === '待回访';
+    if (tab === '已回访') return row.status === '已回访';
+    if (tab === '标记关注') return row.followers > 0;
+    return true;
+  });
+  const stats = [
+    ['book', formatCount(data?.visitors), '访问人数', '去重后的站点访问'],
+    ['author', formatCount(data?.authorized_users), '已授权人数', '已连接知乎的账号'],
+    ['ai', formatCount(data?.authorized_reads), '授权用户阅读', '授权账号读过的帖子'],
+    ['heart', formatCount(data?.heat_score), '综合热度', data?.heat_formula || ''],
+  ];
+  return (
+    <div className="d-admin" data-screen="10">
+      <nav className="d-admin-nav">
+        {['样本库', '回访管理', '研究数据', '官方数据', '接口状态', '内容审核', '团队管理', '系统设置'].map((label, i) => (
+          <button className={menu === label ? 'active' : ''} key={label} onClick={() => { setMenu(label); if (i > 0) setModal(label); }}>
+            <Icon name={['book', 'calendar', 'chart', 'clock', 'comment', 'shield', 'users', 'settings'][i]} />{label}
+          </button>
+        ))}
+        <div className="d-blue-box">让真实的回答<br />被时间看见。<br />　—— 然后呢？</div>
+      </nav>
+      <div className="d-admin-main">
+        <div className="d-admin-heading">
+          <div>
+            <h1>样本库</h1>
+            <p>这些数字来自本站真实访问、授权和阅读记录，不是演示填充。</p>
+          </div>
+        </div>
+        {error && <Panel><p role="alert">{error}</p></Panel>}
+        <div className="d-admin-stats">
+          <h3 className="d-admin-overview-title">数据概览</h3>
+          {stats.map(([icon, value, label, trend]) => (
+            <Panel key={label}>
+              <Icon name={icon} />
+              <div>
+                <b>{data ? value : '…'}</b>
+                <span>{label}</span>
+                <small>{trend}</small>
+              </div>
+            </Panel>
+          ))}
+        </div>
+        <Panel className="d-admin-table-panel">
+          <div className="d-admin-tabs">
+            {['全部', '待回访', '已回访', '标记关注'].map((item) => (
+              <button className={tab === item ? 'active' : ''} key={item} onClick={() => setTab(item)}>{item}</button>
+            ))}
+            <input aria-label="搜索样本" placeholder="搜索标题或分类…" value={query} onChange={(event) => setQuery(event.target.value)} />
+          </div>
+          <div className="d-table-scroll">
+            <table>
+              <thead>
+                <tr>{['标题', '年份', '分类', '当前状态', '关注人数', '热度', '最近更新'].map((heading) => <th key={heading}>{heading}</th>)}</tr>
+              </thead>
+              <tbody>
+                {samples.map((row) => (
+                  <tr key={row.id}>
+                    <td>
+                      <button className="d-sample-title" onClick={() => navigate('02', { source: row.id })}>
+                        <StoryCover item={row} />
+                        <span><b>{row.title || '未命名故事'}</b><small>{row.provenance === 'test_fixture' ? '演示材料' : '本站收录'}</small></span>
+                      </button>
+                    </td>
+                    <td>{row.year || '—'}</td>
+                    <td><Tag>{row.category}</Tag></td>
+                    <td><Tag tone={row.status === '已回访' ? 'green' : row.status === '待回访' ? 'orange' : 'blue'}>● {row.status}</Tag></td>
+                    <td>{row.followers}</td>
+                    <td>{row.heat}</td>
+                    <td>{row.updated_at}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!samples.length && <p className="d-muted">{data ? '还没有符合筛选条件的真实样本。' : '正在读取本站数据…'}</p>}
+          <p className="d-muted">热度公式：{data?.heat_formula}</p>
+        </Panel>
+      </div>
+      {modal && (
+        <Modal title={modal} onClose={() => setModal(null)}>
+          <p className="d-muted">当前先把样本库接到真实访问、授权和阅读数据。这一栏暂不另开站点功能。</p>
+          <Button kind="secondary" onClick={() => setModal(null)}>知道了</Button>
+        </Modal>
+      )}
+    </div>
+  );
+}

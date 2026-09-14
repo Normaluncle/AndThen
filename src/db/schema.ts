@@ -905,7 +905,7 @@ export const discoverySelections = pgTable('discovery_selections', {
   runId: uuid('run_id').notNull().references(()=>discoveryRuns.id),
   candidateId: uuid('candidate_id').references(()=>discoveryCandidates.id,{onDelete:'cascade'}),
   data: jsonb('data').$type<OfficialCandidate>().notNull(),
-  analysis: jsonb('analysis').$type<{run_id:string;caption:string|null;reasons:string[];model:string}>(),
+  analysis: jsonb('analysis').$type<{run_id:string;caption:string|null;year:number|null;reasons:string[];model:string}>(),
   decision: text('decision').notNull(),
   reason: text('reason').notNull(),
   createdAt: timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),
@@ -992,8 +992,27 @@ export const storyReads = pgTable('story_reads', {
  readAt:timestamp('read_at',{withTimezone:true}).notNull().defaultNow(),
 },t=>[uniqueIndex('story_reads_user_source_uq').on(t.userId,t.sourceId)]);
 
+export const siteVisits = pgTable('site_visits', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  visitorKey: text('visitor_key').notNull(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'set null' }),
+  page: text('page').notNull(),
+  sourceId: uuid('source_id').references(() => sources.id, { onDelete: 'set null' }),
+  followupId: uuid('followup_id').references(() => followupVersions.id, { onDelete: 'set null' }),
+  dwellMs: integer('dwell_ms').notNull().default(0),
+  clientEventId: uuid('client_event_id').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+}, (t) => [
+  uniqueIndex('site_visits_event_uq').on(t.clientEventId),
+  index('site_visits_visitor_idx').on(t.visitorKey),
+  index('site_visits_source_idx').on(t.sourceId),
+  index('site_visits_created_idx').on(t.createdAt),
+]);
+
 export const schema = {
   storyReads,
+  siteVisits,
   coverCatalog,
   storyReactions, siteComments, siteReports, siteFeedback,
   zhihuAccounts,

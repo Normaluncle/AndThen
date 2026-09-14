@@ -4,7 +4,7 @@ import {Button,Panel,Tabs} from './shared.jsx';
 import {playgroundResetAllowed} from '../publish-chrome.js';
 export function SessionPanel({user,onUser,onClose}){
  const [mode,setMode]=useState('真实使用'),[consent,setConsent]=useState(false);
- const [credential,setCredential]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const [credential,setCredential]=useState(''),[adminSecret,setAdminSecret]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [demo,setDemo]=useState(false);
  useEffect(()=>{api('/auth/demo/status').then(data=>setDemo(!!data.enabled)).catch(()=>setDemo(false));},[]);
  async function run(fn){setBusy(true);setError('');setNotice('');try{await fn();}catch(e){setError(e.message);}finally{setBusy(false);}}
@@ -21,8 +21,11 @@ export function SessionPanel({user,onUser,onClose}){
     <div className="d-actions">
       <Button kind="secondary" disabled={busy} onClick={()=>run(()=>identify('/auth/demo/reader',{}))}>演示读者</Button>
       <Button kind="secondary" disabled={busy} onClick={()=>run(()=>identify('/auth/demo/author',{}))}>模拟作者</Button>
-      <Button kind="secondary" disabled={busy} onClick={()=>run(()=>identify('/auth/demo/admin',{}))}>管理员</Button>
     </div>
+    <form onSubmit={e=>{e.preventDefault();run(()=>identify('/auth/demo/admin',{password:adminSecret}));}}>
+      <label>管理员密码<input className="d-input" type="password" autoComplete="current-password" value={adminSecret} onChange={e=>setAdminSecret(e.target.value)}/></label>
+      <Button disabled={busy||adminSecret.length<8} type="submit">进入管理后台</Button>
+    </form>
     <p className="d-muted">评委可以反复体验关注和问询：点下方按钮会清空演示进度并重建三则完整示例。</p>
     <Button disabled={busy} kind="ghost" onClick={()=>run(resetPlayground)}>刷新演示数据</Button>
   </>

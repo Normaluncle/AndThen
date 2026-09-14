@@ -29,11 +29,11 @@ it('uses conservative evidence rules and a Shanghai calendar day',()=>{
 it('publishes only model-approved summaries, records real usage, and never creates an author story',async()=>{
  const h=await createHarness();try{
  const ctx=h.moduleCtx;Object.assign(ctx.env,{DISCOVERY_AI_ENABLED:true,PUBLIC_BASE_URL:'https://example.com',LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
- const mock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({model:'fixture',usage:{prompt_tokens:20,completion_tokens:10},choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['具体经历与时间线'],caption:'开始学习新的技能'})}}]})));
+ const mock=vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({model:'fixture',usage:{prompt_tokens:20,completion_tokens:10},choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['具体经历与时间线'],year:null,caption:'我辞职转行学新技能'})}}]})));
  await execute(ctx,async()=>[item(31)]);
  expect(mock).toHaveBeenCalledTimes(1);
  const feed=(await h.app.inject({url:'/api/discovery/local-preview'})).json().data;
- expect(feed.ai_enabled).toBe(true);expect(feed.items).toHaveLength(1);expect(feed.items[0].cover_caption).toBe('开始学习新的技能');
+ expect(feed.ai_enabled).toBe(true);expect(feed.items).toHaveLength(1);expect(feed.items[0].cover_caption).toBe('我辞职转行学新技能');expect(feed.items[0].cover_year).toBeNull();
  expect((await h.app.inject({url:'/api/discovery/candidates/'+feed.items[0].candidate_id})).statusCode).toBe(200);
  expect(await ctx.db.select().from(sources)).toHaveLength(0);
  const runs=await ctx.db.select().from(aiRuns);expect(runs[0]?.status).toBe('succeeded');expect(runs[0]?.inputTokens).toBe(20);
@@ -42,7 +42,7 @@ it('publishes only model-approved summaries, records real usage, and never creat
 it('rejects invented AI captions and leaves the public feed empty',async()=>{
  const h=await createHarness();try{
  Object.assign(h.moduleCtx.env,{DISCOVERY_AI_ENABLED:true,LLM_BASE_URL:'http://llm.test/v1',LLM_MODEL:'fixture'});
- vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['经历'],caption:'赚了100万'})}}]})));
+ vi.spyOn(globalThis,'fetch').mockResolvedValue(new Response(JSON.stringify({choices:[{message:{content:JSON.stringify({decision:'candidate',reasons:['经历'],year:null,caption:'后来赚了100万'})}}]})));
  await execute(h.moduleCtx,async()=>[item(32)]);
  expect((await h.app.inject({url:'/api/discovery/local-preview'})).json().data.items).toHaveLength(0);
  expect((await h.ctx.db.select().from(aiRuns))[0]?.status).toBe('failed');

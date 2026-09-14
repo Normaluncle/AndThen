@@ -33,11 +33,13 @@ import {SessionPanel} from './SessionPanel.jsx';
 import {ConnectedHome,ConnectedPersonal,ConnectedDetail,ConnectedImport,ConnectedSettings,ConnectedCandidate} from './Connected.jsx';
 import {DesignMobileNav} from './shared.jsx';
 import {unreadNotificationCount} from './notification-data.js';
+import {usePageView} from '../telemetry.js';
 export const screenNames={'01':'发现首页','02':'故事详情','03':'我的关注','04':'通知','05':'写下后来','06':'AI 回访采访','07':'确认与发布','08':'公开后来','09':'我的资料与设置','10':'管理后台','11':'作者邀请','12':'链接导入与核验','13':'状态与空态','14':'弹窗与抽屉','15':'组件总览'};
 const navIds={'发现':'01','我的关注':'03','作者工作台':'05','我的回答':'05','通知':'04','账号':'09'};
 export default function DesignApp({user,onUser,connectionError}){
  const [route,setRoute]=useState(()=>readRoute(location.search));
  const screen=route.screen;
+ usePageView(route);
  useEffect(()=>{setQuery(route.q||'');},[route.q]);
  const [query,setQuery]=useState(''),[toastText,setToastText]=useState(''),[loginOpen,setLoginOpen]=useState(false);
  const [interactions,setInteractions]=useState({});

@@ -14,6 +14,6 @@ test('clean cover selection is stable and respects tags with an explicit missing
  assert.ok(['career1','career2'].includes(selectCover(item,pool).src));assert.deepEqual(selectCover(item,pool),selectCover(item,pool));assert.equal(selectCover(item,[]),null);assert.equal(selectCover({category:'未知'},pool),null);
 });
 
-test('cover captions use source publication metadata and keep date separate from wording',()=>{assert.deepEqual(coverCaption({date:'2021-06-12',cover_caption:'2021.06 我选择了出发'}),['2021年6月','我选择了出发']);assert.deepEqual(coverCaption({published_at:'2025-09-01T00:00:00Z'}),['2025年9月','原回答']);assert.deepEqual(coverCaption({cover_caption:'原回答'}),['','原回答']);assert.deepEqual(coverCaption({}),[]);});
+test('cover captions put the story year on its own line above the concrete sentence',()=>{assert.deepEqual(coverCaption({cover_year:2015,cover_caption:'我辞职投入独立开发'}),['2015年','我辞职投入独立开发']);assert.deepEqual(coverCaption({cover_caption:'2021.06 我选择了出发'}),['2021年','我选择了出发']);assert.deepEqual(coverCaption({published_at:'2025-09-01T00:00:00Z'}),[]);assert.deepEqual(coverCaption({cover_caption:'原回答'}),['','原回答']);assert.deepEqual(coverCaption({}),[]);});
 
 test('share keeps the exact public later version instead of sending readers to the original answer',()=>{assert.equal(storySharePath({followupId:'version-id',sourceId:'source-id'}),'/?screen=08&followup=version-id');assert.equal(storySharePath({sourceId:'source-id'}),'/?screen=02&source=source-id');assert.equal(storySharePath({fixtureId:'study',screen:'08'}),'/?screen=08&story=study');});

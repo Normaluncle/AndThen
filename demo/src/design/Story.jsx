@@ -1,14 +1,26 @@
 import {followedStories} from './Following.jsx';
 import {StoryCover} from '../StoryCover.jsx';
 import React,{useState} from 'react';
-import {Button,Tag,Panel,Icon,Modal,storyTitle,storyParagraphs} from './shared.jsx';
+import {AvatarGroup,Button,Tag,Panel,Icon,Modal,storyTitle,storyParagraphs} from './shared.jsx';
 import {HomeImage} from '../Home.jsx';
 import {FOLLOW_REASONS} from '../publish-chrome.js';
 export const reasons=FOLLOW_REASONS;
-export function ReasonChoices({value,onChange}){return <div className="d-reasons" data-region="reason-picker">{reasons.map(([title,detail],i)=><label key={title} className={value===i?'selected':''}><input type="radio" name="reason" checked={value===i} onChange={()=>onChange(i)}/><span><b>{title}</b><small>{detail}</small></span></label>)}</div>;}
-export function FollowBlock({followed=false,onFollow,busy=false,notice,extra,cta='关注后续'}){
- const [reason,setReason]=useState(0);
- return <div className="d-interest" data-region="interest-panel"><h2><HomeImage crop={[69,114,26,30]}/>然后呢？</h2><p className="d-interest-intro">想知道这段经历后来发生了什么吗？</p><b>你更想知道什么？</b><ReasonChoices value={reason} onChange={setReason}/>{reason===3&&<textarea className="d-input" aria-label="补充问题" placeholder="写下你想了解的后来…"/>}{extra}<Button className="wide" disabled={busy} onClick={()=>onFollow?.(reason)}>{followed?'取消关注':cta}</Button>{notice}</div>;
+export function ReasonChoices({value,onChange,poll,locked=false}){
+ return <div className="d-reasons" data-region="reason-picker">{reasons.map(([title,detail],i)=>{
+  const tag=poll?.tags?.find(item=>item.tag===title);
+  const pct=locked?Number(tag?.percentage||0):null;
+  return <label key={title} className={`${value===i?'selected':''} ${locked?'polled':''}`}>
+   {locked&&<i className="d-reason-fill" style={{'--pct':(pct||0)/100}}/>}
+   <input type="radio" name="reason" checked={value===i} disabled={locked} onChange={()=>onChange(i)}/>
+   <span><b>{title}</b>{locked?<small className="d-reason-pct">{pct}%</small>:<small>{detail}</small>}</span>
+  </label>;
+ })}</div>;
+}
+export function FollowBlock({followed=false,onFollow,busy=false,notice,extra,cta='关注后续',poll}){
+ const [reason,setReason]=useState(0),[other,setOther]=useState(''),[consent,setConsent]=useState(false);
+ const locked=!!followed;
+ const otherReady=reason!==3||(Array.from(other).length>0&&consent);
+ return <div className="d-interest" data-region="interest-panel"><h2><HomeImage crop={[69,114,26,30]}/>然后呢？</h2><p className="d-interest-intro">想知道这段经历后来发生了什么吗？</p><b>你更想知道什么？</b><ReasonChoices value={reason} onChange={setReason} poll={poll} locked={locked}/>{reason===3&&!locked&&<><textarea className="d-input" aria-label="补充问题" placeholder="写下你想了解的后来…" value={other} onChange={e=>setOther(Array.from(e.target.value).slice(0,20).join(''))}/><label className="d-consent-row"><input type="checkbox" checked={consent} onChange={e=>setConsent(e.target.checked)}/>同意将这句疑问用于归类和采访选题</label></>}{extra}<Button className="wide" disabled={busy||(!followed&&!otherReady)} onClick={()=>onFollow?.(reason,other,consent)}>{followed?'取消关注':cta}</Button>{locked&&<div className="d-follow-count"><AvatarGroup/><b>已有 {poll.total} 人和你一样关注这个事情</b></div>}{notice}</div>;
 }
 export function Story({navigate,state={},dispatch=()=>{},toast=()=>{},engagement,onSearchTopic,story,followSlot,recommendations}){
  const [expanded,setExpanded]=useState(false),[original,setOriginal]=useState(false);

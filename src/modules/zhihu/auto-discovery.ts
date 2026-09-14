@@ -113,7 +113,7 @@ export async function registerDiscoveryRoutes(app: AppInstance,ctx: ModuleContex
       if(candidate.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,candidate.sourceId));if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus))continue;}
       items.push({...row.data,comments:[],candidate_id:row.candidateId,provenance:'official_api',discovery_reason:row.reason,
         display_status:ctx.env.DISCOVERY_AI_ENABLED?'official_candidate':'local_candidate_preview',analysis_status:row.analysis?'ai_reviewed':'awaiting_model_consent',
-        ...await sourcePresentation(ctx.db,row.url,row.data.title+' '+row.data.text),...(row.analysis?.caption?{cover_caption:row.analysis.caption}:{})});
+        ...await sourcePresentation(ctx.db,row.url,row.data.title+' '+row.data.text),...(row.analysis?.caption?{cover_caption:row.analysis.caption,cover_year:row.analysis.year??null}:{})});
     }
     return success(request.id,{enabled:true,ai_enabled:ctx.env.DISCOVERY_AI_ENABLED,items});
   });

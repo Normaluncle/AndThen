@@ -18,11 +18,12 @@ import {
   sources,
   users,
 } from '../../db/schema.js';
-import { envelopeSchema } from '../../http/envelope.js';
+import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { AppError, success } from '../../http/errors.js';
 import { createSession, resolveSession } from './service.js';
 import { snapshotContentHash } from '../sources/service.js';
 import { DEMO_ACCOUNTS, FIXTURE_STORIES, LOCAL_DEMO_COHORT, playgroundResetAllowed } from './playground.js';
+import { verifyAdminConsolePassword } from './admin-gate.js';
 
 export { DEMO_ACCOUNTS, FIXTURE_STORIES, playgroundResetAllowed } from './playground.js';
 
@@ -127,10 +128,18 @@ export async function registerLocalDemoRoutes(app: AppInstance, ctx: ModuleConte
   const r = app.withTypeProvider<ZodTypeProvider>();
   r.get('/auth/demo/status', { schema: { response: { 200: envelopeSchema(z.object({ enabled: z.boolean() })) } } }, async (request) => success(request.id, { enabled: localDemoEnabled(ctx) }));
   for (const preset of DEMO_ACCOUNTS) r.post('/auth/demo/' + preset.path, {
-    schema: { tags: ['identity'], body: z.object({}).strict(), response: { 200: envelopeSchema(sessionUserSchema) } },
+    schema: {
+      tags: ['identity'],
+      body: preset.path === 'admin' ? z.object({ password: z.string().min(1).max(200) }).strict() : z.object({}).strict(),
+      response: { 200: envelopeSchema(sessionUserSchema), 401: errorEnvelopeSchema, 403: errorEnvelopeSchema, 404: errorEnvelopeSchema },
+    },
   }, async (request, reply) => {
     if (!localDemoEnabled(ctx)) throw AppError.notFound();
     assertSameOrigin(request, ctx);
+    if (preset.path === 'admin') {
+      const password = 'password' in request.body ? request.body.password : '';
+      if (!await verifyAdminConsolePassword(password)) throw AppError.unauthorized();
+    }
     const result = await loginPreset(ctx, preset.path);
     issueWebCookie(request, reply, ctx.env, result.session_token, 7200);
     reply.header('cache-control', 'no-store');

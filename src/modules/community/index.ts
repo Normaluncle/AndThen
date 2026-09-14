@@ -7,8 +7,11 @@ import {requireAuthContext} from '../../http/auth.js';
 import {envelopeSchema,errorEnvelopeSchema} from '../../http/envelope.js';
 import {success,AppError} from '../../http/errors.js';
 import {requirePublicStory} from '../sources/service.js';
+import {registerTelemetryRoutes} from './telemetry.js';
+import {siteOverview} from './stats.js';
 
 export const communityModule:ModuleDefinition={name:'community',async registerRoutes(app,ctx){
+ await registerTelemetryRoutes(app,ctx);
  const r=app.withTypeProvider<ZodTypeProvider>();
  const failures={400:errorEnvelopeSchema,401:errorEnvelopeSchema,403:errorEnvelopeSchema,404:errorEnvelopeSchema,409:errorEnvelopeSchema};
  const params=z.object({id:z.string().uuid()});
@@ -103,4 +106,9 @@ export const communityModule:ModuleDefinition={name:'community',async registerRo
   const rows=await ctx.db.select().from(siteFeedback).orderBy(desc(siteFeedback.createdAt)).limit(10).offset(req.query.offset);
   return success(req.id,{items:rows.map(row=>({id:row.id,category:row.category,body:row.body,page:row.page,created_at:row.createdAt.toISOString()}))});
  });
+ r.get('/admin/overview',{preHandler:[app.authenticate,app.requireRole('admin')],schema:{tags:['community'],response:{...failures,200:envelopeSchema(z.object({
+  visitors:z.number(),authorized_users:z.number(),authorized_reads:z.number(),heat_score:z.number(),heat_formula:z.string(),
+  stories:z.number(),published_followups:z.number(),pending_followups:z.number(),
+  samples:z.array(z.object({id:z.string(),title:z.string().nullable(),provenance:z.string(),year:z.number().nullable(),category:z.string(),status:z.string(),followers:z.number(),heat:z.number(),updated_at:z.string()})),
+ }))}}},async req=>success(req.id,await siteOverview(ctx.db,ctx.now())));
 }};

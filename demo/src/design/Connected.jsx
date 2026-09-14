@@ -13,13 +13,12 @@ import {publishBackTarget} from '../publish-chrome.js';
 import {SourceMaterials} from '../SourceMaterials.jsx';
 import {Home} from '../Home.jsx';
 import {InterviewPage,DraftPage} from '../screens.jsx';
-import {Article} from '../Article.jsx';
-import {ReasonPicker} from '../ReasonPicker.jsx';
+import {LiveReading} from './LiveReading.jsx';
 import {ZhihuAccount} from '../ZhihuAccount.jsx';
 import {MemoryMaterials} from '../MemoryMaterials.jsx';
 import {draftActions,interviewActions,poll} from '../workflow.js';
 import {workbenchTabs} from '../ui14.js';
-import {Panel,Button,Tabs,Modal,Tag} from './shared.jsx';
+import {Panel,Button,Tabs,Modal} from './shared.jsx';
 import {ParticipationDialog} from './ParticipationDialog.jsx';
 import {Workbench} from './Workbench.jsx';
 import {WorkbenchCard} from './WorkbenchCard.jsx';
@@ -72,8 +71,10 @@ export function ConnectedDetail({route,navigate,user,onLogin}){
  const resource=useResource(path,route.interview?2000:0),action=useAction();
  const related=useResource(route.source||route.followup?'/stories?limit=4':null);
  const following=useResource(route.source&&user?'/me/following':null);
- const [answer,setAnswer]=useState(''),[visibility,setVisibility]=useState('public'),[reason,setReason]=useState(false),[draft,setDraft]=useState(null),[saved,setSaved]=useState(''),[pending,setPending]=useState(false),[publish,setPublish]=useState(false),[withdraw,setWithdraw]=useState(false),[publicConsent,setPublicConsent]=useState(false);
+ const [answer,setAnswer]=useState(''),[visibility,setVisibility]=useState('public'),[reason,setReason]=useState(false),[reasonPoll,setReasonPoll]=useState(null),[draft,setDraft]=useState(null),[saved,setSaved]=useState(''),[pending,setPending]=useState(false),[publish,setPublish]=useState(false),[withdraw,setWithdraw]=useState(false),[publicConsent,setPublicConsent]=useState(false);
  useEffect(()=>{setReason(!!following.value?.items?.some(item=>item.source_id===route.source));},[following.value,route.source]);
+ useEffect(()=>{if(reason&&route.source)api(`/sources/${route.source}/interest-reasons`).then(setReasonPoll).catch(()=>setReasonPoll(null));else setReasonPoll(null);},[reason,route.source]);
+ const origin=useResource(route.followup&&resource.value?.source_id?'/stories/'+resource.value.source_id:null);
  useEffect(()=>{const source=route.source||resource.value?.source_id;if(user&&source&&resource.value)api(`/stories/${source}/read`,'PUT',{}).catch(()=>{});},[user?.id,route.source,resource.value]);
  function loadDraft(value){setDraft(value);setSaved(JSON.stringify(value.statements));const next=draftVersionRoute(route,value);if(next)navigate(next.screen,{draft:next.draft},{replace:true});}
  useEffect(()=>{if(route.draft&&resource.value)loadDraft(resource.value);},[resource.value,route.draft]);
@@ -82,8 +83,15 @@ export function ConnectedDetail({route,navigate,user,onLogin}){
  const data=resource.value;
  const recommendations=<>{(related.value?.items||[]).filter(item=>item.source_id!==(route.source||data.source_id)).slice(0,3).map(item=><button className="d-related" key={item.source_id} onClick={()=>navigate('02',{source:item.source_id})}><StoryCover item={item}/><span><b>{item.title}</b><small>本站故事</small></span></button>)}<Button kind="soft" onClick={()=>navigate('01')}>发现更多故事 →</Button></>;
  async function interviewAction(name){try{await api(`/interviews/${route.interview}/${name}`,'POST',{expected_version:data.session.revision});resource.reload();}catch(e){if(e.status===409)resource.reload();throw e;}}
- return <div className="d-connected"><ActionError action={action}/>{route.source&&<Story story={{...data.story,source_id:route.source,updated:!!data.story.published_followup}} navigate={navigate} recommendations={recommendations} engagement={<Engagement sourceId={route.source} user={user} onLogin={onLogin}/>} followSlot={<FollowBlock followed={reason} busy={action.busy} extra={data.story.published_followup&&<Button kind="soft" onClick={()=>navigate('08',{followup:data.story.published_followup.version_id})}>阅读作者的后来 →</Button>} notice={reason&&<ReasonPicker sourceId={route.source}/>} onFollow={()=>{if(!user){onLogin();return;}action.run(async()=>{await api(`/stories/${route.source}/interest`,'PUT',{active:!reason});setReason(!reason);});}}/>}/>}
- {route.followup&&<div className="d-two d-reading"><Panel className="d-reading-main"><Tag>作者的后来</Tag><h1>这段经历，后来怎么样了？</h1><p className="d-muted">{data.published_at?.slice(0,10)} · 作者自述{data.ai_assisted?'，AI 辅助整理':''}</p><div className="d-reading-blocks">{data.statements?.map(statement=><Article key={statement.id} statement={statement}/>)}</div>{data.source_id&&<><Button kind="secondary" onClick={()=>navigate('02',{source:data.source_id})}>查看原回答</Button><Engagement followupId={route.followup} sourceId={data.source_id} user={user} onLogin={onLogin}/></>}</Panel><aside className="d-sidebar"><Panel><h3>这篇文章的来龙去脉</h3><p>这是作者已确认并公开展示的后续。可以回到原回答了解故事的起点。</p><Button kind="soft" onClick={()=>navigate('02',{source:data.source_id})}>查看原回答 →</Button></Panel><Panel><h3>你可能也感兴趣</h3>{recommendations}</Panel></aside></div>}
+ async function saveFollow(choice=0,extra='',consent=false){if(!user){onLogin();return;}await action.run(async()=>{
+  if(reason){await api(`/stories/${route.source}/interest`,'PUT',{active:false});setReason(false);setReasonPoll(null);return;}
+  await api(`/stories/${route.source}/interest`,'PUT',{active:true});
+  const picked=['outcome','journey','reflection','other'][choice]||'outcome';
+  await api(`/sources/${route.source}/interest-reason`,'PUT',picked==='other'?{choice:picked,text:extra,allow_model_processing:!!consent}:{choice:picked});
+  setReason(true);setReasonPoll(await api(`/sources/${route.source}/interest-reasons`));
+ });}
+ return <div className="d-connected"><ActionError action={action}/>{route.source&&<Story story={{...data.story,source_id:route.source,updated:!!data.story.published_followup}} navigate={navigate} recommendations={recommendations} engagement={<Engagement sourceId={route.source} user={user} onLogin={onLogin}/>} followSlot={<FollowBlock followed={reason} busy={action.busy} poll={reason?reasonPoll:null} extra={data.story.published_followup&&<Button kind="soft" onClick={()=>navigate('08',{followup:data.story.published_followup.version_id})}>阅读作者的后来 →</Button>} notice={<ActionError action={action}/>} onFollow={saveFollow}/>}/>}
+ {route.followup&&<LiveReading data={data} origin={origin.value?.story} navigate={navigate} recommendations={recommendations} engagement={data.source_id?<Engagement followupId={route.followup} sourceId={data.source_id} user={user} onLogin={onLogin}/>:null}/>}
  {route.interview&&<InterviewPage context={data.context} session={data.session} messages={data.messages||[]} answer={answer} answerVisibility={visibility} busy={action.busy} interviewState={interviewActions(data.session,data.messages||[])} onBack={()=>navigate('05')} onAnswer={setAnswer} onVisibility={setVisibility} onSave={()=>action.run(async()=>{await api(`/interviews/${route.interview}/messages`,'POST',{message:answer,visibility,client_message_id:crypto.randomUUID(),expected_version:data.session.revision});setAnswer('');resource.reload();})} onSkip={()=>action.run(async()=>{await api(`/interviews/${route.interview}/messages`,'POST',{skip:true,client_message_id:crypto.randomUUID(),expected_version:data.session.revision});resource.reload();})} onPause={()=>action.run(()=>interviewAction('pause'))} onResume={()=>action.run(()=>interviewAction('resume'))} onFinish={()=>action.run(()=>interviewAction('finish'))} onRetry={()=>action.run(()=>interviewAction('retry'))} onRefresh={resource.reload} onDraft={()=>action.run(async()=>{const result=await api(`/interviews/${route.interview}/draft`,'POST');navigate('07',{draft:result.id});})}/>}
  {route.draft&&draft&&<DraftPage draft={draft} draftState={draftActions(draft,saved)} draftJobPending={pending} busy={action.busy} onBack={()=>{const back=publishBackTarget(draft);navigate(back.screen,back.interview?{interview:back.interview}:{});}} onDraft={loadDraft} onPending={setPending} onChange={setDraft} onSave={()=>action.run(async()=>loadDraft(await api(`/drafts/${draft.id}`,'PATCH',{expected_version:draft.version,statements:draft.statements})))} onConfirm={()=>action.run(async()=>{await api(`/drafts/${draft.id}/confirm`,'POST',{content_hash:draft.contentHash,statement_ids:draft.statements.map(item=>item.id)});loadDraft(await api('/drafts/'+draft.id));})} onPublish={()=>{setPublicConsent(false);setPublish(true);}} onWithdraw={()=>setWithdraw(true)}/>}
  {publish&&<Modal title="确认发布到本站？" onClose={()=>setPublish(false)} actions={<Button disabled={action.busy||!publicConsent} onClick={()=>action.run(async()=>{loadDraft(await publishOwnDraft(api,draft,publicConsent));setPublish(false);})}>确认发布</Button>}><p>公开后，关注这则故事的读者可以阅读。服务端会检查公开展示许可及当前版本确认。</p><label><input type="checkbox" checked={publicConsent} onChange={e=>setPublicConsent(e.target.checked)}/>我同意在本站公开展示原材料与当前后来版本</label><ActionError action={action}/></Modal>}

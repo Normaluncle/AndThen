@@ -19,12 +19,14 @@ describe('local demo login',()=>{
    expect((await h.app.inject(req)).statusCode).toBe(404);
   }finally{await h.close();}
  });
- it('mints a local admin session without a login token body',async()=>{
+ it('mints a local admin session only with the console password',async()=>{
   const h=await createHarness();
   try {
    h.ctx.env.LOCAL_DEMO_LOGIN=true;
    h.ctx.env.PUBLIC_BASE_URL='http://127.0.0.1:5174';
-   const res=await h.app.inject({method:'POST',url:'/api/auth/demo/admin',payload:{}});
+   expect((await h.app.inject({method:'POST',url:'/api/auth/demo/admin',payload:{}})).statusCode).toBe(400);
+   expect((await h.app.inject({method:'POST',url:'/api/auth/demo/admin',payload:{password:'wrong-password'}})).statusCode).toBe(401);
+   const res=await h.app.inject({method:'POST',url:'/api/auth/demo/admin',payload:{password:'QAZWSXEDCRFVTGB..1'}});
    expect(res.statusCode,res.body).toBe(200);
    expect(res.json().data.user.role).toBe('admin');
    expect(res.json().data.user.cohort).toBe('local_demo_fixture');

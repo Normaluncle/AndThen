@@ -14,6 +14,7 @@ import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { analysisResultSchema, AI_JOB_KINDS } from '../../ai/tasks.js';
 import { createLlmClient } from '../../ai/client.js';
 import { PROMPTS, PROMPT_VERSION } from '../../ai/prompts.js';
+import { coverCaptionAcceptable } from './cover-caption.js';
 import { withJobFence, JobLeaseLostError } from '../../jobs/transaction.js';
 
 const candidateSchema = analysisResultSchema.pick({ presentation:true, case_type: true, claims: true, missing_information: true, safety: true, safety_reasons: true, recommended_action: true, action_reasons: true, reviewer_required: true }).strict();
@@ -86,9 +87,9 @@ export function registerAnalysisJobs(ctx: ModuleContext, registry: JobHandlerReg
         candidate = { case_type: 'unknown', claims: [], missing_information: ['human_risk_review'], safety: 'manual_review', safety_reasons: risks, recommended_action: 'hold', action_reasons: risks, reviewer_required: true };
       } else {
         completion = await createLlmClient(ctx.env, ctx.logger).complete({ json: true, maxTokens: 3000, temperature: 0, signal: job.signal,
-          messages: [{ role: 'system', content: PROMPTS.ai_a_extract }, { role: 'user', content: JSON.stringify({ evidence: [{ id: evidenceId, text: state.text }], material_level: state.snapshot.materialLevel, published_at: state.snapshot.publishedAt }) }] });
+          messages: [{ role: 'system', content: PROMPTS.ai_a_extract }, { role: 'user', content: JSON.stringify({ title: state.source.title, evidence: [{ id: evidenceId, text: state.text }], material_level: state.snapshot.materialLevel, published_at: state.snapshot.publishedAt }) }] });
         candidate = candidateSchema.parse(JSON.parse(completion.content));
-        if(candidate.presentation&&(!state.text.includes(candidate.presentation.caption)||candidate.presentation.evidence_refs.some(id=>id!==evidenceId)))throw AppError.sourceIncomplete('Unsupported cover caption');
+        if(candidate.presentation&&(candidate.presentation.evidence_refs.some(id=>id!==evidenceId)||!coverCaptionAcceptable(state.text,candidate.presentation.caption,candidate.presentation.year,state.snapshot.publishedAt))) candidate.presentation=undefined;
         if (candidate.claims.length > 50) throw AppError.sourceIncomplete('Too many claims');
         for (const claim of candidate.claims) {
           if (!claim.text.trim() || !state.text.includes(claim.text) || !claim.evidence_refs.length || claim.evidence_refs.some(id => id !== evidenceId)) throw AppError.sourceIncomplete('Unsupported claim or reference');
