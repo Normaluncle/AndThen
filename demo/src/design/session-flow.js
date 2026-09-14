@@ -18,6 +18,17 @@ export function sessionTabs(demo) {
 }
 
 /**
+ * The demo accounts exist for reviewers, so the panel only offers the tab on the judge link
+ * (`?judge=1`). An ordinary visitor never sees it, even on a deployment where the server has
+ * demo logins switched on. `?judge=0` (or false/no/off) keeps them hidden.
+ */
+export function judgeEntry(search = '') {
+  const params = new URLSearchParams(search.startsWith('?') ? search : `?${search}`);
+  if (!params.has('judge')) return false;
+  return !['0', 'false', 'no', 'off'].includes((params.get('judge') ?? '').trim().toLowerCase());
+}
+
+/**
  * The developer tab is only ever rendered when demo accounts are unavailable.
  * Its copy used to send people to "「体验演示」里的管理员按钮" — a tab that is
  * not on screen in exactly that case, which is what made the deployed panel

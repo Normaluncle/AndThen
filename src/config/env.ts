@@ -22,6 +22,8 @@ const envSchema = z.object({
   PORT: z.coerce.number().int().min(1).max(65535).default(8080),
   PUBLIC_BASE_URL: z.string().url().default('http://127.0.0.1:8080'),
   LOCAL_DEMO_LOGIN: booleanish.default('false'),
+  /** Allows the demo accounts on a non-local host (deployed review site). Off by default. */
+  PUBLIC_DEMO_LOGIN: booleanish.default('false'),
   DISCOVERY_AI_ENABLED: booleanish.default('false'),
   LOCAL_DISCOVERY_PREVIEW: booleanish.default('false'),
   DISCOVERY_INTERVAL_MINUTES: z.coerce.number().int().min(1).max(1440).default(60),

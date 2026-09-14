@@ -28,7 +28,11 @@ import { verifyAdminConsolePassword } from './admin-gate.js';
 export { DEMO_ACCOUNTS, FIXTURE_STORIES, playgroundResetAllowed } from './playground.js';
 
 export function localDemoEnabled(ctx: ModuleContext) {
-  return ctx.env.LOCAL_DEMO_LOGIN && ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(ctx.env.PUBLIC_BASE_URL).hostname);
+  if (!ctx.env.LOCAL_DEMO_LOGIN) return false;
+  // A deployed review site is never reachable through localhost, so serving the demo
+  // accounts from a public host needs its own explicit opt-in on top of the local flag.
+  if (ctx.env.PUBLIC_DEMO_LOGIN) return true;
+  return ['127.0.0.1', 'localhost', '[::1]'].includes(new URL(ctx.env.PUBLIC_BASE_URL).hostname);
 }
 
 function assertSameOrigin(request: { headers: { origin?: string } }, ctx: ModuleContext) {

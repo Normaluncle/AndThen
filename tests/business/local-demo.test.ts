@@ -32,6 +32,23 @@ describe('local demo login',()=>{
    expect(res.json().data.user.cohort).toBe('local_demo_fixture');
   }finally{await h.close();}
  });
+ it('serves the demo accounts on a public review host only with the explicit opt-in',async()=>{
+  const h=await createHarness();
+  try {
+   const req={method:'POST' as const,url:'/api/auth/demo/reader',payload:{}};
+   h.ctx.env.LOCAL_DEMO_LOGIN=true;
+   h.ctx.env.PUBLIC_BASE_URL='https://39.105.229.217';
+   // The public host stays closed even with the local flag on, so switching the flag on a
+   // laptop can never expose the demo accounts on a deployed site by itself.
+   expect((await h.app.inject(req)).statusCode).toBe(404);
+   expect((await h.app.inject({url:'/api/auth/demo/status'})).json().data.enabled).toBe(false);
+   h.ctx.env.PUBLIC_DEMO_LOGIN=true;
+   expect((await h.app.inject({url:'/api/auth/demo/status'})).json().data.enabled).toBe(true);
+   expect((await h.app.inject(req)).statusCode).toBe(200);
+   h.ctx.env.LOCAL_DEMO_LOGIN=false;
+   expect((await h.app.inject(req)).statusCode).toBe(404);
+  }finally{await h.close();}
+ });
  it('playground reset rebuilds fixture stories and refuses a real reader',async()=>{
   const h=await createHarness();
   try {

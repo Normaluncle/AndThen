@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {continueAsRealReader,continueAsGuest,READER_CONSENT_VERSION,sessionTabs,DEVELOPER_TAB_COPY} from './session-flow.js';
+import {readFileSync} from 'node:fs';
+import {continueAsRealReader,continueAsGuest,READER_CONSENT_VERSION,sessionTabs,judgeEntry,DEVELOPER_TAB_COPY} from './session-flow.js';
 
 const reader={session_token:'session-token',user:{id:'user-a',display_name:null,avatar_url:null}};
 
@@ -46,4 +47,22 @@ test('the developer tab copy never points at a tab that is not rendered',()=>{
  assert.equal(sessionTabs(false).includes('体验演示'),false);
  assert.equal(DEVELOPER_TAB_COPY.includes('体验演示'),false);
  assert.ok(sessionTabs(false).some(tab=>DEVELOPER_TAB_COPY.includes(tab)));
+});
+
+test('the demo accounts are offered on the judge link only',()=>{
+ // Reviewers add the suffix; an ordinary visitor never sees the tab, which is what keeps a
+ // deployment with demo logins switched on from showing them to the public.
+ assert.equal(judgeEntry('?judge=1'),true);
+ assert.equal(judgeEntry('judge=1'),true);
+ assert.equal(judgeEntry('?screen=01&judge=true'),true);
+ assert.equal(judgeEntry('?judge'),true);
+ assert.equal(judgeEntry('?judge=0'),false);
+ assert.equal(judgeEntry('?judge=false'),false);
+ assert.equal(judgeEntry('?screen=02&candidate=x'),false);
+ assert.equal(judgeEntry(''),false);
+});
+
+test('the panel requires both the server flag and the judge link',()=>{
+ const panel=readFileSync(new URL('./SessionPanel.jsx',import.meta.url),'utf8');
+ assert.match(panel,/data\.enabled&&judgeEntry\(location\.search\)/);
 });

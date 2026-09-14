@@ -2,12 +2,12 @@ import React,{useEffect,useState} from 'react';
 import {api,setToken} from '../api.js';
 import {Button,Panel,Tabs} from './shared.jsx';
 import {playgroundResetAllowed} from '../publish-chrome.js';
-import {continueAsRealReader,continueAsGuest,sessionTabs,DEVELOPER_TAB_COPY} from './session-flow.js';
+import {continueAsRealReader,continueAsGuest,sessionTabs,judgeEntry,DEVELOPER_TAB_COPY} from './session-flow.js';
 export function SessionPanel({user,onUser,onClose}){
  const [mode,setMode]=useState('真实使用'),[consent,setConsent]=useState(false);
  const [credential,setCredential]=useState(''),[adminSecret,setAdminSecret]=useState(''),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  const [demo,setDemo]=useState(false);
- useEffect(()=>{api('/auth/demo/status').then(data=>setDemo(!!data.enabled)).catch(()=>setDemo(false));},[]);
+ useEffect(()=>{api('/auth/demo/status').then(data=>setDemo(!!data.enabled&&judgeEntry(location.search))).catch(()=>setDemo(false));},[]);
  async function run(fn){setBusy(true);setError('');setNotice('');try{await fn();}catch(e){setError(e.message);}finally{setBusy(false);}}
  async function identify(path,body){const data=await api(path,'POST',body);setToken(data.session_token||true);onUser((await api('/me')).user);setCredential('');onClose?.();}
  // The reader session is only the pre-step for the Zhihu authorization, so the
