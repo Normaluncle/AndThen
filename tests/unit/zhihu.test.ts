@@ -16,4 +16,14 @@ describe('official Zhihu adapter', () => {
     expect(item).not.toHaveProperty('published_at');
     expect(item).toMatchObject({ material_level: 'api_summary', author_url: null, comments_coverage: 'selected', comments: ['部分评论'] });
   });
+  it('carries the official engagement counts instead of dropping them', async () => {
+    const transport = (async () => new Response(JSON.stringify({ Code: 0, Data: { Items: [{ Title: 'fixture', Url: 'https://zhuanlan.zhihu.com/p/123', ContentText: '摘要', AuthorName: '同名用户', EditTime: 1779678078, VoteUpCount: 18, CommentCount: 3, RankingScore: 1.3879999, CommentInfoList: [] }] } }))) as typeof fetch;
+    const [item] = await officialSearch('test-key', 'query', transport);
+    expect(item).toMatchObject({ vote_up_count: 18, comment_count: 3, ranking_score: 1.3879999 });
+  });
+  it('reports absent or unusable engagement counts as null rather than inventing them', async () => {
+    const transport = (async () => new Response(JSON.stringify({ Code: 0, Data: { Items: [{ Title: 'fixture', Url: 'https://zhuanlan.zhihu.com/p/9', ContentText: '摘要', VoteUpCount: -1, CommentInfoList: [] }] } }))) as typeof fetch;
+    const [item] = await officialSearch('test-key', 'query', transport);
+    expect(item).toMatchObject({ vote_up_count: null, comment_count: null, ranking_score: null });
+  });
 });

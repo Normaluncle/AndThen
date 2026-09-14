@@ -20,6 +20,11 @@ export const publicUserSchema = z.object({
   cohort: z.string(),
   display_name: z.string().nullable(),
   email: z.string().nullable(),
+  /**
+   * Verified public avatar, or null. Written only by the OAuth binding flow, so
+   * a client can display it but never set it.
+   */
+  avatar_url: z.string().nullable(),
 });
 
 const issuedSessionSchema = z.object({
@@ -44,6 +49,7 @@ function serializeUser(user: {
   cohort: string;
   displayName: string | null;
   email: string | null;
+  avatarUrl: string | null;
 }) {
   return {
     id: user.id,
@@ -51,6 +57,7 @@ function serializeUser(user: {
     cohort: user.cohort,
     display_name: user.displayName,
     email: user.email,
+    avatar_url: user.avatarUrl,
   };
 }
 

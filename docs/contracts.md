@@ -278,7 +278,7 @@ export function tokenHashEquals(a: string, b: string): boolean;
 
 `GET /api/integrations/zhihu/capabilities` reports real configuration boundaries.
 `GET /api/discovery/search?q=...` requires a session and returns official summaries and selected comments.
-`POST /api/sources/resolve {url}` registers an exact canonical URL, with `summary_available` or `pending_content`; never accepts supplied author identity.
+`POST /api/sources/resolve {url}` registers an exact canonical URL, with `summary_available` or `pending_content`; never accepts supplied author identity. 该路径把同一次官方搜索已经返回的上游时间写进快照 `upstream_updated_at`（2026-09-14 修正，此前传 `null`，等于把手上已有的时间丢掉）；`POST /api/me/zhihu/sync` 同样把官方本人内容列表的 `CreatedAt` 写入 `upstream_updated_at`。两者都不猜测发布时间。
 `GET /api/me/workbench` resolves verified own cases.
 `GET /api/me/memory`, `PUT /api/me/memory/consent {enabled}`, and `POST /api/me/memory/refresh` act only on the authenticated account.
 Memory processing additionally requires verified source ownership and source-specific external-model/private-interview consent.
@@ -339,7 +339,11 @@ Source replacement authorization: after snapshot dedupe and before a new version
 
 POST /api/auth/zhihu/start（站内登录，严格空对象）创建一次性请求，返回 authorization_url/expires_at，并设置十分钟 HttpOnly Secure SameSite=Lax Cookie。GET /api/auth/zhihu/callback 接收 state 和 authorization_code（兼容 code）；同时核验 Cookie 与一次性请求，在服务端换令牌和读取官方 UID，完成唯一绑定后返回无令牌的结果。缺少应用配置、HTTPS 回调或 ZHIHU_OAUTH_STATE_VERIFIED 时拒绝启动。GET 的旧 start 路径仅保留不可用提示；页面改用 POST。回调页完成后返回原账号页刷新，站内 session 不进入 URL。
 
+前端入口：右上角登录面板的「以真实读者身份继续」固定为「建立读者会话（仅作为 start 所需的登录前置）→ POST /api/auth/zhihu/start → 跳转 authorization_url」，不再停留在游客会话；授权完成后身份即该知乎账号。start 不可用时报错并保留已建立的读者会话，不静默降级；无知乎账号的人可用同一面板中的次要入口「暂不连接知乎，仅以访客浏览」。
+
 GET /api/me/zhihu 返回授权状态、UID、显示名、过期时间、资料处理同意与最近同步时间；无令牌或密文。DELETE /api/me/zhihu 删除本地密文，取消待回调请求、撤销 OAuth 材料处理同意/核验并使相关记忆失效。身份保留以防转绑冲突；不声称调用了官方未提供的远程撤销接口。
+
+头像与昵称：GET /api/me 的 user 对象新增 `avatar_url`（string|null，始终存在）。该值只能由服务端核验过的官方 OAuth 用户资料写入（迁移 0022 在 users 增加 avatar_url），非 http(s) 地址一律丢弃，请求体无法提供或修改它；未授权账号为 null，前端此时保留原首字母占位符。官方未返回该字段时保留上一次已核验的图片，不清空。同一处把官方 fullname 写入 users.display_name，但仅在当前账号名为空时写入一次，已有名字（例如管理员设定）不会被覆盖；display_name 已用于站内评论署名与已核验作者署名。官方未提供的简介与职业信息仍然空缺，不猜测。
 
 POST /api/me/zhihu/sync 要求 {accept_material_processing:true}：明确同意官方本人摘要用于私有采访、模型处理和记忆。按账号去重入队，后台最多读取首批 20 条回答/文章摘要，依据官方本人列表核验归属，给未绑定回访关联作者，按来源记录两项同意；不授予公开展示。已有不同核验归属则拒绝。读者账号仅在取得本人内容后由服务端升为作者。重新进入账号页/作者工作台超过 24 小时才后台检查。令牌/同意/版本改变或账户失效时旧结果不落库；关闭记忆同时停止自动资料同步。
 
@@ -392,7 +396,7 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 
 - 写操作在事务内检查公开许可、来源状态及用户状态；用户身份来自 request.auth，不接受 body/query 声明身份。举报、评论、反应与读者活动删除共用 advisory lock。
 - Migration 0014 只新增 story_reactions、site_comments、site_reports；用户/来源物理删除通过 FK cascade 清理；现有 reader_activity 删除同时清理自身互动，保留其他读者数据。
-- GET /api/stories 增加 q（<=300 字符）、from/to（YYYY-MM-DD，原回答发布时间，结束日包含当天）、sort=relevance|newest|oldest。保留原 limit/offset/total。默认顺序仍为收录顺序；关键词为标题及当前可展示材料的子串检索，并非语义排序。日期未知的来源不匹配日期范围。
+- GET /api/stories 增加 q（<=300 字符）、from/to（YYYY-MM-DD，结束日包含当天）、sort=relevance|newest|oldest。保留原 limit/offset/total。默认顺序仍为收录顺序；关键词为标题及当前可展示材料的子串检索，并非语义排序。**from/to 与 newest/oldest 使用「最佳可知时间」**（2026-09-14 定稿）：`coalesce(最新快照的 published_at, upstream_updated_at, acquired_at)`，即优先原回答发布时间，其次官方更新时间，最后是我们收录它的时间；`acquired_at` 非空，所以该表达式总能取到值，日期区间不可能再因为某个字段缺失而清空列表（此前规则「日期未知的来源不匹配日期范围」正是这么把列表清空的）。响应仍分别如实返回 `published_at`/`upstream_updated_at`/`acquired_at` 三个原始字段，前端据此标注这个日期到底是发布、更新还是收录，不把三者混为一个「发布时间」。
 - GET /api/discovery/search 仍调用既有知乎官方接口，现在允许游客读取，仍由服务端持有开发者凭据；一次最多 10 条摘要，现有上游无分页游标，不能伪造第二页。日期/排序筛选目前仅应用本站结果。
 - 本轮未新增 AI 输出字段。前端 StoryCover 接受可选 cover_caption；实际 AI 首次理解时生成、溯源和持久化该短句需后续后端契约。不得将私有 memU 原始资料直接当作公开封面字幕。
 
@@ -423,6 +427,8 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - LOCAL_DISCOVERY_PREVIEW 默认 false，并且 PUBLIC_BASE_URL 必须为 localhost/127.0.0.1/[::1] 才可运行及展示。仅本地验证，不给部署配置增加公网收录许可。
 - DISCOVERY_INTERVAL_MINUTES 默认 60，DISCOVERY_DAILY_LIMIT 默认 50，DISCOVERY_DAILY_SEARCH_LIMIT 默认 12；上海时区日额度通过数据库事务串行核验。DISCOVERY_QUERIES 使用竖线分隔。专用 docker-compose.discovery-local.yml 限制为每天 5 条候选、3 次搜索，默认每小时检查。
 - GET /api/discovery/local-preview 无需登录；关闭返回 enabled:false,items:[]；开启返回最多 50 条通过本地规则的官方摘要候选，含 existing presentation 字段、display_status=local_candidate_preview、analysis_status=awaiting_model_consent。已关联来源删除或撤销后隐藏。原始搜索记录与选中摘要分别保存。
+
+**候选卡片上的两套数字（2026-09-14）**：官方搜索接口实际返回 `VoteUpCount`、`CommentCount`、`RankingScore`，此前解析器只声明了 7 个字段、把互动数据全部丢弃（和「日期未知」同源）。现在 `/api/discovery/search`、`/api/discovery/feed`、`/api/discovery/following`、`/api/discovery/candidates/:id`、`/api/discovery/local-preview`、`POST /api/sources/resolve` 的候选对象统一新增 `vote_up_count`、`comment_count`、`ranking_score`、`heat`、`acquired_at`。`heat` 由服务端统一计算：**热度 = 点赞 + 评论 × 2**（`src/modules/zhihu/heat.ts`），只使用官方真实返回的计数；两个计数都没有时为 `null`，前端不显示热度而不是显示 0。`ranking_score` 是官方结果排序分，不是热度，单独保留、不并入热度。热度是平台的数字，与本站 `site_counts`（点赞/评论/收藏）是**两套不同来源的统计**，卡片分别标注，不合并、不互相冒充。无互动数据的候选其本站计数按 0 展示（它在本站确实没有互动），不改用热度填充。
 - POST /api/admin/discovery/run 仅 admin、严格空对象，按同一时间槽去重；GET /api/admin/discovery/runs 仅 admin，返回最近 30 批和配置。默认模块注册路由，未修改 app.ts 或 worker.ts。
 - 本轮采用规则筛选（材料完整度、经历和时间线索、敏感内容保留审核），没有调用模型判断未授权摘要。不会创建作者授权、公开来源、后来或通知，不是 AI 回访质量验收。原有授权 AI-A 流程保持独立。
 - Migration 0019 新增 IMG001–IMG250 CDN 目录，保留旧 CF001–CF150 未安装项。category/tags 规范化，ready 项优先；后端只返回 URL，浏览器直连 https://img.cc0.cn，懒加载、无 Referer，错误退回占位图。没有图片上传、下载缓存或 API 图片转发功能。
@@ -435,7 +441,7 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - `GET /api/discovery/candidates/:id` exposes the same official summary used in discovery with its stable candidate ID and presentation. Missing/deleted/revoked linked sources return 404. It does not grant author identity or publication permission.
 - `DISCOVERY_AI_ENABLED=true` enables operator-authorized classification of official search summaries on local or public installations. The durable queue schedules the next tick before calling providers. `DISCOVERY_DAILY_LIMIT` (maximum 50) bounds admitted candidates, not a promise that 50 suitable new answers exist. `DISCOVERY_DAILY_SEARCH_LIMIT` bounds search runs. Defaults are 60 minutes / 50 candidates / 12 searches per Shanghai calendar day.
 - Model classification uses `ai_runs.task=ai_a_extract` with `prompt_version=discovery-summary-2026-09-14.1` and `output.scope=official_summary_classification`. This separate output contains decision, reasons, extractive caption, candidate URL and summary hash; it is not a source `analysisResultSchema` or an author profile. Selection records retain the run ID/model/caption. Invalid output is held, never replaced by fabricated success; one invalid item does not discard other valid candidates.
-- `/api/discovery/local-preview` retains its compatible URL. With AI discovery enabled it returns `ai_enabled=true` and only model-approved official candidates. Old rule-only selections are excluded. Source permission revocation still hides linked candidates. Full source analysis, memories, interviews and publication continue to require their existing independent consent gates.
+- `/api/discovery/local-preview` retains its compatible URL. With AI discovery enabled it returns `ai_enabled=true` and only model-approved official candidates. Old rule-only selections are excluded. Source permission revocation still hides linked candidates. Full source analysis, memories, interviews and publication continue to require their existing independent consent gates. 侧栏文案按 `ai_enabled` 区分（2026-09-14）：AI 发现开启时标题为「自动发现 · 官方候选」并说明候选未确认前不作为已发布内容，不再对公网页面使用「本地验证」和「不会发布到公网」这类只对本地预览成立的说明。
 - Pasted material without an original URL deduplicates within its importing author, preventing different authors with the same title from sharing private source identity.
 
 ## 2026-09-14：站点访问、管理概览与封面年份
@@ -444,3 +450,30 @@ GET /api/me/workbench 每项增加 interest_count，表示当前有效关注总�
 - `GET /api/admin/overview` 仅服务端 admin。返回真实 `visitors`（去重访客）、`authorized_users`（未撤销的知乎绑定）、`authorized_reads`（这些账号的阅读次数）、按近 14 天半衰期计算的 `heat_score`，以及当前样本列表。热度：点进 +4，授权阅读 +6，停留 ln(1+秒)×2，同一访客再次进入 +3。不返回虚构的 1203 等演示数字。
 - 本地 `POST /api/auth/demo/admin` 必须提交 `password`，与控制台 scrypt 摘要比对；错误返回 401。密码不明文入库、不写日志。
 - 公开 presentation 增加 `cover_year`。AI-A / 发现筛选必须阅读完整原文，输出 `{year,caption}`：年份单独一行，caption 为 4–28 字的具体短句，允许改写但必须能在原文中找到依据，禁止抽象凑数。提示版本 `2026-09-14.3` 与 `discovery-summary-2026-09-14.2`。不合格 caption 不得进入发现候选。
+
+## 2026-09-14：链接导入的作者自证（screen 12 全链路）
+
+`POST /api/sources/resolve` 只登记链接，导入者因此不是作者：`access.ts` 规定只有
+`author_paste` 的导入者或持 `verified` 记录者才算作者。为了让原作者能写自己的后续，
+新增一条**声明**路径（不是核验路径）：
+
+- Migration 0023：`verification_method` 增加 `self_claim`。
+- `POST /api/sources/:id/author-claim`（需登录，body 严格为
+  `{excerpt, excerpt_location?, published_at?, confirms_own_content: true}`）：
+  - 仅 `third_party_link` / `official_search` 源可声明，且仅**导入者本人**（或 admin）可调用；第三方导入别人的回答拿不到任何权利。
+  - 必须有非空原文：写入一条 `exact_excerpt` 快照（同内容 hash 幂等，不产生第二版），`published_at` 只接受作者显式声明的值。
+  - 写入 `author_verifications` 行：`method='self_claim'`、`status='pending'`、`evidence_ref=null`。这是声明，不是证据。
+  - `sources.permission_status` 仅在 `pending` 时升为 `private_only`，绝不升为 `public_approved`。
+  - 响应含 `analysis_status`（同 `POST /sources`）。
+- `access.ts` 新增 `isSelfClaimedAuthor` 与 `canActAsAuthor(access) = isAuthor || isSelfClaimedAuthor`。
+  自证者获得**私有**作者权利：创建回访（`POST /cases`）、授予 `private_interview` 与
+  `external_model_processing`、让自己的材料进入 AI 分析。`isAuthor` 语义未变。
+- **公开展示的边界未变**：`grantConsent` 的 `demo_public_display` 仍只在
+  `isVerifiedAuthor` 时把源翻成 `public_approved`，公开投影仍要求该状态 + 有效同意。
+  自证永远不能发布。
+- `requireModelSource` 的 owner 解析顺序：`verified` → `author_paste` 导入者 → `self_claim` 声明者；
+  `external_model_processing` 同意仍是唯一授权依据，导入本身不授予模型同意。
+- `POST /api/sources/resolve` 现在把知乎官方返回的 `EditTime` 落为
+  `source_snapshots.upstream_updated_at`。官方接口给的是**编辑时间**，不是发布时间，
+  因此 `published_at` 保持 `null`，不由编辑时间推断；页面显示「未提供（官方摘要更新于 …）」。
+

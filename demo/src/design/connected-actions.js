@@ -5,6 +5,14 @@ export async function startOwnInterview(request,item,confirmation){
  await request(`/cases/${item.id}/decision`,'POST',{decision:'accept'});
  return request(`/cases/${item.id}/interviews`,'POST',{mode:'ai',confirms_own_content:true,confirms_old_state:true});
 }
+/** Screen 12: the author claimed an imported link, so the case is opened here. */
+export async function startImportedInterview(request,sourceId,confirmation){
+ if(!confirmation.ownsContent||!confirmation.privateInterview||!confirmation.modelProcessing)throw new Error('请先确认原回答归属与两项处理同意。');
+ for(const purpose of ['private_interview','external_model_processing'])await request(`/sources/${sourceId}/consents`,'POST',{purpose,version:'v1'});
+ const opened=await request('/cases','POST',{source_id:sourceId,launch_type:'author_initiated'});
+ await request(`/cases/${opened.case.id}/decision`,'POST',{decision:'accept'});
+ return request(`/cases/${opened.case.id}/interviews`,'POST',{mode:'ai',confirms_own_content:true,confirms_old_state:true});
+}
 export async function publishOwnDraft(request,draft,confirmed){
  if(!confirmed)throw new Error('请确认公开展示当前版本。');
  const workbench=await request('/me/workbench');

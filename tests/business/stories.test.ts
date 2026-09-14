@@ -61,6 +61,39 @@ describe('sources: public stories, interest, following and consent revocation', 
     expect(list.json().data.items[0].source_id).toBe(story.source.id);
   });
 
+  it('filters by the best known story time: publish date, else update date, else capture time', async () => {
+    const author = await seedUser(h, 'author');
+    const published = await seedPublishedStory(h, {
+      author: author.user,
+      publishedAt: new Date('2021-06-12T00:00:00Z'),
+    });
+    // An imported story whose upstream publish date the provider never gave us.
+    const capturedOnly = await seedPublishedStory(h, { author: author.user, publishedAt: null });
+    const today = new Date().toISOString().slice(0, 10);
+
+    expect((await h.app.inject({ url: '/api/stories' })).json().data.total).toBe(2);
+
+    // A range covering everything returns both rows; it used to return none, because
+    // a null publish date failed the comparison and emptied the list.
+    const range = await h.app.inject({ url: `/api/stories?from=2020-01-14&to=${today}` });
+    expect(range.json().data.total).toBe(2);
+
+    // A real publish date is still respected: the captured-only story is not in 2021.
+    const in2021 = await h.app.inject({ url: '/api/stories?from=2021-01-01&to=2021-12-31' });
+    expect(in2021.json().data.items.map((item: { source_id: string }) => item.source_id)).toEqual([
+      published.source.id,
+    ]);
+
+    // ...and it is findable by its capture date, which is the date it actually has.
+    const captured = await h.app.inject({ url: `/api/stories?from=${today}&to=${today}` });
+    expect(captured.json().data.items.map((item: { source_id: string }) => item.source_id)).toEqual([
+      capturedOnly.source.id,
+    ]);
+    // The three raw fields stay separate so the UI can name the date it is showing.
+    expect(captured.json().data.items[0].published_at).toBeNull();
+    expect(captured.json().data.items[0].acquired_at).not.toBeNull();
+  });
+
   it('denies a story that is not licensed for public display', async () => {
     const author = await seedUser(h, 'author');
     const privateStory = await seedPublishedStory(h, {

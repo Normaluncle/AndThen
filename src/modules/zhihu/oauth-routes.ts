@@ -79,7 +79,7 @@ export async function registerOAuthRoutes(app: AppInstance, ctx: ModuleContext) 
       if(!user||user.disabledAt)throw AppError.unauthorized();
       const session=await createSession(tx,{userId:user.id,cohort:user.cohort,ttlSeconds:ctx.env.SESSION_TTL_SECONDS,now:ctx.now()});
       await tx.update(zhihuOAuthAttempts).set({deliveredAt:ctx.now()}).where(eq(zhihuOAuthAttempts.id,attempt.id));
-      return {ready:true,session_token:session.token,user:{id:user.id,role:user.role,cohort:user.cohort,display_name:user.displayName,email:user.email}};
+      return {ready:true,session_token:session.token,user:{id:user.id,role:user.role,cohort:user.cohort,display_name:user.displayName,email:user.email,avatar_url:user.avatarUrl}};
     });
     if (data.ready && data.session_token) issueWebCookie(request,reply,ctx.env,data.session_token);
     reply.header('Cache-Control','no-store');return success(request.id,data);

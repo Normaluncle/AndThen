@@ -5,7 +5,7 @@ import {sessions,zhihuAccounts,zhihuOAuthAttempts,users} from '../../src/db/sche
 import {createOAuthAttempt,consumeOAuthAttempt} from '../../src/modules/zhihu/oauth-attempts.js';
 import {bindOAuthAccount,readOAuthToken,disconnectOAuthAccount} from '../../src/modules/zhihu/oauth-accounts.js';
 import {runJob} from '../helpers/run-job.js';
-import {authorVerifications,consents,authorMemories,sources} from '../../src/db/schema.js';
+import {authorVerifications,consents,authorMemories,sources,sourceSnapshots} from '../../src/db/schema.js';
 import {authorizedMaterials} from '../../src/modules/memory/service.js';
 let h:Harness;
 const key='ab'.repeat(32),token={access_token:'fiction-token-only',expires_in:3600};
@@ -74,11 +74,44 @@ it('runs the HTTP start/callback/status/disconnect flow using a simulated offici
  expect((await h.app.inject({url:'/api/me/zhihu',headers:auth(a.token)})).json().data.authorized).toBe(false);
 });
 
+it('mirrors only a verified http(s) avatar and keeps the last one when the field is absent',async()=>{
+ const a=await attempt();
+ await bindOAuthAccount(h.ctx.db,a.attemptId,{uid:'303030',avatar_path:'javascript:alert(1)'},token,key);
+ let [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));
+ expect(u!.avatarUrl).toBeNull();
+ const retry=await createOAuthAttempt(h.ctx.db,a.sessionId);
+ const claim=await consumeOAuthAttempt(h.ctx.db,retry.state,retry.browserProof);
+ await bindOAuthAccount(h.ctx.db,claim.attemptId,{uid:'303030',fullname:'虚构头像作者',avatar_path:'https://pic.example.test/avatar/303030.jpg'},token,key);
+ [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));
+ expect(u!.avatarUrl).toBe('https://pic.example.test/avatar/303030.jpg');
+ const again=await createOAuthAttempt(h.ctx.db,a.sessionId);
+ const second=await consumeOAuthAttempt(h.ctx.db,again.state,again.browserProof);
+ await bindOAuthAccount(h.ctx.db,second.attemptId,{uid:'303030'},token,key);
+ [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));
+ expect(u!.avatarUrl).toBe('https://pic.example.test/avatar/303030.jpg');
+});
+
+it('fills the account name from the verified provider once, without overwriting an existing name',async()=>{
+ const a=await attempt();
+ const first=await createOAuthAttempt(h.ctx.db,a.sessionId);
+ const claim=await consumeOAuthAttempt(h.ctx.db,first.state,first.browserProof);
+ await bindOAuthAccount(h.ctx.db,claim.attemptId,{uid:'404040',fullname:'虚构知乎昵称'},token,key);
+ let [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));
+ expect(u!.displayName).toBe('虚构知乎昵称');
+ // A deliberately set name survives a later authorization.
+ await h.ctx.db.update(users).set({displayName:'管理员设定的名字'}).where(eq(users.id,a.user.id));
+ const second=await createOAuthAttempt(h.ctx.db,a.sessionId);
+ const again=await consumeOAuthAttempt(h.ctx.db,second.state,second.browserProof);
+ await bindOAuthAccount(h.ctx.db,again.attemptId,{uid:'404040',fullname:'另一个昵称'},token,key);
+ [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));
+ expect(u!.displayName).toBe('管理员设定的名字');
+});
+
 it('syncs official own summaries only after consent, verifies ownership, dedupes and stops using revoked material',async()=>{
  const a=await attempt();
  await bindOAuthAccount(h.ctx.db,a.attemptId,{uid:'101010'},token,key);
  Object.assign(h.ctx.env,{ZHIHU_ACCESS_SECRET:'fixture-secret',ZHIHU_TOKEN_ENCRYPTION_KEY:key});
- const official=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({Code:0,Data:{Items:[{ContentType:'answer',Url:'https://www.zhihu.com/question/20/answer/30',Title:'虚构摘要',Summary:'虚构经历：学习八个月后转行。',CreatedAt:1}],Paging:{IsEnd:true}}})));
+ const official=vi.fn<typeof fetch>().mockResolvedValue(new Response(JSON.stringify({Code:0,Data:{Items:[{ContentType:'answer',Url:'https://www.zhihu.com/question/20/answer/30',Title:'虚构摘要',Summary:'虚构经历：学习八个月后转行。',CreatedAt:1779678078}],Paging:{IsEnd:true}}})));
  vi.stubGlobal('fetch',official);
  expect((await h.app.inject({method:'POST',url:'/api/me/zhihu/sync',headers:auth(a.token),payload:{accept_material_processing:false}})).statusCode).toBe(400);
  const start=await h.app.inject({method:'POST',url:'/api/me/zhihu/sync',headers:auth(a.token),payload:{accept_material_processing:true}});
@@ -89,6 +122,10 @@ it('syncs official own summaries only after consent, verifies ownership, dedupes
  expect(result?.data?.imported).toBe(1);
  const [verification]=await h.ctx.db.select().from(authorVerifications).where(eq(authorVerifications.userId,a.user.id));
  expect(verification).toMatchObject({method:'oauth',status:'verified'});
+ // The official list already returned CreatedAt; it used to be discarded on import,
+ // which left every synced story without any date.
+ const [synced]=await h.ctx.db.select().from(sourceSnapshots).where(eq(sourceSnapshots.sourceId,verification!.sourceId));
+ expect(synced!.upstreamUpdatedAt?.toISOString()).toBe(new Date(1779678078000).toISOString());
  expect(await authorizedMaterials(h.moduleCtx,a.user.id)).toHaveLength(1);
  const [u]=await h.ctx.db.select().from(users).where(eq(users.id,a.user.id));expect(u!.role).toBe('author');
  const materials=await h.ctx.db.select().from(consents).where(eq(consents.userId,a.user.id));expect(materials.map(x=>x.purpose).sort()).toEqual(['external_model_processing','private_interview']);

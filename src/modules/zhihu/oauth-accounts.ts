@@ -5,12 +5,28 @@ import { AppError } from '../../http/errors.js';
 import { activeOAuthSession } from './oauth-attempts.js';
 import { openToken, sealToken } from './oauth-client.js';
 
+/**
+ * The provider avatar is a URL we later render in an `<img>`. Accept only
+ * http/https and drop anything else, so a malformed or hostile scheme can never
+ * reach the browser through the account record.
+ */
+function verifiedAvatar(value: string | undefined) {
+  if (!value) return null;
+  try {
+    const url = new URL(value);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? value : null;
+  } catch {
+    return null;
+  }
+}
+
 /** Only the server's verified OAuth /user response may supply provider identity. */
 export async function bindOAuthAccount(db: Database, attemptId: string,
-  identity: { uid: string; fullname?: string | undefined }, token: { access_token: string; expires_in: number },
+  identity: { uid: string; fullname?: string | undefined; avatar_path?: string | undefined }, token: { access_token: string; expires_in: number },
   encryptionKey: string, now = new Date(), signInExisting = false) {
   if (!/^[1-9]\d*$/.test(identity.uid) || !token.access_token || token.access_token.length > 8192
     || !Number.isSafeInteger(token.expires_in) || token.expires_in <= 0 || token.expires_in > 31536000) throw AppError.validation('Invalid verified OAuth response');
+  const avatar = verifiedAvatar(identity.avatar_path);
   return db.transaction(async tx => {
     const [attempt] = await tx.select().from(zhihuOAuthAttempts).where(eq(zhihuOAuthAttempts.id, attemptId));
     if (!attempt) throw AppError.forbidden('OAuth attempt is no longer available');
@@ -34,6 +50,18 @@ export async function bindOAuthAccount(db: Database, attemptId: string,
     const values = { uid: identity.uid, displayName: identity.fullname ?? null,
       tokenCiphertext: sealToken(token.access_token, encryptionKey, userId), expiresAt, revokedAt: null, updatedAt: now };
     await tx.insert(zhihuAccounts).values({userId,...values}).onConflictDoUpdate({target:zhihuAccounts.userId,set:values});
+    // Mirror the verified picture and name onto the account so an authorized
+    // reader does not have to retype who they already are. Both come only from
+    // the verified provider response, never from a request body. An absent
+    // field keeps the last verified picture, and an existing name is never
+    // overwritten because it may have been set deliberately (e.g. by an admin).
+    const [accountOwner] = await tx.select({displayName:users.displayName}).from(users).where(eq(users.id,userId));
+    const nickname = identity.fullname?.trim();
+    const patch = {
+      ...(avatar ? {avatarUrl:avatar} : {}),
+      ...(nickname && !accountOwner?.displayName ? {displayName:nickname} : {}),
+    };
+    if (Object.keys(patch).length) await tx.update(users).set({...patch,updatedAt:now}).where(eq(users.id,userId));
     return { uid: identity.uid, display_name: values.displayName, expires_at: expiresAt };
   });
 }

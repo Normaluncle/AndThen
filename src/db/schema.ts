@@ -110,7 +110,13 @@ export const consentPurposeEnum = pgEnum('consent_purpose', [
 
 export const consentStatusEnum = pgEnum('consent_status', ['granted', 'revoked', 'expired']);
 
-export const verificationMethodEnum = pgEnum('verification_method', ['oauth', 'manual']);
+/**
+ * `self_claim` is a declaration by the importer that the material is their own
+ * writing. It is deliberately not evidence: the row stays `pending` until an
+ * OAuth link or an admin decision verifies it, and only `verified` unlocks
+ * public display.
+ */
+export const verificationMethodEnum = pgEnum('verification_method', ['oauth', 'manual', 'self_claim']);
 export const verificationStatusEnum = pgEnum('verification_status', ['pending', 'verified', 'rejected']);
 
 /** PRD §13.1 business state machine. Execution state lives in `jobs.status`. */
@@ -210,6 +216,12 @@ export const users = pgTable(
     cohort: text('cohort').notNull().default('unassigned'),
     displayName: text('display_name'),
     email: text('email'),
+    /**
+     * Public avatar URL. Only the server-verified OAuth profile may write this;
+     * it is never accepted from a request body. Null means "no verified
+     * picture", which the UI renders as an initial placeholder.
+     */
+    avatarUrl: text('avatar_url'),
     /** Opaque reference to a bound external account; never a credential. */
     externalAccountRef: text('external_account_ref'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -877,6 +889,8 @@ export const zhihuCommentSyncs = pgTable('zhihu_comment_syncs', {
 export interface OfficialCandidate {
   url: string; title: string; text: string; author_name: string;
   author_avatar: string | null; author_url: null; upstream_updated_at?: string | null;
+  /** Engagement as returned by the official search response. Never estimated. */
+  vote_up_count?: number | null; comment_count?: number | null; ranking_score?: number | null;
   material_level: 'api_summary'; comments: string[]; comments_coverage: 'selected';
 }
 export const discoveryCandidates = pgTable('discovery_candidates', {

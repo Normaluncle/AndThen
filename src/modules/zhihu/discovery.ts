@@ -9,7 +9,7 @@ export async function storeCandidates(ctx:ModuleContext,items:OfficialCandidate[
   const result=[];
   for(const data of items){
     const [row]=await ctx.db.insert(discoveryCandidates).values({url:data.url,data,updatedAt:ctx.now()}).onConflictDoUpdate({target:discoveryCandidates.url,set:{data,updatedAt:ctx.now()}}).returning();
-    result.push({...data,candidate_id:row!.id});
+    result.push({...data,candidate_id:row!.id,acquired_at:row!.updatedAt.toISOString()});
   }
   return result;
 }
@@ -19,7 +19,7 @@ export async function candidateFeed(ctx:ModuleContext,auth:AuthContext,following
   for(const row of rows){
     if(row.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,row.sourceId));if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus))continue;}
     const [interest]=row.sourceId?await ctx.db.select().from(interests).where(and(eq(interests.sourceId,row.sourceId),eq(interests.readerKey,auth.userId))):[];
-    result.push({...row.data,candidate_id:row.id,linked_source_id:row.sourceId,interested:interest?.active??false});
+    result.push({...row.data,candidate_id:row.id,linked_source_id:row.sourceId,interested:interest?.active??false,acquired_at:row.updatedAt.toISOString()});
   }
   return result;
 }

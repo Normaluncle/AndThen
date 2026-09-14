@@ -15,11 +15,13 @@ import { success, AppError } from '../../http/errors.js';
 import { requireAuthContext } from '../../http/auth.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { canonicalZhihuUrl, parseZhihuShare, officialSearch } from './client.js';
+import { engagementFields } from './heat.js';
+import { resolveImportInput } from './resolve-input.js';
 import { importSource } from '../sources/service.js';
 
 import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js';
 
-const candidate = z.object({...z.object(presentationShape).partial().shape, candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), upstream_updated_at: z.string().datetime().nullable().optional(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
+const candidate = z.object({...z.object(presentationShape).partial().shape, candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), upstream_updated_at: z.string().datetime().nullable().optional(), acquired_at: z.string().datetime().nullable().optional(), vote_up_count: z.number().int().min(0).nullable().optional(), comment_count: z.number().int().min(0).nullable().optional(), ranking_score: z.number().nullable().optional(), heat: z.number().int().min(0).nullable().optional(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
 export const zhihuModule: ModuleDefinition = {
   name: 'zhihu',
   onWorkerStart: async ctx=>{await seedDiscovery(ctx);},
@@ -28,7 +30,7 @@ export const zhihuModule: ModuleDefinition = {
     await registerOAuthRoutes(app, ctx);
     await registerDiscoveryRoutes(app, ctx);
     const r = app.withTypeProvider<ZodTypeProvider>();
-    async function presentCandidates<T extends {url:string;title:string;text:string}>(items:T[]){return Promise.all(items.map(async item=>({...item,...await sourcePresentation(ctx.db,item.url,item.title+' '+item.text)})));}
+    async function presentCandidates<T extends {url:string;title:string;text:string}>(items:T[]){return Promise.all(items.map(async item=>({...item,...engagementFields(item as {vote_up_count?:number|null;comment_count?:number|null;ranking_score?:number|null}),...await sourcePresentation(ctx.db,item.url,item.title+' '+item.text)})));}
 
     r.get('/integrations/zhihu/capabilities', { schema: { tags: ['zhihu'], response: { 200: envelopeSchema(z.object({ search: z.boolean(), creator_account_reads: z.boolean(), comment_sync_scope: z.literal('access_secret_owner_only'), oauth: z.boolean(), oauth_reason: z.string(), arbitrary_fulltext: z.literal(false), comments: z.literal('selected_search_comments') })) } } }, async request => success(request.id, {
       search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: oauthReady(ctx), oauth_reason: oauthReady(ctx) ? 'available' : ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
@@ -49,9 +51,7 @@ export const zhihuModule: ModuleDefinition = {
       const items = await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, url);
       const exact = items.find(x => x.url === url);
       const match=exact?(await storeCandidates(ctx,[exact]))[0]:undefined;
-      const imported = await importSource(ctx, auth, { sourceType: 'third_party_link', originalUrl: url, originalAccountRef: null,
-        title: match?.title ?? null, materialLevel: 'api_summary', body: match?.text ?? null, excerpt: null, excerptLocation: null,
-        publishedAt: null, upstreamUpdatedAt: null, notes: 'Official exact URL resolution; ownership not established', provenance: 'official_api' });
+      const imported = await importSource(ctx, auth, resolveImportInput(url, match));
       return success(request.id, { source_id: imported.source.id, status: match ? 'summary_available' : 'pending_content', candidate: match ? (await presentCandidates([match]))[0] ?? null : null });
     });
     // These routes operate only for trusted administrators on the configured

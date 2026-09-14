@@ -11,7 +11,6 @@ import {startOwnInterview,publishOwnDraft,notificationTarget} from './connected-
 import {followingFeed} from './reading-layout.js';
 import {readCandidate} from '../home-data.js';
 import {publishBackTarget} from '../publish-chrome.js';
-import {SourceMaterials} from '../SourceMaterials.jsx';
 import {Home} from '../Home.jsx';
 import {InterviewPage,DraftPage} from '../screens.jsx';
 import {LiveReading} from './LiveReading.jsx';
@@ -99,11 +98,6 @@ export function ConnectedDetail({route,navigate,user,onLogin}){
  {publish&&<Modal title="确认发布到本站？" onClose={()=>setPublish(false)} actions={<Button disabled={action.busy||!publicConsent} onClick={()=>action.run(async()=>{loadDraft(await publishOwnDraft(api,draft,publicConsent));setPublish(false);})}>确认发布</Button>}><p>公开后，关注这则故事的读者可以阅读。服务端会检查公开展示许可及当前版本确认。</p><label><input type="checkbox" checked={publicConsent} onChange={e=>setPublicConsent(e.target.checked)}/>我同意在本站公开展示原材料与当前后来版本</label><ActionError action={action}/></Modal>}
  {withdraw&&<Modal title="确认撤回这则后来？" onClose={()=>setWithdraw(false)} actions={<Button kind="danger" disabled={action.busy} onClick={()=>action.run(async()=>{await api(`/followups/${draft.id}/withdraw`,'POST',{reason:'作者主动撤回'});loadDraft(await api('/drafts/'+draft.id));setWithdraw(false);})}>撤回</Button>}><p>撤回后读者将无法继续读取这一版本。</p><ActionError action={action}/></Modal>}
  </div>;
-}
-
-export function ConnectedImport({navigate,user}){
- const [url,setUrl]=useState(''),[result,setResult]=useState(null);const action=useAction();
- return <><Panel><h1>链接导入与核验</h1><p>粘贴知乎回答或文章链接，核验结果以服务器返回为准。</p><form onSubmit={e=>{e.preventDefault();action.run(async()=>setResult(await api('/sources/resolve','POST',{url})));}}><input className="d-input" type="url" required aria-label="知乎链接" value={url} onChange={e=>{setUrl(e.target.value);setResult(null);}}/><Button type="submit" disabled={action.busy}>读取链接</Button></form><ActionError action={action}/>{result&&<><p role="status">{result.status==='pending_content'?'已登记链接，官方渠道暂未取得正文。':'已取得材料，后续仍需核验归属与许可。'}</p><Button onClick={()=>navigate('05')}>查看我的回答</Button></>}</Panel>{['author','researcher','admin'].includes(user?.role)&&<Panel><SourceMaterials role={user.role}/></Panel>}</>;
 }
 
 export function ConnectedSettings({user}){

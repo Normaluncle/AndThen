@@ -1,5 +1,6 @@
 import React from 'react';
 import {COPY, DESKTOP_NAV, MOBILE_NAV, TOKENS, navPage} from './ui14.js';
+import {ProfileAvatar} from './Home.jsx';
 
 function BrandMark() {
   return (
@@ -37,7 +38,7 @@ export function AppHeader({page, user, notifications = [], query, onQuery, onSea
         {unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
       </button>
       <button type="button" className="avatar-btn" aria-label="我的" disabled={busy} onClick={onAvatar}>
-        <span>{(user?.display_name || '游').slice(0, 1)}</span>
+        <ProfileAvatar user={user} fallback={(user?.display_name || '游').slice(0, 1)} />
       </button>
     </header>
   );
@@ -94,7 +95,7 @@ export function MobileTopBar({page, onEnter, onBell, user, notifications = []}) 
           {unread > 0 && <span className="badge">{unread > 9 ? '9+' : unread}</span>}
         </button>
         <button type="button" className="avatar-btn" aria-label="我的" onClick={() => onEnter('账号')}>
-          <span>{(user?.display_name || '游').slice(0, 1)}</span>
+          <ProfileAvatar user={user} fallback={(user?.display_name || '游').slice(0, 1)} />
         </button>
       </div>
     </div>

@@ -2,6 +2,7 @@ import React,{useEffect,useState} from 'react';
 import {api,setToken} from '../api.js';
 import {ZhihuAccount} from '../ZhihuAccount.jsx';
 import {Panel,Button,Icon,Modal} from './shared.jsx';
+import {ProfileAvatar} from '../Home.jsx';
 import {Toggle} from './Account.jsx';
 import {playgroundResetAllowed} from '../publish-chrome.js';
 export function SettingsPage({user,onUser,onLogin,navigate}){
@@ -9,7 +10,7 @@ export function SettingsPage({user,onUser,onLogin,navigate}){
  useEffect(()=>{let active=true;setZhihu(null);setMemory(null);setError('');if(user)Promise.all([api('/me/zhihu'),api('/me/memory')]).then(([z,m])=>{if(active){setZhihu(z);setMemory(m);}}).catch(e=>{if(active)setError(e.message);});return()=>{active=false;};},[user?.id]);
  async function run(fn){setBusy(true);setError('');try{await fn();}catch(e){setError(e.message);}finally{setBusy(false);}}
  const heading=(icon,title,text)=><div className="d-account-heading"><Icon name={icon}/><div><h2>{title}</h2><p>{text}</p></div></div>;
- return <div className="d-account-settings">{notice&&<p role="status">{notice}</p>}<Panel>{heading('link','知乎账号','授权后同步可用的昵称与本人资料，无需重复填写。')}<div className="d-account-zhihu"><span className="d-profile-initial">{user?.display_name?.slice(0,1)||'知'}</span><span><b>{zhihu?.display_name||user?.display_name||'尚未连接知乎账号'}</b><small>{zhihu?.authorized?'已授权':'未授权'} · {zhihu?.last_sync_at||'尚未同步'}</small></span><Button kind="secondary" onClick={()=>user?setDetail('知乎授权'):onLogin()}>{user?'管理授权':'登录并连接'}</Button></div></Panel>
+ return <div className="d-account-settings">{notice&&<p role="status">{notice}</p>}<Panel>{heading('link','知乎账号','授权后同步可用的昵称与本人资料，无需重复填写。')}<div className="d-account-zhihu"><ProfileAvatar user={user} className="d-profile-initial" fallback="知"/><span><b>{zhihu?.display_name||user?.display_name||'尚未连接知乎账号'}</b><small>{zhihu?.authorized?'已授权':'未授权'} · {zhihu?.last_sync_at||'尚未同步'}</small></span><Button kind="secondary" onClick={()=>user?setDetail('知乎授权'):onLogin()}>{user?'管理授权':'登录并连接'}</Button></div></Panel>
  <Panel>{heading('pen','作者身份','基于自己的经历写下后来，内容始终由你确认。')}<div className="d-account-creator"><Icon name="author"/><span><b>{({author:'已核验作者身份',reader:'读者账号',admin:'管理员账号',researcher:'研究人员账号'})[user?.role]||'游客体验'}</b><small>在我的回答中查看材料、参与回访与管理发布。</small></span><Button kind="secondary" onClick={()=>navigate('05')}>我的回答 →</Button></div></Panel>
  <Panel>{heading('memory','AI 资料与记忆','从你授权的材料中整理经历和关注主题，保留可追溯的来源。')}<div className="d-account-rows">{[['me','个人资料','职业、经历与公开资料'],['calendar','人生阶段','求学、工作与生活中的阶段变化'],['star','关注主题','从经历中整理的主题，不自动建立订阅']].map(([icon,title,text])=><button key={title} onClick={()=>setDetail(title)}><Icon name={icon}/><b>{title}</b><span>{text}</span><small>{memory?.records?.length?'查看记录':'尚无记录'}　›</small></button>)}</div></Panel>
  <Panel>{heading('shield','数据使用授权','登录、材料处理与公开发布是独立的选择。')}<div className="d-account-switches"><div><Icon name="memory"/><b>AI 资料处理</b><span>仅使用已核验并授权的本人材料</span><Toggle label="AI 资料处理同意" value={memory?.enabled===true} onChange={value=>user?run(async()=>{await api('/me/memory/consent','PUT',{enabled:value});setMemory(await api('/me/memory'));}):onLogin()}/></div><div><Icon name="users"/><b>内容公开展示</b><span>在每则回答发布前单独确认</span><Button kind="ghost" onClick={()=>navigate('05')}>管理回答 ›</Button></div></div></Panel>

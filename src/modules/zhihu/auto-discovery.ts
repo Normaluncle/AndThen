@@ -7,6 +7,7 @@ import {discoveryRuns, discoverySelections, discoveryCandidates, sources, type O
 import {success, AppError} from '../../http/errors.js';
 import {envelopeSchema} from '../../http/envelope.js';
 import {officialSearch, canonicalZhihuUrl} from './client.js';
+import {engagementFields} from './heat.js';
 import {reviewDiscovery} from './discovery-analysis.js';
 import {sourcePresentation} from '../sources/presentation.js';
 
@@ -111,7 +112,7 @@ export async function registerDiscoveryRoutes(app: AppInstance,ctx: ModuleContex
       const [candidate]=await ctx.db.select().from(discoveryCandidates).where(eq(discoveryCandidates.id,row.candidateId));
       if(!candidate)continue;
       if(candidate.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,candidate.sourceId));if(!source||source.deletedAt||['revoked','rejected'].includes(source.permissionStatus))continue;}
-      items.push({...row.data,comments:[],candidate_id:row.candidateId,provenance:'official_api',discovery_reason:row.reason,
+      items.push({...row.data,...engagementFields(row.data),comments:[],candidate_id:row.candidateId,provenance:'official_api',discovery_reason:row.reason,acquired_at:row.createdAt.toISOString(),
         display_status:ctx.env.DISCOVERY_AI_ENABLED?'official_candidate':'local_candidate_preview',analysis_status:row.analysis?'ai_reviewed':'awaiting_model_consent',
         ...await sourcePresentation(ctx.db,row.url,row.data.title+' '+row.data.text),...(row.analysis?.caption?{cover_caption:row.analysis.caption,cover_year:row.analysis.year??null}:{})});
     }
