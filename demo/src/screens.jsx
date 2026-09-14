@@ -429,6 +429,7 @@ export function DraftPage({draft, draftState, draftJobPending, busy, onDraft, on
                 <h2>{block.label}</h2>
                 <Tag>{block.key === 'then' ? '来自原回答' : block.key === 'later' ? '来自作者回访' : 'AI 整理，作者确认'}</Tag>
               </div>
+              {block.key === 'reflection' && <DraftAssistant key={draft.id} draft={draft} dirty={draftState.dirty} disabled={busy} onDraft={onDraft} onPending={onPending} />}
               {block.items.length ? block.items.map((statement) => {
                 const index = draft.statements.findIndex((item) => item.id === statement.id);
                 const open = editing === statement.id;
@@ -457,8 +458,6 @@ export function DraftPage({draft, draftState, draftJobPending, busy, onDraft, on
             </Panel>
           ))}
         </div>
-        <DraftAssistant key={draft.id} draft={draft} dirty={draftState.dirty} disabled={busy} onDraft={onDraft} onPending={onPending} />
-        <DraftEvidence key={draft.id + ':evidence'} draft={draft} />
         <Panel className="d-publish-options" data-region="publish-options">
           <h3>发布选项</h3>
           <div>
@@ -483,6 +482,7 @@ export function DraftPage({draft, draftState, draftJobPending, busy, onDraft, on
             ))}
           </div>
         </Panel>
+        <DraftEvidence key={draft.id + ':evidence'} draft={draft} />
         <Panel>
           <h3>事实由作者确认</h3>
           {[['author', '内容来自你的原回答和回访', '我们仅整理呈现，不会擅自修改事实'], ['shield', '发布前请确认内容的真实性', '你是这段经历的唯一作者'], ['heart', '用真实的经历，帮助更多人', '你的故事可能正在鼓励某个身处相似困境的人']].map(([icon, title, text]) => (

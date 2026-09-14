@@ -30,6 +30,17 @@ test('the live 07 page does not render a native select for section or visibility
   assert.match(draftFn, /data-region="publish-options"/);
 });
 
+test('live 07 chrome does not ship the unstyled draft-tool headings', () => {
+  const page = readFileSync(new URL('./screens.jsx', import.meta.url), 'utf8');
+  const assistant = readFileSync(new URL('./DraftAssistant.jsx', import.meta.url), 'utf8');
+  const evidence = readFileSync(new URL('./DraftEvidence.jsx', import.meta.url), 'utf8');
+  const shipped = page.slice(page.indexOf('export function DraftPage'), page.indexOf('export function AccountPage')) + assistant + evidence;
+  assert.equal(shipped.includes('整理与检查草稿'), false);
+  assert.equal(shipped.includes('查看已保存版本的依据'), false);
+  assert.match(assistant, /AI 整理/);
+  assert.match(evidence, /核对依据/);
+});
+
 test('playground reset is allowed for guests and local demo fixtures only', () => {
   assert.equal(playgroundResetAllowed(null), true);
   assert.equal(playgroundResetAllowed({cohort: 'local_demo_fixture'}), true);
