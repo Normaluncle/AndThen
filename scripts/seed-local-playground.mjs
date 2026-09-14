@@ -6,9 +6,9 @@ import {snapshotContentHash} from '../dist/modules/sources/service.js';
 import {eq} from 'drizzle-orm';
 if(process.env.LOCAL_DEMO_LOGIN!=='true'||process.env.PUBLIC_BASE_URL!=='http://127.0.0.1:5174')throw new Error('Only run in the configured loopback demo');
 const db=await connect({connectionString:process.env.DATABASE_URL});
-const reader='c04bfed0-818f-4628-a3d9-b991bdfc8001',author='c04bfed0-818f-4628-a3d9-b991bdfc8002';
+const reader='c04bfed0-818f-4628-a3d9-b991bdfc8001',author='c04bfed0-818f-4628-a3d9-b991bdfc8002',admin='c04bfed0-818f-4628-a3d9-b991bdfc8003';
 try {await db.db.transaction(async tx=>{
- for(const [id,role,displayName] of [[reader,'reader','演示读者'],[author,'author','模拟作者（非知乎原作者）']]){
+ for(const [id,role,displayName] of [[reader,'reader','演示读者'],[author,'author','模拟作者（非知乎原作者）'],[admin,'admin','本地管理员']]){
   await tx.insert(users).values({id,role,displayName,cohort:'local_demo_fixture'}).onConflictDoNothing();
   const [u]=await tx.select().from(users).where(eq(users.id,id));
   if(u.role!==role||u.cohort!=='local_demo_fixture')throw new Error('Fixture identity collision');
@@ -26,4 +26,4 @@ try {await db.db.transaction(async tx=>{
   await tx.insert(consents).values(['private_interview','external_model_processing','demo_public_display'].map(purpose=>({sourceId:id,userId:author,purpose,version:'local-demo-fixture-v1'})));
   await tx.insert(followupCases).values({sourceId:id,authorUserId:author,createdByUserId:author,status:'eligible',reviewerRequired:false});
  }
-});console.log('Local playground ready: 2 fixed accounts, 3 clearly labeled stories; existing progress preserved.');}finally{await db.close();}
+});console.log('Local playground ready: 3 fixed accounts, 3 clearly labeled stories; existing progress preserved.');}finally{await db.close();}

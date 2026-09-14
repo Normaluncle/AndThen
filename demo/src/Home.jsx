@@ -70,7 +70,7 @@ export function Home({items, preview, query, onQuery, onSearch, onOpen, onIntere
     <aside className="home-sidebar"><section className="home-about" data-region="about"><h2>关于「然后呢？」<button onClick={() => setAbout(true)}>了解更多 →</button></h2><p>我们从知乎的真实回答出发，通过 AI 回访原作者，让那些认真留下的经历，能够被时间补充完整。</p>
       {[['book', '基于真实内容', '来自知乎的公开回答'], ['ai', 'AI 辅助回访', '生成有深度的问题，不代写、不编造'], ['author', '原作者确认', '由作者亲自补充与发布']].map(([icon, title, desc]) => <div className="home-principle" key={icon}><span><HomeIcon name={icon} /></span><div><b>{title}</b><p>{desc}</p></div></div>)}
       {preview && <div className="home-stats" aria-label="设计稿示例统计">{[['1,203', '已发起回访'], ['317', '已有后来'], ['5,826', '感兴趣的读者']].map(([value, label]) => <div key={label}><b>{value}</b><span>{label}</span></div>)}</div>}
-      <div className="home-quote"><p>“有些回答，不该只停留在过去。”</p><span>—— 然后呢？</span><HomeImage crop={[941, 803, 122, 69]} /></div>
+      <div className="home-quote"><p>“有些回答，不该只停留在过去。”</p><span>—— 然后呢？</span><img className="home-quote-bear" src="/home/quote-bear.png" alt="" /></div>
     </section>{asideExtra}</aside></div>
     {preview && <p className="home-provenance">设计稿演示 · 故事、头像及数字均为虚构示例</p>}
     {about && <div className="home-modal-backdrop" onClick={() => setAbout(false)}><section role="dialog" aria-modal="true" aria-label="关于然后呢" className="home-dialog" onClick={event => event.stopPropagation()}><button autoFocus className="home-dialog-close" aria-label="关闭" onClick={() => setAbout(false)}>×</button><h2>让认真留下的回答，等到它的后来。</h2><p>读者关注过去的回答，作者自主参与回访、补充经历并确认发布。AI 只辅助提问，不代替作者编造经历。</p></section></div>}

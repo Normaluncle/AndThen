@@ -11,7 +11,7 @@ import {ZhihuAccount} from './ZhihuAccount.jsx';
 import {EmptyState} from './overlays.jsx';
 import {articleLength, formatParagraphs} from './article-format.js';
 import {COPY, coverStyle, interviewProgress, isFixture, liveCount, sectionBlocks, storyTitle, workbenchDefaultTab, workbenchTabs} from './ui14.js';
-import {Button, Icon, Modal, Panel} from './design/shared.jsx';
+import {Button, Icon, Modal, Panel, Tag} from './design/shared.jsx';
 import {interviewInsert, interviewRail} from './interview-rail.js';
 
 function Cover({item}) {
@@ -407,70 +407,88 @@ export function InterviewPage({context, session, messages, answer, answerVisibil
   );
 }
 
-export function DraftPage({draft, draftState, draftJobPending, busy, onDraft, onPending, onSave, onConfirm, onPublish, onWithdraw, onChange}) {
+export function DraftPage({draft, draftState, draftJobPending, busy, onDraft, onPending, onSave, onConfirm, onPublish, onWithdraw, onChange, onBack}) {
+  const [editing, setEditing] = React.useState(null);
   if (!draft) return <EmptyState kind="withdrawn" />;
   const sections = sectionBlocks(draft.statements);
   const tooShort = articleLength(draft.statements) < 100;
+  const patch = (index, next) => onChange({...draft, statements: draft.statements.map((item, n) => n === index ? {...item, ...next} : item)});
   return (
-    <div className="page page-2" data-screen="07">
-      <section className="card">
+    <div className="d-two d-publish" data-screen="07">
+      <div>
+        {onBack && <button className="d-link d-desktop" type="button" onClick={onBack}>← 返回编辑</button>}
         <h1>确认并发布这则「后来」</h1>
-        <p>公开正文共 {articleLength(draft.statements)} 字；问题不计入字数。</p>
+        <p className="d-publish-intro">我们已根据访谈内容整理出完整的故事，请阅读并确认。你可以编辑修改，或补充更多细节。公开正文共 {articleLength(draft.statements)} 字。</p>
         {tooShort && <p role="status">目前仍是简短回答，还不足以讲清一段后来。请展开关键经历与前因后果，再确认发布；AI排版不会替你编造内容。</p>}
-        <button className="btn-ghost" disabled={busy || draftJobPending} type="button" onClick={() => onChange({...draft, statements: draft.statements.map((statement) => ({...statement, text: formatParagraphs(statement.text)}))})}>自动整理段落</button>
+        {draftState.dirty && <p role="status">有未保存的修改。保存后才能确认并发布这段新内容。</p>}
+        <div className="d-draft-sections" data-region="draft-sections">
+          {sections.map((block) => (
+            <Panel key={block.key} className={`d-draft-section ${block.key}`} data-section={block.key}>
+              <div className="d-draft-heading">
+                <span className={`d-section-icon ${block.key === 'later' ? 'green' : block.key === 'reflection' ? 'purple' : ''}`}><Icon name={block.key === 'then' ? 'clock' : block.key === 'later' ? 'chart' : 'bulb'} /></span>
+                <h2>{block.label}</h2>
+                <Tag>{block.key === 'then' ? '来自原回答' : block.key === 'later' ? '来自作者回访' : 'AI 整理，作者确认'}</Tag>
+              </div>
+              {block.items.length ? block.items.map((statement) => {
+                const index = draft.statements.findIndex((item) => item.id === statement.id);
+                const open = editing === statement.id;
+                return (
+                  <article key={statement.id}>
+                    <button className="d-link" type="button" onClick={() => setEditing(open ? null : statement.id)}>{open ? '完成' : '编辑'}</button>
+                    {statement.question && <p className="d-muted">采访问题：{statement.question}</p>}
+                    {open ? (
+                      <>
+                        <textarea className="d-input" rows={8} disabled={draftJobPending} value={statement.text} onChange={(event) => patch(index, {text: event.target.value})} />
+                        <div className="d-section-pills" role="group" aria-label="时间段落">
+                          {[['then', '当时'], ['later', '后来'], ['reflection', '现在回看']].map(([id, label]) => (
+                            <button type="button" key={id} className={statement.section === id ? 'active' : ''} disabled={draftJobPending} onClick={() => patch(index, {section: id})}>{label}</button>
+                          ))}
+                        </div>
+                        <div className="d-section-pills" role="group" aria-label="内容范围">
+                          <button type="button" className={statement.visibility === 'public' ? 'active' : ''} disabled={draftJobPending} onClick={() => patch(index, {visibility: 'public'})}>公开</button>
+                          <button type="button" className={statement.visibility === 'private' ? 'active' : ''} disabled={draftJobPending} onClick={() => patch(index, {visibility: 'private'})}>仅自己可见</button>
+                        </div>
+                        {statement.question && <button className="d-link" type="button" disabled={busy || draftJobPending} onClick={() => onChange({...draft, statements: draft.statements.map((item, n) => { if (n !== index) return item; const {question, ...rest} = item; return rest; })})}>不公开这一问题</button>}
+                      </>
+                    ) : <div className="d-draft-text">{(statement.text || '（空）').split('\n\n').map((paragraph, i) => <p key={i}>{paragraph}</p>)}</div>}
+                  </article>
+                );
+              }) : <p className="d-muted">这一段还没有内容。</p>}
+            </Panel>
+          ))}
+        </div>
         <DraftAssistant key={draft.id} draft={draft} dirty={draftState.dirty} disabled={busy} onDraft={onDraft} onPending={onPending} />
         <DraftEvidence key={draft.id + ':evidence'} draft={draft} />
-        <p>状态：{draft.status} · 版本 {draft.version}</p>
-        {draftState.dirty && <p role="status">有未保存的修改。保存后才能确认并发布这段新内容。</p>}
-        <div data-region="draft-sections">
-        {sections.map((block) => (
-          <section key={block.key} className="section-block" data-section={block.key}>
-            <h2>{block.label}</h2>
-            {block.items.map((statement) => {
-              const index = draft.statements.findIndex((item) => item.id === statement.id);
-              return (
-                <article key={statement.id}>
-                  <label>采访问题（随此段一起公开，请核对是否涉及私密内容）
-                    <input className="text-input" value={statement.question || ''} readOnly />
-                  </label>
-                  {statement.question && (
-                    <button className="btn-ghost" disabled={busy || draftJobPending} type="button" onClick={() => onChange({...draft, statements: draft.statements.map((item, n) => { if (n !== index) return item; const {question, ...rest} = item; return rest; })})}>不公开这一问题</button>
-                  )}
-                  <label>内容
-                    <textarea rows={8} disabled={draftJobPending} value={statement.text} onChange={(event) => onChange({...draft, statements: draft.statements.map((item, n) => n === index ? {...item, text: event.target.value} : item)})} />
-                  </label>
-                  <label>内容范围
-                    <select disabled={draftJobPending} value={statement.visibility} onChange={(event) => onChange({...draft, statements: draft.statements.map((item, n) => n === index ? {...item, visibility: event.target.value} : item)})}>
-                      <option value="public">可用于公开草稿</option>
-                      <option value="private">仅自己可见</option>
-                    </select>
-                  </label>
-                  <label>时间段落
-                    <select disabled={draftJobPending} value={statement.section || ''} onChange={(event) => onChange({...draft, statements: draft.statements.map((item, n) => n === index ? {...item, section: event.target.value || undefined} : item)})}>
-                      <option value="">未分节</option>
-                      <option value="then">当时</option>
-                      <option value="later">后来</option>
-                      <option value="reflection">现在回看</option>
-                    </select>
-                  </label>
-                  <button className="btn-ghost" disabled={busy || draftJobPending || draft.statements.length <= 1} type="button" onClick={() => onChange({...draft, statements: draft.statements.filter((_, n) => n !== index)})}>从草稿移除此项</button>
-                  <small>依据：{statement.evidence_refs?.join('、')}</small>
-                </article>
-              );
-            })}
-          </section>
-        ))}
-        </div>
-        <div className="interview-actions" data-region="publish-options">
-          <button className="btn-ghost" disabled={busy || draftJobPending || !draftState.save} type="button" onClick={onSave}>保存修改</button>
-          <button className="btn-secondary" disabled={busy || draftJobPending || !draftState.confirm || tooShort} type="button" onClick={onConfirm}>确认全部内容</button>
-          <button className="btn-primary" disabled={busy || draftJobPending || !draftState.publish || tooShort} type="button" data-cta="confirm-publish" onClick={onPublish}>{COPY.confirmPublish}</button>
-          <button className="btn-danger" disabled={busy || draftJobPending || !draftState.withdraw} type="button" onClick={onWithdraw}>撤回发布</button>
-        </div>
-      </section>
-      <aside className="card">
-        <h2 className="aside-title">发布后读者将看到什么？</h2>
-        <p>我们会以时间线的形式呈现这段经历。事实由作者确认。</p>
+        <Panel className="d-publish-options" data-region="publish-options">
+          <h3>发布选项</h3>
+          <div>
+            <Button kind="soft" disabled={busy || draftJobPending || !draftState.save} onClick={onSave}>保存修改</Button>
+            <Button kind="secondary" disabled={busy || draftJobPending || !draftState.confirm || tooShort} onClick={onConfirm}>确认全部内容</Button>
+            <Button disabled={busy || draftJobPending || !draftState.publish || tooShort} data-cta="confirm-publish" onClick={onPublish}>{COPY.confirmPublish}</Button>
+            {draftState.withdraw && <Button kind="danger" disabled={busy || draftJobPending} onClick={onWithdraw}>撤回发布</Button>}
+          </div>
+        </Panel>
+      </div>
+      <aside className="d-sidebar">
+        <Panel className="d-saved">状态：{draft.status} · 版本 {draft.version}</Panel>
+        <Panel>
+          <h3>发布后读者将看到什么？</h3>
+          <p className="d-muted">我们会以时间线的形式呈现这段经历，让更多人从你的故事中获得启发。</p>
+          <div className="d-preview-timeline">
+            {sections.filter((block) => block.items.length).map((block) => (
+              <div key={block.key} className={block.key === 'later' ? 'green' : block.key === 'reflection' ? 'purple' : ''}>
+                <b>{block.label}</b>
+                <p>{(block.items[0]?.text || '').slice(0, 28)} …</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+        <Panel>
+          <h3>事实由作者确认</h3>
+          {[['author', '内容来自你的原回答和回访', '我们仅整理呈现，不会擅自修改事实'], ['shield', '发布前请确认内容的真实性', '你是这段经历的唯一作者'], ['heart', '用真实的经历，帮助更多人', '你的故事可能正在鼓励某个身处相似困境的人']].map(([icon, title, text]) => (
+            <div className="d-principle" key={title}><Icon name={icon} /><div><b>{title}</b><p>{text}</p></div></div>
+          ))}
+        </Panel>
       </aside>
     </div>
   );

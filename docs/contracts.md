@@ -70,6 +70,16 @@ Routes (implemented):
 `POST /api/auth/sessions` returns
 `{ session_token, token_prefix, expires_at, user }`.
 
+Local demo only (`LOCAL_DEMO_LOGIN` + loopback `PUBLIC_BASE_URL`):
+
+| Method | Path | Auth | Notes |
+|---|---|---|---|
+| GET | `/api/auth/demo/status` | none | `{ enabled }` |
+| POST | `/api/auth/demo/reader` | none | Fixture reader session |
+| POST | `/api/auth/demo/author` | none | Fixture author session |
+| POST | `/api/auth/demo/admin` | none | Fixture admin session; no login-token in logs |
+| POST | `/api/auth/demo/reset` | optional | Rebuilds `test_fixture` playground stories; refuses non-`local_demo_fixture` identities |
+
 ## 4. Module contract — **FROZEN**
 
 ```ts
