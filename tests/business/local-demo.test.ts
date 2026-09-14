@@ -40,6 +40,10 @@ describe('local demo login',()=>{
    const ok=await h.app.inject({method:'POST',url:'/api/auth/demo/reset',payload:{}});
    expect(ok.statusCode,ok.body).toBe(200);
    expect(ok.json().data.stories).toBe(3);
+   const reader=await h.app.inject({method:'POST',url:'/api/auth/demo/reader',payload:{}});
+   const following=await h.app.inject({url:'/api/me/following',headers:{authorization:`Bearer ${reader.json().data.session_token}`}});
+   expect(following.json().data.items).toHaveLength(3);
+   expect(following.json().data.items.every((item:{available:boolean})=>item.available)).toBe(true);
    const again=await h.app.inject({method:'POST',url:'/api/auth/demo/reset',payload:{}});
    expect(again.statusCode).toBe(200);
    const outsider=await createUser(h.ctx.db,{role:'reader',cohort:'anonymous_reader'});

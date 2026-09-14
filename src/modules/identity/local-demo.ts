@@ -76,6 +76,7 @@ export async function resetPlayground(db: Executor) {
     }
   }
   await db.delete(interests).where(inArray(interests.sourceId, sourceIds));
+  const readerId = DEMO_ACCOUNTS.find((item) => item.path === 'reader')!.id;
   await db.update(followupCases).set({ status: 'eligible', declineFlag: false, doNotContact: false }).where(inArray(followupCases.sourceId, sourceIds));
   for (const preset of DEMO_ACCOUNTS) {
     await db.insert(users).values({ id: preset.id, role: preset.role, displayName: preset.displayName, cohort: LOCAL_DEMO_COHORT }).onConflictDoNothing();
@@ -120,6 +121,16 @@ export async function resetPlayground(db: Executor) {
       status: 'eligible',
       reviewerRequired: false,
     });
+  }
+  for (const story of FIXTURE_STORIES) {
+    await db.insert(interests).values({
+      readerKey: readerId,
+      sourceId: story.id,
+      active: true,
+      cohort: LOCAL_DEMO_COHORT,
+      triggeredBy: 'natural',
+      excluded: true,
+    }).onConflictDoNothing();
   }
   return { stories: FIXTURE_STORIES.length };
 }

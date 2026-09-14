@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Article } from '../Article.jsx';
+import { formatParagraphs } from '../article-format.js';
 import { Button, Icon, Panel, Tag, Modal } from './shared.jsx';
+import { groupReadingSections, yearFromText } from './reading-layout.js';
 
 const SECTIONS = [
   ['then', '当时'],
@@ -14,32 +15,23 @@ function yearLabel(value) {
   return match ? match[1] : '';
 }
 
-function groupStatements(statements = []) {
-  const groups = { then: [], later: [], reflection: [] };
-  const known = statements.filter((item) => groups[item.section]);
-  if (known.length) {
-    for (const item of known) groups[item.section].push(item);
-    for (const item of statements) if (!groups[item.section]) groups.later.push(item);
-    return groups;
+function sectionYear(items, fallback) {
+  for (const item of items) {
+    const year = yearFromText(item.text);
+    if (year) return year;
   }
-  if (!statements.length) return groups;
-  if (statements.length === 1) {
-    groups.later = statements;
-    return groups;
-  }
-  const first = Math.max(1, Math.ceil(statements.length / 3));
-  const second = Math.max(first + 1, Math.ceil((statements.length * 2) / 3));
-  statements.forEach((item, index) => {
-    groups[index < first ? 'then' : index < second ? 'later' : 'reflection'].push(item);
-  });
-  return groups;
+  return fallback || '';
+}
+
+function paragraphs(text) {
+  return formatParagraphs(text || '').split(/\n+/).filter(Boolean);
 }
 
 export function LiveReading({ data, origin, navigate, engagement, recommendations }) {
   const [original, setOriginal] = useState(false);
-  const groups = groupStatements(data.statements);
-  const start = yearLabel(origin?.published_at || origin?.date);
-  const end = yearLabel(data.published_at);
+  const groups = groupReadingSections(data.statements);
+  const start = sectionYear(groups.then, yearLabel(origin?.published_at || origin?.date));
+  const end = yearLabel(data.published_at) || sectionYear(groups.reflection, '');
   const span = start && end && start !== end ? `${start} – ${end}` : end || start;
   const banner = span ? `${span}，有些回答，需要时间才完整。` : '有些回答，需要时间才完整。';
   const originTitle = origin?.title || '当时的回答';
@@ -64,16 +56,18 @@ export function LiveReading({ data, origin, navigate, engagement, recommendation
             return (
               <section key={key}>
                 <h2>{title}{date ? <> · <span>{date}</span></> : null}</h2>
-                {items.map((statement) => <Article key={statement.id} statement={statement} />)}
+                {items.flatMap((statement) => paragraphs(statement.text)).map((line, index) =>
+                  line.startsWith('## ')
+                    ? <h4 key={`${key}-${index}`}>{line.slice(3)}</h4>
+                    : <p key={`${key}-${index}`}>{line.startsWith('- ') ? `• ${line.slice(2)}` : line}</p>
+                )}
               </section>
             );
           })}
         </div>
         {data.source_id && <Button kind="soft" className="d-reading-original wide" onClick={() => setOriginal(true)}>查看当时的回答 →</Button>}
-        <div className="d-reading-bottom">
-          <p>ⓘ 作者自述{data.ai_assisted ? '，AI 辅助采访与整理' : ''}，未由平台独立核实。</p>
-          {engagement}
-        </div>
+        <p className="d-reading-disclaimer">ⓘ 作者自述{data.ai_assisted ? '，AI 辅助采访与整理' : ''}，未由平台独立核实。</p>
+        <div className="d-reading-engage">{engagement}</div>
       </Panel>
       <aside className="d-sidebar">
         <Panel>

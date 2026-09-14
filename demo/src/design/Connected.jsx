@@ -8,6 +8,7 @@ import {internalSearchUrl} from './search-model.js';
 import {Engagement} from './Engagement.jsx';
 import {draftVersionRoute} from './navigation.js';
 import {startOwnInterview,publishOwnDraft,notificationTarget} from './connected-actions.js';
+import {followingFeed} from './reading-layout.js';
 import {readCandidate} from '../home-data.js';
 import {publishBackTarget} from '../publish-chrome.js';
 import {SourceMaterials} from '../SourceMaterials.jsx';
@@ -57,7 +58,7 @@ export function ConnectedPersonal({tab,navigate,user,filter='全部',onFilter}){
  const action=useAction();
  if(!resource.value)return <ResourceStatus resource={resource}/>;
  const rows=resource.value.items||[];
- if(tab==='following'){const entries=[...rows.map(item=>({...item,id:item.source_id,source_id:item.source_id,title:item.title||'暂不可用的故事',date:item.published_at?.slice(0,10),author:'原回答作者',text:item.text||'',updated:item.update?.status==='published',followup:item.update?.status==='published'?item.update.version_id:null,status:item.available===false?'暂不可用':item.update?.status==='published'?'已有后来':'等待作者回应',tone:item.update?.status==='published'?'green':'orange',reason:'查看故事与后续',fixture:false})),...(candidates.value?.items||[]).filter(item=>!rows.some(row=>row.source_id===item.linked_source_id)).map(item=>({...item,id:item.candidate_id,source_id:item.linked_source_id,author:item.author_name,status:'等待作者回应',tone:'orange',reason:'等待收录后续',fixture:false}))];return <><Following items={entries} navigate={navigate} busy={action.busy} onOpen={item=>item.followup?navigate('08',{followup:item.followup}):item.source_id?navigate('02',{source:item.source_id}):window.open(item.url,'_blank','noopener,noreferrer')} onUnfollow={item=>action.run(async()=>{await api(item.candidate_id?`/discovery/candidates/${item.candidate_id}/interest`:`/stories/${item.source_id}/interest`,'PUT',{active:false});resource.reload();candidates.reload();})}/><ActionError action={action}/></>;}
+ if(tab==='following'){const entries=followingFeed(rows,candidates.value?.items||[]);return <><Following items={entries} navigate={navigate} busy={action.busy} onOpen={item=>item.followup?navigate('08',{followup:item.followup}):item.candidate_id?navigate('02',{candidate:item.candidate_id}):item.source_id?navigate('02',{source:item.source_id}):window.open(item.url,'_blank','noopener,noreferrer')} onUnfollow={item=>action.run(async()=>{await api(item.candidate_id?`/discovery/candidates/${item.candidate_id}/interest`:`/stories/${item.source_id}/interest`,'PUT',{active:false});resource.reload();candidates.reload();})}/><ActionError action={action}/></>;}
  if(tab==='notifications')return <><NoticeList items={rows} filter={filter} onFilter={setFilter} onRead={item=>action.run(async()=>{await api(`/notifications/${item.id}/read`,'POST');resource.reload();})} onOpen={item=>action.run(async()=>{const target=notificationTarget(item);await api(`/notifications/${item.id}/read`,'POST');navigate('08',target);})}/><ActionError action={action}/></>;
  const tabs=workbenchTabs(rows),selected=tabs.find(item=>item.label===filter)||tabs[0];
  return <><Workbench navigate={navigate} state={{published:false}} content={<><Tabs items={tabs.map(item=>item.label)} value={selected.label} onChange={setFilter}/>{selected.items.map(item=>{const card=liveWorkbenchCard(item);return <WorkbenchCard key={item.id} card={card} onAction={()=>{if(card.action.invite){setConsents({});setConfirmed(false);setInvite(item);}else navigate(card.action.screen,card.action.options);}}/>;})}{!selected.items.length&&<p>这一栏暂时没有回答。</p>}<Button kind="secondary" onClick={()=>navigate('12')}>导入我的回答</Button><ActionError action={action}/></>}/>{invite&&<ParticipationDialog title={invite.title} busy={action.busy} onClose={()=>{if(!action.busy)setInvite(null);}} onStart={()=>action.run(async()=>{
@@ -81,6 +82,7 @@ export function ConnectedDetail({route,navigate,user,onLogin}){
  if(!path)return <Panel><h1>请选择一条自己的回答</h1><Button onClick={()=>navigate('05')}>返回我的回答</Button></Panel>;
  if(!resource.value)return <ResourceStatus resource={resource}/>;
  const data=resource.value;
+ if(route.source&&!data.story)return <Panel><h1>未找到这则故事</h1><Button onClick={()=>navigate('01')}>返回发现</Button></Panel>;
  const recommendations=<>{(related.value?.items||[]).filter(item=>item.source_id!==(route.source||data.source_id)).slice(0,3).map(item=><button className="d-related" key={item.source_id} onClick={()=>navigate('02',{source:item.source_id})}><StoryCover item={item}/><span><b>{item.title}</b><small>本站故事</small></span></button>)}<Button kind="soft" onClick={()=>navigate('01')}>发现更多故事 →</Button></>;
  async function interviewAction(name){try{await api(`/interviews/${route.interview}/${name}`,'POST',{expected_version:data.session.revision});resource.reload();}catch(e){if(e.status===409)resource.reload();throw e;}}
  async function saveFollow(choice=0,extra='',consent=false){if(!user){onLogin();return;}await action.run(async()=>{

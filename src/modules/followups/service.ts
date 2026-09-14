@@ -177,11 +177,24 @@ export async function withdrawFollowup(ctx: ModuleContext, auth: AuthContext, id
   });
 }
 
+function withReadingSections<T extends { section?: 'then' | 'later' | 'reflection' }>(statements: T[]): T[] {
+  if (statements.some((item) => item.section === 'then' || item.section === 'later' || item.section === 'reflection')) return statements;
+  if (statements.length <= 1) return statements.map((item) => ({ ...item, section: 'later' as const }));
+  const first = Math.max(1, Math.ceil(statements.length / 3));
+  const second = Math.max(first + 1, Math.ceil((statements.length * 2) / 3));
+  return statements.map((item, index) => ({
+    ...item,
+    section: (index < first ? 'then' : index < second ? 'later' : 'reflection') as 'then' | 'later' | 'reflection',
+  }));
+}
+
 export async function publicFollowup(db: Executor, id: string) {
   const [record] = await db.select({ version: followupVersions, caseRow: followupCases, source: sources }).from(followupVersions)
     .innerJoin(followupCases, eq(followupCases.id, followupVersions.caseId)).innerJoin(sources, eq(sources.id, followupCases.sourceId)).where(eq(followupVersions.id, id));
   if (!record) throw AppError.notFound();
   if (record.version.status !== 'published' || record.caseRow.publishedVersionId !== id || !await isPubliclyVisible(db, record.source)) throw AppError.withdrawn();
-  return { version_id: id, source_id: record.source.id, statements: z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public').map(({ id, text, kind, section, question }) => ({ id, text, kind, ...(section ? { section } : {}), ...(question ? { question } : {}) })), confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
+  const statements = withReadingSections(z.array(draftStatementSchema).parse(record.version.statements).filter(s => s.visibility === 'public'))
+    .map(({ id, text, kind, section }) => ({ id, text, kind, ...(section ? { section } : {}) }));
+  return { version_id: id, source_id: record.source.id, statements, confirmed_at: record.version.confirmedAt, published_at: record.version.publishedAt, ai_assisted: record.version.aiAssisted, attribution: 'author_reported' };
 }
 import { invalidateAuthorMemory } from '../memory/service.js';
