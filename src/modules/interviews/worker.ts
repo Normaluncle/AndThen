@@ -56,15 +56,27 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
   let turn: z.infer<typeof turnSchema> | undefined;
   let completion: Awaited<ReturnType<ReturnType<typeof createLlmClient>['complete']>> | undefined;
   let failureCode: string | null = null;
+  let totalInput:number|null=null,totalOutput:number|null=null,totalLatency=0;
   try {
     const readerInterests = await reasonSummary(ctx.db,p.source_id);
     const serialized = JSON.stringify({ reader_interests:{...readerInterests,tags:readerInterests.tags.slice(0,12)}, evidence, author_memory: memoryRecords.map(m => ({ summary: m.content, preference: m.preference, basis_ref: m.evidenceRef ?? `snapshot:${m.snapshotId}` })), question_number: input.session.questionsAsked + 1, remaining_questions: Math.min(5,input.session.budgetMainQuestions) - input.session.questionsAsked,
       history: input.history.map(m => ({ role: m.role, question: m.question, answer: m.authorMessage, skipped: m.skipped })) });
     if (serialized.length > 64000) throw AppError.sourceIncomplete('Authorized input exceeds the task budget');
-    completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview + `\n本次明确生成第${input.session.questionsAsked+1}问（总预算${Math.min(5,input.session.budgetMainQuestions)}问）。${input.session.questionsAsked+1===Math.min(5,input.session.budgetMainQuestions)?'这是最后一问。结合作者最近的回答，选择尚未回答的开放收尾角度，不重复历史问题；若建议已经说过，邀请补充尚未谈到的个人感受。':'这不是最后一问，禁止使用最后、收尾等结束措辞。继续围绕未讲清的经历展开。'}` }, { role: 'user', content: serialized }], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
+    let repair='';
+    for(let attempt=0;attempt<2;attempt++){
+      await job.heartbeat();
+      try{
+    completion = await createLlmClient(ctx.env, ctx.logger).complete({ messages: [{ role: 'system', content: PROMPTS.ai_b_interview + `\n本次明确生成第${input.session.questionsAsked+1}问（总预算${Math.min(5,input.session.budgetMainQuestions)}问）。${input.session.questionsAsked+1===Math.min(5,input.session.budgetMainQuestions)?'这是最后一问。结合作者最近的回答，选择尚未回答的开放收尾角度，不重复历史问题；若建议已经说过，邀请补充尚未谈到的个人感受。':'这不是最后一问，禁止使用最后、收尾等结束措辞。继续围绕未讲清的经历展开。'}` }, { role: 'user', content: serialized },...(repair?[{role:'user' as const,content:repair}]:[])], json: true, maxTokens: 1000, temperature: 0.2, signal: job.signal });
+    totalInput=completion.usage.inputTokens===null?null:(totalInput??0)+completion.usage.inputTokens; totalOutput=completion.usage.outputTokens===null?null:(totalOutput??0)+completion.usage.outputTokens;totalLatency+=completion.latencyMs;
     turn = turnSchema.parse(JSON.parse(completion.content));
     if (turn.basis_refs.some(ref => !evidence.some(e => e.id === ref))) throw AppError.sourceIncomplete('Unsupported interview reference');
     if ((turn.question.match(/[?？]/g) ?? []).length > 1 || input.history.some(m => m.question && questionKey(m.question) === questionKey(turn!.question))) throw AppError.conflict('Repeated or multiple questions');
+        break;
+      }catch(error){
+        if(attempt||!(error instanceof AppError)||error.code!=='conflict')throw error;
+        repair='上一个候选问题未通过服务端校验：重复已有问题或包含多个问句。请换一个未问过的角度，只输出一个简洁的开放问题，只允许句尾出现一个问号，不在引述里使用问号。不要重复历史问题。只输出原定JSON结构。';
+      }
+    }
   } catch (err) {
     if (job.signal.aborted) throw err;
     failureCode = err instanceof AppError ? err.code : 'invalid_model_output';
@@ -84,7 +96,7 @@ async function generateNext(ctx: ModuleContext, job: JobHandlerContext) {
       if (!source || source.deletedAt || !session || privateExpired(session.updatedAt, ctx.now()) || session.status !== 'active' || session.revision !== p.revision || !await hasActiveConsent(fenced, p.source_id, 'external_model_processing', p.owner_user_id) || !await hasActiveConsent(fenced, p.source_id, 'private_interview', p.owner_user_id)) {
         throw new JobLeaseLostError(job.job.id, 'authorization or interview changed');
       }
-      await fenced.update(aiRuns).set({ status: failureCode ? 'failed' : 'succeeded', errorCode: failureCode, finishedAt: ctx.now(), inputTokens: completion?.usage.inputTokens ?? null, outputTokens: completion?.usage.outputTokens ?? null, latencyMs: completion?.latencyMs ?? null }).where(eq(aiRuns.id, runId));
+      await fenced.update(aiRuns).set({ status: failureCode ? 'failed' : 'succeeded', errorCode: failureCode, finishedAt: ctx.now(), inputTokens: totalInput, outputTokens: totalOutput, latencyMs: completion?totalLatency:null }).where(eq(aiRuns.id, runId));
       if (failureCode || !turn) {
         await fenced.update(interviewSessions).set({ mode: 'manual', stopReason: failureCode, revision: session.revision + 1, updatedAt: ctx.now() }).where(eq(interviewSessions.id, session.id));
       } else {

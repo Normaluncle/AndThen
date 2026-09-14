@@ -38,6 +38,7 @@ export const iconPaths = {
     checkCircle: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0M6 12l4 4 8-8',
     info: 'M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0M12 11v6M12 7h.01',
     plus: 'M12 4v16M4 12h16',
+    list: 'M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01',
     more: 'M4 12h.01M12 12h.01M20 12h.01',
     desktop: 'M2 3h20v14H2zM12 17v5M7 22h10',
     phone: 'M6 2h12v21H6zM11 18h2',

@@ -47,6 +47,7 @@ function App() {
   const [memory, setMemory] = useState(null);
   const [session, setSession] = useState(null);
   const [messages, setMessages] = useState([]);
+  const [interviewContext, setInterviewContext] = useState(null);
   const [answer, setAnswer] = useState('');
   const [draft, setDraft] = useState(null);
   const [caseId, setCaseId] = useState('');
@@ -69,7 +70,7 @@ function App() {
   useEffect(() => {
     if (busy) return;
     if (page === '作者工作台' && user) return poll(() => api('/me/workbench'), (data) => setItems(data.items), (err) => setError(err.message));
-    if (page === '采访' && session?.status === 'active') return poll(() => api('/interviews/' + session.id), (data) => { setSession(data.session); setMessages(data.messages || []); }, (err) => setError(err.message));
+    if (page === '采访' && session?.status === 'active') return poll(() => api('/interviews/' + session.id), (data) => { setSession(data.session); setMessages(data.messages || []); setInterviewContext(data.context || null); }, (err) => setError(err.message));
     if (page === '资料与记忆' && memory?.status === 'pending') return poll(() => api('/me/memory'), setMemory, (err) => setError(err.message));
   }, [page, session?.id, session?.status, memory?.status, busy, user?.id]);
   async function run(fn, message) {
@@ -125,7 +126,7 @@ function App() {
   }
   async function readInterview(id) {
     const data = await api('/interviews/' + id);
-    setSession(data.session); setMessages(data.messages || []); setPage('采访');
+    setSession(data.session); setMessages(data.messages || []); setInterviewContext(data.context || null); setPage('采访');
   }
   async function actionInterview(action) {
     try { await api(`/interviews/${session.id}/${action}`, 'POST', {expected_version: session.revision}); }
@@ -221,7 +222,7 @@ function App() {
         )}
         {page === '采访' && (
           <InterviewPage
-            session={session} messages={messages} answer={answer} answerVisibility={answerVisibility} busy={busy} interviewState={interviewState}
+            context={interviewContext} session={session} messages={messages} answer={answer} answerVisibility={answerVisibility} busy={busy} interviewState={interviewState}
             onAnswer={setAnswer} onVisibility={setAnswerVisibility}
             onSave={() => run(async () => { await api(`/interviews/${session.id}/messages`, 'POST', {message: answer, visibility: answerVisibility, client_message_id: crypto.randomUUID(), expected_version: session.revision}); setAnswer(''); await readInterview(session.id); })}
             onSkip={() => run(async () => { await api(`/interviews/${session.id}/messages`, 'POST', {skip: true, client_message_id: crypto.randomUUID(), expected_version: session.revision}); await readInterview(session.id); })}

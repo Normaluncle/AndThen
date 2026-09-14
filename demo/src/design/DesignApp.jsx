@@ -30,7 +30,7 @@ import {readRoute,routeUrl,nextRoute,mayOpenRoute,canUseDeveloperPages} from './
 import {storyParagraphs,Panel,Button,Modal,Tag} from './shared.jsx';
 import {followedStories} from './Following.jsx';
 import {SessionPanel} from './SessionPanel.jsx';
-import {ConnectedHome,ConnectedPersonal,ConnectedDetail,ConnectedImport,ConnectedSettings} from './Connected.jsx';
+import {ConnectedHome,ConnectedPersonal,ConnectedDetail,ConnectedImport,ConnectedSettings,ConnectedCandidate} from './Connected.jsx';
 import {DesignMobileNav} from './shared.jsx';
 import {unreadNotificationCount} from './notification-data.js';
 export const screenNames={'01':'发现首页','02':'故事详情','03':'我的关注','04':'通知','05':'写下后来','06':'AI 回访采访','07':'确认与发布','08':'公开后来','09':'我的资料与设置','10':'管理后台','11':'作者邀请','12':'链接导入与核验','13':'状态与空态','14':'弹窗与抽屉','15':'组件总览'};
@@ -46,7 +46,7 @@ export default function DesignApp({user,onUser,connectionError}){
  const [liveUnread,setLiveUnread]=useState(0);
  useEffect(()=>{if(!user){setLiveUnread(0);return;}let active=true;const apply=data=>{if(active)setLiveUnread((data.items||[]).filter(item=>!item.readAt&&!item.read_at&&item.status!=='withdrawn').length);};const fail=e=>{if(active&&e.status===401){setToken(false);onUser(null);}};api('/me/notifications').then(apply).catch(fail);const stop=poll(()=>api('/me/notifications'),apply,fail,2000);return()=>{active=false;stop();};},[user?.id]);
  const [state,dispatch]=useReducer(designReducer,initialDesignState);
- const [saved,setSaved]=useState([]),[visited,setVisited]=useState([]),[selection,setSelection]=useState(null);
+ const [saved,setSaved]=useState([]),[visited,setVisited]=useState([]);
  const navigate=useCallback((id,options={},mode={})=>{
    const next=nextRoute(route,id,options);if(next.screen==='01'&&!next.q)setQuery('');if(routeUrl(next)===routeUrl(route))return;
    if(mode.replace)history.replaceState(history.state,'',routeUrl(next));
@@ -59,7 +59,7 @@ export default function DesignApp({user,onUser,connectionError}){
  useEffect(()=>{setSaved([]);setVisited([]);setInteractions({});setPersonalFilters({});},[user?.id]);
  const developer=canUseDeveloperPages(user),allowed=mayOpenRoute(route,user);
  const story=followedStories.find(s=>s.id===route.story);
- const openStory=(title,target='02')=>{const item=followedStories.find(s=>s.title===title);if(item)navigate(target,{story:item.id});else setSelection({title});};
+ const openStory=(title,target='02')=>{const item=followedStories.find(s=>s.title===title);navigate(target,item?{story:item.id}:{});};
  const engagementFor=id=><Engagement screen={screen} fixtureId={id} user={user} onLogin={()=>setLoginOpen(true)} fixtureState={interactions[id]||emptyEngagement} onFixtureChange={value=>{setInteractions(all=>({...all,[id]:value}));setSaved(items=>value.saved?[...new Set([...items,id])]:items.filter(item=>item!==id));}}/>;
  const shared={navigate,interactions,state:{...state,followed:fixtureFollows.includes(route.story||'career')},dispatch:action=>{if(action.type==='follow'||action.type==='unfollow'){const id=route.story||'career';setFixtureFollows(ids=>action.type==='follow'?[...new Set([...ids,id])]:ids.filter(value=>value!==id));}dispatch(action);},toast:setToastText,openStory,engagement:engagementFor(route.story||'career'),onSearchTopic:q=>navigate('01',{q})};
  const personal=screen==='09';
@@ -82,13 +82,12 @@ export default function DesignApp({user,onUser,connectionError}){
  </Account>}
  {personal&&developer&&<Panel><h3>开发者工具</h3>{['10','13','14','15'].map(id=><Button kind="ghost" key={id} onClick={()=>navigate(id)}>{screenNames[id]}</Button>)}</Panel>}
  {['02','06','07','08','11'].includes(screen)&&<>
- {route.source||route.followup||route.interview||route.draft||route.case||(user&&!route.story)?<ConnectedDetail key={routeUrl(route)} route={route} navigate={navigate} user={user} onLogin={()=>setLoginOpen(true)}/>:route.story&&!story?<Panel><h1>未找到这则故事</h1><Button onClick={back}>返回</Button></Panel>:fixtureDetail?<Panel><Tag>{story.category}</Tag><h1>{story.title}</h1><p>{story.author} · {story.date}</p><p className="d-prose">{story.text}</p><p className="d-muted">{screen==='02'?'这是设计示例中的回答摘要。':'这则示例尚未提供完整后续或回访材料。'}</p>{engagementFor(story.id)}<Button kind="ghost" onClick={back}>返回</Button></Panel>:<>{screen==='02'&&<Story key={route.story||'career'} {...shared} story={story?.id==='career'?{...story,text:storyParagraphs.join('\n\n'),tags:['职业选择','个人成长','独立开发']}:story}/>}{screen==='06'&&<Interview {...shared}/>} {screen==='07'&&<Publish {...shared}/>} {screen==='08'&&(story&&story.id!=='career'?<Story key={story.id} {...shared} story={story}/>:<Reading {...shared}/>)} {screen==='11'&&<Invite {...shared}/>}</>}
+ {route.candidate?<ConnectedCandidate id={route.candidate} navigate={navigate} user={user} onLogin={()=>setLoginOpen(true)}/>:route.source||route.followup||route.interview||route.draft||route.case||(user&&!route.story)?<ConnectedDetail key={routeUrl(route)} route={route} navigate={navigate} user={user} onLogin={()=>setLoginOpen(true)}/>:route.story&&!story?<Panel><h1>未找到这则故事</h1><Button onClick={back}>返回</Button></Panel>:fixtureDetail?<Panel><Tag>{story.category}</Tag><h1>{story.title}</h1><p>{story.author} · {story.date}</p><p className="d-prose">{story.text}</p><p className="d-muted">{screen==='02'?'这是设计示例中的回答摘要。':'这则示例尚未提供完整后续或回访材料。'}</p>{engagementFor(story.id)}<Button kind="ghost" onClick={back}>返回</Button></Panel>:<>{screen==='02'&&<Story key={route.story||'career'} {...shared} story={story?.id==='career'?{...story,text:storyParagraphs.join('\n\n'),tags:['职业选择','个人成长','独立开发']}:story}/>}{screen==='06'&&<Interview {...shared}/>} {screen==='07'&&<Publish {...shared}/>} {screen==='08'&&(story&&story.id!=='career'?<Story key={story.id} {...shared} story={story}/>:<Reading {...shared}/>)} {screen==='11'&&<Invite {...shared}/>}</>}
  </>}
  {screen==='10'&&<><ReportsPanel navigate={navigate}/><ReportsPanel feedback navigate={navigate}/><Admin {...shared}/></>} {screen==='12'&&(user?<ConnectedImport navigate={navigate} user={user}/>:<Import {...shared}/>)} {screen==='13'&&<States {...shared}/>} {screen==='14'&&<Overlays {...shared}/>} {screen==='15'&&<Components {...shared}/>}
  </>}
  </main><footer className="d-footer"><span>然后呢？　And Then? · {user?'已连接当前账号':'访客浏览 · 设计示例单独标识'}</span>{developer&&<label>开发预览 <select aria-label="演示页面" value={screen} onChange={e=>navigate(e.target.value)}>{Object.entries(screenNames).sort(([a],[b])=>a.localeCompare(b)).map(([id,name])=><option value={id} key={id}>{id} {name}</option>)}</select></label>}<button className="d-link" onClick={()=>setLoginOpen(true)}>{user?'切换账号':'登录账号'}</button></footer>
  {['01','09'].includes(screen)&&<DesignMobileNav screen={active} navigate={navigate} unread={user?liveUnread:unreadNotificationCount(state.read)}/>}
  {loginOpen&&<Modal title="账号登录" onClose={()=>setLoginOpen(false)}><SessionPanel user={user} onUser={onUser} onClose={()=>setLoginOpen(false)}/></Modal>}
- {selection&&<Modal title="故事摘要" onClose={()=>setSelection(null)}><h2>{selection.title}</h2><p>当前示例尚未提供这则故事的完整内容。</p></Modal>}
  {toastText&&<div role="status" className="d-toast">✓　{toastText}</div>}</div>;
 }

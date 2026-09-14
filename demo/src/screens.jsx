@@ -11,6 +11,8 @@ import {ZhihuAccount} from './ZhihuAccount.jsx';
 import {EmptyState} from './overlays.jsx';
 import {articleLength, formatParagraphs} from './article-format.js';
 import {COPY, coverStyle, interviewProgress, isFixture, liveCount, sectionBlocks, storyTitle, workbenchDefaultTab, workbenchTabs} from './ui14.js';
+import {Button, Icon, Modal, Panel} from './design/shared.jsx';
+import {interviewInsert, interviewRail} from './interview-rail.js';
 
 function Cover({item}) {
   const date = (item.published_at || item.created_at || '').slice(0, 7).replace('-', '.');
@@ -324,58 +326,83 @@ export function InvitePage({sourceId, caseId, busy, onSourceId, onConsent, onAcc
   );
 }
 
-export function InterviewPage({session, messages, answer, answerVisibility, busy, interviewState, onAnswer, onVisibility, onFormat, onSave, onSkip, onPause, onResume, onFinish, onRetry, onRefresh, onDraft}) {
+export function InterviewPage({context, session, messages, answer, answerVisibility, busy, interviewState, onAnswer, onVisibility, onFormat, onSave, onSkip, onPause, onResume, onFinish, onRetry, onRefresh, onDraft, onBack}) {
+  const [drawer, setDrawer] = React.useState(false);
+  const [why, setWhy] = React.useState(false);
+  const [pauseConfirm, setPauseConfirm] = React.useState(false);
   if (!session) return <EmptyState kind="timeout" />;
   const progress = interviewProgress(session);
   const current = messages.filter((item) => item.role === 'ai').at(-1);
+  const rail = interviewRail(context, current);
+  const paused = session.status === 'paused';
+  const count = Array.from((answer || '').trim()).length;
   return (
-    <div className="page page-2" data-screen="06">
-      <section className="card">
-        <p className="progress-label" data-region="interview-progress">{progress.label} 问</p>
-        <div className="progress"><span style={{width: `${(progress.current / progress.total) * 100}%`}} /></div>
-        <p>状态：{session.status} · 已问 {session.questionsAsked} / 5</p>
-        <h1>{current?.question || '聊聊你的后来'}</h1>
-        {messages.map((item) => (
-          <article key={item.id}>
-            <strong>{item.role === 'ai' ? '回访问题' : '你的回答'}</strong>
-            <p className="body">{item.question || item.authorMessage || (item.skipped ? '已跳过' : '')}</p>
-          </article>
-        ))}
-        <button className="btn-ghost" disabled={busy} type="button" onClick={onRefresh}>刷新下一问</button>
+    <div className="d-two d-interview" data-screen="06">
+      <Panel className="d-interview-main">
+        {onBack && <button className="d-link d-desktop" type="button" onClick={onBack}>← 返回</button>}
+        <div className="d-interview-intro"><h2>✦ AI 回访</h2><p>基于你过去的回答，AI 为你生成了一组回访问题，帮你记录「当时」与「现在」的连接。</p></div>
+        <div className="d-progress" data-region="interview-progress"><span><i style={{width: `${(Math.max(progress.current, 1) / progress.total) * 100}%`}} /></span><b><span className="d-progress-desktop">{progress.label}</span><span className="d-progress-mobile">{Math.max(progress.current, 1)} / {progress.total}</span></b></div>
+        <h1 data-region="interview-question">{current?.question || '聊聊你的后来'}</h1>
+        <p className="d-question-tip">你可以从工作、生活、情感、心态等任何角度来聊。真实的感受比「正确的答案」更重要。</p>
         {session.mode === 'manual' && session.stopReason && <p>AI 提问暂不可用，已保存的回答仍保留。可以继续手动补充，或重试 AI 提问。</p>}
-        {interviewState.retry && <button className="btn-secondary" disabled={busy} type="button" onClick={onRetry}>重试 AI 提问</button>}
+        {interviewState.retry && <Button kind="secondary" disabled={busy} onClick={onRetry}>重试 AI 提问</Button>}
         {interviewState.waiting && <p role="status">回答已保存，正在准备下一问…</p>}
-        <label>回答范围
+        <div className="d-editor" data-region="interview-composer">
+          <div className="d-toolbar">
+            <button type="button" className="d-tool-bold" aria-label="加粗" disabled={busy || paused} onClick={() => onAnswer(interviewInsert(answer, 'bold'))}>B</button>
+            <button type="button" className="d-tool-italic" aria-label="斜体" disabled={busy || paused} onClick={() => onAnswer(interviewInsert(answer, 'italic'))}><i>I</i></button>
+            <button type="button" aria-label="插入链接" disabled={busy || paused} onClick={() => onAnswer(interviewInsert(answer, 'link'))}><Icon name="link" /></button>
+            <button type="button" aria-label="插入列表" disabled={busy || paused} onClick={() => onAnswer(interviewInsert(answer, 'list'))}><Icon name="list" /></button>
+            <span>{count} / 2000</span>
+          </div>
+          <textarea aria-label="回访回答" maxLength={2000} disabled={busy || paused} value={answer} onChange={(event) => onAnswer(event.target.value)} placeholder={'在这里写下你的回答…\n你可以尽量具体一点，比如：哪些实现了，哪些没实现，原因是什么？\n过程中有什么意想不到的转折？现在的你，会如何看待当时的自己？'} />
+          <small className="d-mobile-counter">{count} / 2000</small>
+        </div>
+        <div className="d-blue-box d-editor-tip">♧　<b>小提示：</b>不必追求完整，先写下此刻最真实的想法即可。你之后还可以随时回来修改。</div>
+        <label className="d-muted">回答范围
           <select value={answerVisibility} onChange={(event) => onVisibility(event.target.value)}>
             <option value="public">可用于公开草稿（仍需确认发布）</option>
             <option value="private">仅私有采访使用</option>
           </select>
         </label>
-        <p>这次最多五问。每一问都可以写成一小篇，按你自己的节奏讲清经历。</p>
-        <div className="composer" data-region="interview-composer">
-          <div className="composer-tools">
-            <div>
-              <button className="btn-ghost" disabled={busy || !answer} type="button" onClick={() => onAnswer(formatParagraphs(answer))}>自动分段</button>
-              <button className="btn-ghost" type="button" onClick={() => onAnswer(answer + '\n\n## 小标题\n')}>插入小标题</button>
-              <button className="btn-ghost" type="button" onClick={() => onAnswer(answer + '\n- ')}>插入列表</button>
-            </div>
-            <span>{Array.from(answer.trim()).length} / 2000</span>
-          </div>
-          <textarea rows={10} value={answer} onChange={(event) => onAnswer(event.target.value)} placeholder="在这里写下你的回答…" />
+        <div className="d-mobile-reference">
+          <button type="button" onClick={() => setDrawer(true)}><Icon name="book" /><span><b>查看当时的回答</b><small>{rail.originalDate ? `来自 ${rail.originalDate} 的原回答` : '来自当时的回答'}</small></span>›</button>
+          <button type="button" onClick={() => setWhy(true)}><Icon name="ai" /><span><b>为什么会问这个问题？</b><small>基于你过去的回答，我们想了解…</small></span>›</button>
         </div>
-        <div className="interview-actions">
-          <button className="btn-primary" disabled={busy || !answer || !interviewState.answer} type="button" data-cta="save-continue" onClick={onSave}>{COPY.saveContinue}</button>
-          <button className="btn-ghost" disabled={busy || !interviewState.answer} type="button" onClick={onSkip}>{COPY.skipQuestion}</button>
-          <button className="btn-ghost" disabled={busy || !interviewState.pause} type="button" onClick={onPause}>暂停采访</button>
-          <button className="btn-ghost" disabled={busy || !interviewState.resume} type="button" onClick={onResume}>继续</button>
-          <button className="btn-ghost" disabled={busy || !interviewState.finish} type="button" onClick={onFinish}>结束采访</button>
+        <div className="d-interview-actions">
+          <Button disabled={busy || paused || !answer || !interviewState.answer} data-cta="save-continue" onClick={onSave}>{COPY.saveContinue}　→</Button>
+          <Button kind="soft" disabled={busy || paused || !interviewState.answer} onClick={onSkip}><Icon name="skip" /> {COPY.skipQuestion}</Button>
+          {interviewState.resume
+            ? <Button kind="soft" disabled={busy} onClick={onResume}><Icon name="play" /> 继续采访</Button>
+            : <Button kind="soft" disabled={busy || !interviewState.pause} onClick={() => setPauseConfirm(true)}><Icon name="pause" /> 暂停采访</Button>}
         </div>
-        {session.status === 'finished' && <button className="btn-primary" disabled={busy} type="button" onClick={onDraft}>整理草稿</button>}
-      </section>
-      <aside className="card">
-        <h2 className="aside-title">本次采访会生成</h2>
-        <p>{COPY.sections.join(' / ')}</p>
+        {session.status === 'finished' && <Button disabled={busy} onClick={onDraft}>整理草稿</Button>}
+        {interviewState.finish && <button className="d-link" disabled={busy} type="button" onClick={onFinish}>结束采访</button>}
+        <button className="d-link" disabled={busy} type="button" onClick={onRefresh}>刷新下一问</button>
+      </Panel>
+      <aside className="d-sidebar" data-region="interview-aside">
+        <Panel>
+          <h2 className="d-between">当时{rail.originalUrl ? <a className="d-link" href={rail.originalUrl} target="_blank" rel="noreferrer">查看原文 ↗</a> : <button className="d-link" type="button" onClick={() => setDrawer(true)}>查看原文 ↗</button>}</h2>
+          <p className="d-muted">（来自你{rail.originalYear || '当时'}年的回答）</p>
+          <div className="d-info-box"><strong className="d-big-quote">“</strong><p>{rail.originalText}</p><small>{rail.originalDate || '日期未知'} · 来源：原回答</small></div>
+        </Panel>
+        <Panel>
+          <h3 className="d-icon-heading"><Icon name="bulb" />为什么会问这个问题？</h3>
+          <p className="d-prose">{rail.why}</p>
+        </Panel>
+        <Panel>
+          <h3 className="d-icon-heading"><Icon name="users" />读者最想知道什么？</h3>
+          <ul className="d-muted">{rail.reader.map((item) => <li key={item}>{item}</li>)}</ul>
+        </Panel>
+        <Panel>
+          <h3 className="d-icon-heading"><Icon name="document" />本次采访会生成</h3>
+          <p className="d-muted">完成全部 {progress.total} 个问题后，我们将为你生成一篇完整的回访内容，包含以下三个部分：</p>
+          <div className="d-three-labels"><span>▣ {COPY.sections[0]}<small>你原来的回答</small></span><span>▣ {COPY.sections[1]}<small>你现在的分享</small></span><span>◉ {COPY.sections[2]}<small>AI 整理的观察</small></span></div>
+        </Panel>
       </aside>
+      {drawer && <Modal kind="drawer" title="查看当时的回答" onClose={() => setDrawer(false)}><h3>{rail.originalTitle || '当时的回答'}</h3><p className="d-prose">{rail.originalText}</p>{rail.originalUrl && <a className="d-link" href={rail.originalUrl} target="_blank" rel="noreferrer">查看原回答 ↗</a>}</Modal>}
+      {why && <Modal kind="sheet" title="为什么会问这个问题？" onClose={() => setWhy(false)}><p>{rail.why}</p></Modal>}
+      {pauseConfirm && <Modal title="暂停采访？" onClose={() => setPauseConfirm(false)} actions={<><Button kind="ghost" onClick={() => setPauseConfirm(false)}>继续回答</Button><Button onClick={() => { setPauseConfirm(false); onPause(); }}>暂停采访</Button></>}><p>当前回答会保留。你可以稍后继续完成这组回访问题。</p></Modal>}
     </div>
   );
 }

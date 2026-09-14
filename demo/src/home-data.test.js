@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {homeStories, filterHomeStories, homeAction} from './home-data.js';
+import {homeStories, filterHomeStories, homeAction, homeDestination} from './home-data.js';
 
 test('home categories and submitted keyword filter the design stories together', () => {
   assert.equal(filterHomeStories(homeStories, '学习成长')[0].id, 'design-study');
@@ -17,4 +17,14 @@ test('design stories never resolve to a live write or story endpoint', () => {
   assert.equal(homeAction({source_id: 'live-id'}), 'open');
   assert.equal(homeAction({candidate_id: 'candidate'}), 'interest');
   assert.equal(homeAction({url: 'https://www.zhihu.com/'}), 'import');
+});
+test('home clicks send existing stories to a detail route instead of a preview modal', () => {
+  const calls = [];
+  const navigate = (screen, options) => calls.push({screen, options});
+  assert.equal(homeDestination(homeStories[0], navigate), 'preview');
+  assert.deepEqual(calls[0], {screen: '02', options: {story: 'career'}});
+  assert.equal(homeDestination({source_id: 'live-id'}, navigate), 'open');
+  assert.deepEqual(calls[1], {screen: '02', options: {source: 'live-id'}});
+  assert.equal(homeDestination({candidate_id: 'cand-1', title: '摘要'}, navigate), 'interest');
+  assert.deepEqual(calls[2], {screen: '02', options: {candidate: 'cand-1'}});
 });

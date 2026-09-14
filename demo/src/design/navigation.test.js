@@ -35,6 +35,12 @@ test('a page accepts only its own resource so mixed query IDs cannot render inco
   assert.deepEqual(readRoute('?screen=01&draft=private-id'),{screen:'01'});
   assert.deepEqual(nextRoute({screen:'02',story:'career'},'07',{draft:'new-id'}),{screen:'07',draft:'new-id'});
 });
+test('a candidate click becomes a story-detail URL instead of staying on the home overlay',()=>{
+  const route=routeFor('02',{candidate:'cand-1'});
+  assert.deepEqual(route,{screen:'02',candidate:'cand-1'});
+  assert.deepEqual(readRoute(routeUrl(route).slice(2)),route);
+  assert.equal(routeFor('02',{source:'s',candidate:'c'}).candidate,undefined);
+});
 test('a newly saved or AI-generated draft replaces the addressable version; unchanged versions stay put',()=>{
   const current=routeFor('07',{draft:'old-id'});
   const next=draftVersionRoute(current,{id:'new-id'});

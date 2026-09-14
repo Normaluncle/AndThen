@@ -10,8 +10,10 @@ describe('official Zhihu adapter', () => {
     expect(() => canonicalZhihuUrl(url)).toThrow();
   });
   it('preserves summary and selected-comment semantics and does not invent author identity', async () => {
-    const transport = (async () => new Response(JSON.stringify({ Code: 0, Data: { Items: [{ Title: 'fixture', Url: 'https://zhuanlan.zhihu.com/p/123', ContentText: '摘要', AuthorName: '同名用户', CommentInfoList: [{ Content: '部分评论' }] }] } }))) as typeof fetch;
+    const transport = (async () => new Response(JSON.stringify({ Code: 0, Data: { Items: [{ Title: 'fixture', Url: 'https://zhuanlan.zhihu.com/p/123', ContentText: '摘要', AuthorName: '同名用户', EditTime: 1779678078, CommentInfoList: [{ Content: '部分评论' }] }] } }))) as typeof fetch;
     const [item] = await officialSearch('test-key', 'query', transport);
+    expect(item?.upstream_updated_at).toBe(new Date(1779678078000).toISOString());
+    expect(item).not.toHaveProperty('published_at');
     expect(item).toMatchObject({ material_level: 'api_summary', author_url: null, comments_coverage: 'selected', comments: ['部分评论'] });
   });
 });

@@ -7,6 +7,7 @@ import { AppError } from '../../http/errors.js';
 import { hasActiveConsent, isVerifiedAuthor } from '../sources/access.js';
 import { createLlmClient } from '../../ai/client.js';
 import { AI_JOB_KINDS, interviewGenerateDedupeKey } from '../../ai/tasks.js';
+import { reasonSummary } from '../sources/reasons.js';
 import { requirePrivateFresh } from '../followups/retention.js';
 
 export const messageInput = z.object({
@@ -43,7 +44,9 @@ export async function getInterview(db: Executor, id: string, auth: AuthContext) 
   const [ownerSource] = await db.select({ deletedAt: sources.deletedAt }).from(followupCases).innerJoin(sources, eq(sources.id, followupCases.sourceId)).where(eq(followupCases.id, session.caseId));
   if (!ownerSource || ownerSource.deletedAt) throw AppError.withdrawn();
   const messages = await db.select().from(interviewMessages).where(eq(interviewMessages.sessionId, id)).orderBy(asc(interviewMessages.sequence));
-  return { session, messages };
+  const [snapshot]=session.snapshotId?await db.select().from(sourceSnapshots).where(eq(sourceSnapshots.id,session.snapshotId)):[];
+  const [source]=snapshot?await db.select().from(sources).where(eq(sources.id,snapshot.sourceId)):[];
+  return { session, messages, context: snapshot&&source?{title:source.title,original_url:source.originalUrl,published_at:snapshot.publishedAt,text:snapshot.excerpt||snapshot.body,material_level:snapshot.materialLevel,reader_interests:await reasonSummary(db,source.id)}:null };
 }
 
 export async function enqueueNext(ctx: ModuleContext, db: Executor, session: typeof interviewSessions.$inferSelect, sourceId: string) {
@@ -91,7 +94,7 @@ export async function startInterview(ctx: ModuleContext, auth: AuthContext, case
 export async function saveMessage(ctx: ModuleContext, auth: AuthContext, id: string, input: z.infer<typeof messageInput>) {
   return ctx.db.transaction(async tx => {
     const initial = await getInterview(tx, id, auth);
-    const { source } = await requireCaseAuthor(tx, initial.session.caseId, auth);
+    const { source, caseRow } = await requireCaseAuthor(tx, initial.session.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
     if (!session) throw AppError.notFound();
     requirePrivateFresh(session.updatedAt, ctx.now());
@@ -114,13 +117,14 @@ export async function saveMessage(ctx: ModuleContext, auth: AuthContext, id: str
 export async function transitionInterview(ctx: ModuleContext, auth: AuthContext, id: string, action: 'pause' | 'resume' | 'finish', expectedVersion: number) {
   return ctx.db.transaction(async tx => {
     const initial = await getInterview(tx, id, auth);
-    const { source } = await requireCaseAuthor(tx, initial.session.caseId, auth);
+    const { source, caseRow } = await requireCaseAuthor(tx, initial.session.caseId, auth);
     const [session] = await tx.select().from(interviewSessions).where(eq(interviewSessions.id, id)).for('update');
     if (!session) throw AppError.notFound();
     requirePrivateFresh(session.updatedAt, ctx.now());
     if (action === 'finish' && session.status === 'finished' && [expectedVersion, expectedVersion + 1].includes(session.revision)) return { session, job_id: null };
     if (session.revision !== expectedVersion) throw AppError.conflict('Interview version changed');
-    if (action === 'resume' ? session.status !== 'paused' : !['active', 'paused'].includes(session.status)) throw AppError.conflict('Invalid interview transition');
+    if(action==='resume'&&session.status==='finished'&&(caseRow.publishedVersionId||session.questionsAsked>=Math.min(session.budgetMainQuestions,5)))throw AppError.conflict('本次采访已完成，可返回查看记录；已发布的内容请在后来页面修改。');
+    if (action === 'resume' ? !['paused','finished'].includes(session.status) : !['active', 'paused'].includes(session.status)) throw AppError.conflict('Invalid interview transition');
     if (action === 'resume' && !await hasActiveConsent(tx, source.id, 'private_interview', auth.userId)) throw AppError.consentRequired();
     // Source lock serializes cancellation against model writeback. The handler also checks revision.
     await tx.execute(sql`update jobs set status='cancelled', finished_at=now(), lease_owner=null, lease_expires_at=null where status in ('queued','running') and payload->>'session_id'=${id}`);

@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {homeStories, filterHomeStories, homeAction} from './home-data.js';
+import {homeStories, filterHomeStories, homeAction, homeDestination} from './home-data.js';
 import './home.css';
 import {StoryCover} from './StoryCover.jsx';
 import {SearchFilters} from './design/SearchFilters.jsx';
@@ -30,10 +30,9 @@ export function HomeHeader({onEnter, query, onQuery, onSearch, page='发现', in
   </header>;
 }
 
-export function Home({items, preview, query, onQuery, onSearch, onOpen, onInterest, onFillImport, onUrl, busy, onDesignOpen,searchMode=false,results,asideExtra,filterOptions={},onFilters,interactions={}}) {
+export function Home({items, preview, query, onQuery, onSearch, onOpen, onInterest, onFillImport, onUrl, busy, onDesignOpen, onNavigate, searchMode=false,results,asideExtra,filterOptions={},onFilters,interactions={}}) {
   const [category, setCategory] = useState('为你推荐');
   const [searched, setSearched] = useState('');
-  const [selected, setSelected] = useState(null);
   const [about, setAbout] = useState(false);
   const [localFilters,setLocalFilters]=useState({});
   const filters=onFilters?filterOptions:localFilters;
@@ -42,8 +41,9 @@ export function Home({items, preview, query, onQuery, onSearch, onOpen, onIntere
   if(filters.sort&&filters.sort!=='relevance')shown=[...shown].sort((a,b)=>String(a.date||a.published_at||'').localeCompare(String(b.date||b.published_at||''))*(filters.sort==='oldest'?1:-1));
   const categories = ['为你推荐', '职场发展', '人生选择', '学习成长', '情感关系', '创业思考', '全部'];
   function act(item) {
+    if (onNavigate) { homeDestination(item, onNavigate); return; }
     const action = homeAction(item);
-    if (action === 'preview') onDesignOpen ? onDesignOpen(item) : setSelected(item);
+    if (action === 'preview') onDesignOpen?.(item);
     else if (action === 'open') onOpen(item.source_id || item.linked_source_id);
     else if (action === 'interest') onInterest(item);
     else { onUrl(item.url || ''); onFillImport(); }
@@ -73,7 +73,7 @@ export function Home({items, preview, query, onQuery, onSearch, onOpen, onIntere
       <div className="home-quote"><p>“有些回答，不该只停留在过去。”</p><span>—— 然后呢？</span><HomeImage crop={[941, 803, 122, 69]} /></div>
     </section>{asideExtra}</aside></div>
     {preview && <p className="home-provenance">设计稿演示 · 故事、头像及数字均为虚构示例</p>}
-    {(selected || about) && <div className="home-modal-backdrop" onClick={() => {setSelected(null); setAbout(false);}}><section role="dialog" aria-modal="true" aria-label={selected ? '设计稿故事预览' : '关于然后呢'} className="home-dialog" onClick={event => event.stopPropagation()}><button autoFocus className="home-dialog-close" aria-label="关闭" onClick={() => {setSelected(null); setAbout(false);}}>×</button><h2>{selected?.title || '让认真留下的回答，等到它的后来。'}</h2><p>{selected?.text || '读者关注过去的回答，作者自主参与回访、补充经历并确认发布。AI 只辅助提问，不代替作者编造经历。'}</p>{selected && <small>这是设计稿虚构故事，仅供首页验收，不会发起真实回访。</small>}</section></div>}
+    {about && <div className="home-modal-backdrop" onClick={() => setAbout(false)}><section role="dialog" aria-modal="true" aria-label="关于然后呢" className="home-dialog" onClick={event => event.stopPropagation()}><button autoFocus className="home-dialog-close" aria-label="关闭" onClick={() => setAbout(false)}>×</button><h2>让认真留下的回答，等到它的后来。</h2><p>读者关注过去的回答，作者自主参与回访、补充经历并确认发布。AI 只辅助提问，不代替作者编造经历。</p></section></div>}
   </div>;
 }
 

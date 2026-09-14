@@ -876,7 +876,7 @@ export const zhihuCommentSyncs = pgTable('zhihu_comment_syncs', {
 
 export interface OfficialCandidate {
   url: string; title: string; text: string; author_name: string;
-  author_avatar: string | null; author_url: null;
+  author_avatar: string | null; author_url: null; upstream_updated_at?: string | null;
   material_level: 'api_summary'; comments: string[]; comments_coverage: 'selected';
 }
 export const discoveryCandidates = pgTable('discovery_candidates', {

@@ -17,18 +17,24 @@ export function routeFor(screen, options = {}) {
   if (screen === '09') return {screen, tab:personalTabs.some(([id]) => id === options.tab) ? options.tab : 'settings'};
   const resolved=designScreen(`screen=${screen}`);
   if(resolved==='01')return {screen:resolved,...searchOptions(options)};
+  if(resolved==='02'){
+    if(options.source)return {screen:'02',source:options.source};
+    if(options.candidate)return {screen:'02',candidate:options.candidate};
+    if(options.story)return {screen:'02',story:options.story};
+    return {screen:'02'};
+  }
   const resourceKey=resourceKeyByScreen[resolved];
   if(resourceKey&&options[resourceKey])return {screen:resolved,[resourceKey]:options[resourceKey]};
   return {screen:resolved,...(resourceKey&&options.story?{story:options.story}:{})};
 }
 export function readRoute(search) {
   const params = new URLSearchParams(search);
-  return routeFor(designScreen(search), Object.fromEntries(['q','from','to','sort','page','tab','story','source','followup','case','interview','draft'].map(key=>[key,params.get(key)])));
+  return routeFor(designScreen(search), Object.fromEntries(['q','from','to','sort','page','tab','story','source','followup','case','interview','draft','candidate'].map(key=>[key,params.get(key)])));
 }
 export function routeUrl(route) {
   const params = new URLSearchParams({screen:route.screen});
   if (route.tab) params.set('tab',route.tab);
-  for(const key of ['q','from','to','sort','page','story','source','followup','case','interview','draft']) if(route[key]) params.set(key,route[key]);
+  for(const key of ['q','from','to','sort','page','story','source','followup','case','interview','draft','candidate']) if(route[key]) params.set(key,route[key]);
   return `/?${params}`;
 }
 export function mayOpenRoute(route,user) {return !developerScreens.includes(route.screen) || canUseDeveloperPages(user);}

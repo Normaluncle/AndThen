@@ -112,6 +112,7 @@ const publicFollowupSchema = z.object({
 });
 
 const publicStorySchema = z.object({
+  author_name:z.string().nullable(),
   site_counts:z.array(z.number()),
   ...presentationShape,
   source_id: z.string().uuid(),

@@ -19,7 +19,7 @@ import { importSource } from '../sources/service.js';
 
 import { ownContents, ownContent, ownComments, offsetSchema } from './creator.js';
 
-const candidate = z.object({...z.object(presentationShape).partial().shape, candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
+const candidate = z.object({...z.object(presentationShape).partial().shape, candidate_id:z.string().uuid().optional(),linked_source_id:z.string().uuid().nullable().optional(),interested:z.boolean().optional(),url: z.string(), title: z.string(), text: z.string(), author_name: z.string(), author_avatar: z.string().nullable(), author_url: z.null(), upstream_updated_at: z.string().datetime().nullable().optional(), material_level: z.literal('api_summary'), comments: z.array(z.string()), comments_coverage: z.literal('selected') });
 export const zhihuModule: ModuleDefinition = {
   name: 'zhihu',
   onWorkerStart: async ctx=>{await seedDiscovery(ctx);},

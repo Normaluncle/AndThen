@@ -715,6 +715,7 @@ export interface PublicFollowup {
 }
 
 export interface PublicStory extends Presentation {
+  author_name: string|null;
   site_counts:number[];
   source_id: string;
   title: string | null;
@@ -802,9 +803,11 @@ export async function buildPublicStory(
   }
 
   const isExact = snapshot?.materialLevel === 'exact_excerpt';
+  const [author]=await db.select({name:users.displayName}).from(authorVerifications).innerJoin(users,eq(users.id,authorVerifications.userId)).where(and(eq(authorVerifications.sourceId,source.id),eq(authorVerifications.status,'verified'))).limit(1);
   return {
     ...await sourcePresentation(db,source.id,source.title,snapshot),
     site_counts:await siteCounts(db,source.id),
+    author_name:author?.name??null,
     source_id: source.id,
     title: source.title,
     source_type: source.sourceType,

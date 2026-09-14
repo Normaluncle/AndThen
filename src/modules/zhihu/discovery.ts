@@ -28,7 +28,7 @@ export async function followCandidate(ctx:ModuleContext,auth:AuthContext,id:stri
   if(!candidate)throw AppError.notFound();
   if(!candidate.sourceId&&!active)return {active:false,source_id:null};
   const imported=active?await importSource(ctx,auth,{sourceType:'third_party_link',originalUrl:candidate.url,originalAccountRef:null,title:candidate.data.title,
-    materialLevel:'api_summary',body:candidate.data.text,excerpt:null,excerptLocation:null,publishedAt:null,upstreamUpdatedAt:null,notes:'Official discovery candidate; author ownership not established',provenance:'official_api'}):null;
+    materialLevel:'api_summary',body:candidate.data.text,excerpt:null,excerptLocation:null,publishedAt:null,upstreamUpdatedAt:candidate.data.upstream_updated_at?new Date(candidate.data.upstream_updated_at):null,notes:'Official discovery candidate; author ownership not established',provenance:'official_api'}):null;
   const sourceId=imported?.source.id??candidate.sourceId!;
   await ctx.db.transaction(async tx=>{
     const [source]=await tx.select().from(sources).where(eq(sources.id,sourceId)).for('update');

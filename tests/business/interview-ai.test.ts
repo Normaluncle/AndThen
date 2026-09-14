@@ -13,7 +13,7 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
   let calls = 0;
   let delayReply: (() => void) | undefined;
   let hold = false;
-  let providerMode: 'normal' | 'sequence' | 'repeat' | '429' | 'bad_json' = 'normal';
+  let providerMode: 'normal' | 'repair' | 'sequence' | 'repeat' | '429' | 'bad_json' = 'normal';
   beforeAll(async () => {
     h = await createHarness();
     server = createServer(async (req, res) => {
@@ -28,7 +28,7 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       expect(JSON.parse(raw).messages[0].content).toContain(`第${input.question_number}问`);
       const last = input.history.filter((m: { role: string }) => m.role === 'author').at(-1);
       const answer = last?.answer ?? '';
-      const question = providerMode === 'sequence' ? `请补充第${input.history.filter((m: { role: string }) => m.role === 'ai').length + 1}项后续？` : providerMode === 'repeat' ? input.history.find((m: { role: string }) => m.role === 'ai')?.question ?? '后来发生了什么？' : answer.includes('已完成') ? '完成后有什么变化？' : answer.includes('已停止') ? '停止后有什么变化？' : answer.includes('仍在进行') ? '现在进展如何？' : '后来发生了什么？';
+      const question = providerMode === 'repair' ? (JSON.parse(raw).messages.length===3?'这段经历带来了哪些新的想法？':'进展如何？遇到了什么？') : providerMode === 'sequence' ? `请补充第${input.history.filter((m: { role: string }) => m.role === 'ai').length + 1}项后续？` : providerMode === 'repeat' ? input.history.find((m: { role: string }) => m.role === 'ai')?.question ?? '后来发生了什么？' : answer.includes('已完成') ? '完成后有什么变化？' : answer.includes('已停止') ? '停止后有什么变化？' : answer.includes('仍在进行') ? '现在进展如何？' : '后来发生了什么？';
       const send = () => { res.setHeader('content-type', 'application/json'); res.end(JSON.stringify({ model: 'test_fixture', choices: [{ message: { content: JSON.stringify({ question: providerMode === 'repeat' ? ` ${question.replace('？', '?')} ` : question, purpose: '测试动态分支', basis_refs: [input.evidence.at(-1).id] }) } }], usage: { prompt_tokens: 10, completion_tokens: 10 } })); };
       if (hold) delayReply = send; else send();
     });
@@ -74,6 +74,19 @@ describe('AI-B with a simulated HTTP provider (not a real model evaluation)', ()
       expect(state.messages.filter((m: { role: string }) => m.role === 'ai')).toHaveLength(5);
       expect(state.messages.filter((m: { skipped: boolean }) => m.skipped)).toHaveLength(1);
     } finally { providerMode = 'normal'; }
+  });
+  it('repairs a rejected multi-question response once without spending another interview question',async()=>{
+    providerMode='repair';
+    try{
+      const fixture=await start();const before=calls;
+      await runJob(h.moduleCtx,'ai.interview.next');
+      const state=(await h.app.inject({url:`/api/interviews/${fixture.session.id}`,headers:auth(fixture.author.token)})).json().data;
+      expect(calls-before).toBe(2);
+      expect(state.session.mode).toBe('ai');
+      expect(state.session.questionsAsked).toBe(1);
+      expect(state.messages).toHaveLength(1);
+      expect(state.messages[0].question).toBe('这段经历带来了哪些新的想法？');
+    }finally{providerMode='normal';}
   });
   it.each(['repeat', '429', 'bad_json'] as const)('preserves input and falls back safely for %s', async mode => {
     const fixture = await start();

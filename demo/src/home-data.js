@@ -17,3 +17,30 @@ export function homeAction(item) {
   if (item.candidate_id) return 'interest';
   return 'import';
 }
+
+export function rememberCandidate(item) {
+  if (!item?.candidate_id || typeof sessionStorage === 'undefined') return;
+  sessionStorage.setItem('andthen.candidate.' + item.candidate_id, JSON.stringify({
+    candidate_id: item.candidate_id,
+    title: item.title,
+    text: item.text,
+    author_name: item.author_name,
+    url: item.url,
+    published_at: item.published_at,
+    category: item.category,
+  }));
+}
+
+export function readCandidate(id) {
+  try { return JSON.parse(sessionStorage.getItem('andthen.candidate.' + id) || 'null'); }
+  catch { return null; }
+}
+
+export function homeDestination(item, navigate) {
+  const action = homeAction(item);
+  if (action === 'preview') navigate('02', {story: String(item.id || '').replace(/^design-/, '')});
+  else if (action === 'open') navigate('02', {source: item.source_id || item.linked_source_id});
+  else if (action === 'interest') { rememberCandidate(item); navigate('02', {candidate: item.candidate_id}); }
+  else if (action === 'import') navigate('12');
+  return action;
+}
