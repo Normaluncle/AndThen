@@ -13,7 +13,7 @@ export function filterHomeStories(items, category, query = '') {
 
 export function homeAction(item) {
   if (item.provenance === 'test_fixture' && item.id?.startsWith('design-')) return 'preview';
-  if (item.candidate_id) return 'interest';
   if (item.source_id || item.linked_source_id) return 'open';
+  if (item.candidate_id) return 'interest';
   return 'import';
 }
