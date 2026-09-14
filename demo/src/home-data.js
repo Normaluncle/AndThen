@@ -66,6 +66,17 @@ export function cardCounts(item, {interaction, preview} = {}) {
   return rows;
 }
 
+/**
+ * The local demo counters live under the design fixture's short id (`career`, `study`, …).
+ * Server items (official search candidates) carry `candidate_id` and no `id` at all, so the
+ * key must be derived defensively: reading `item.id.replace(...)` unconditionally threw during
+ * render and blanked the whole page.
+ */
+export function designInteractionKey(item) {
+  const id = item?.id;
+  return typeof id === 'string' && id.startsWith('design-') ? id.slice('design-'.length) : '';
+}
+
 export function homeAction(item) {
   if (item.provenance === 'test_fixture' && item.id?.startsWith('design-')) return 'preview';
   if (item.source_id || item.linked_source_id) return 'open';

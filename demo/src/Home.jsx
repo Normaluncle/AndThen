@@ -1,5 +1,5 @@
 import React, {useState} from 'react';
-import {homeStories, filterHomeStories, filterByDateRange, storyTimeText, cardCounts, homeAction, homeDestination} from './home-data.js';
+import {homeStories, filterHomeStories, filterByDateRange, storyTimeText, cardCounts, designInteractionKey, homeAction, homeDestination} from './home-data.js';
 import './home.css';
 import {StoryCover} from './StoryCover.jsx';
 import {SearchFilters} from './design/SearchFilters.jsx';
@@ -71,7 +71,7 @@ export function Home({items, preview, query, onQuery, onSearch, onOpen, onIntere
     <div className="home-columns"><section className="home-feed">
       {searchMode?results:<><nav className="home-categories" aria-label="分类" data-region="category-tabs">{categories.map((value, index) => <button key={value} className={category === value ? 'selected' : ''} onClick={() => setCategory(value)}>{index === 0 && <HomeIcon name="flame" />}<span className="home-category-long">{value}</span><span className="home-category-short">{['推荐', '职场', '人生', '学习', '情感', '创业', '全部'][index]}</span></button>)}</nav>
       <SearchFilters value={filters} onChange={changeFilters}/>
-      {shown.map((item, index) => {const counts = cardCounts(item, {preview, interaction: interactions[item.id.replace('design-','')]});return <article className="home-story" key={item.id || item.source_id || item.candidate_id || index} data-region="feed" data-provenance={item.provenance}>
+      {shown.map((item, index) => {const counts = cardCounts(item, {preview, interaction: interactions[designInteractionKey(item)]});return <article className="home-story" key={item.id || item.source_id || item.candidate_id || index} data-region="feed" data-provenance={item.provenance}>
         <StoryCover item={item}/>
         <div className="home-story-copy"><h2><button onClick={() => act(item)}>{item.title}</button></h2><p className="home-meta">{item.category || item.author_name || '故事'} · {storyTimeText(item) || (item.candidate_id ? '官方摘要' : '时间未知')}</p><p className="home-excerpt">{item.text}</p>{counts.length > 0 && <><span className="home-ellipsis">...</span><div className="home-counts">{counts.map(row => <span key={row.icon} title={row.label}><HomeIcon name={row.icon} />{row.value}</span>)}</div></>}</div>
         <button className="home-then" data-cta="then" disabled={busy} onClick={() => act(item)}>然后呢？</button>

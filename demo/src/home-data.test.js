@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {homeStories, filterHomeStories, filterByDateRange, storyTime, storyTimeText, cardCounts, homeAction, homeDestination} from './home-data.js';
+import {homeStories, filterHomeStories, filterByDateRange, storyTime, storyTimeText, cardCounts, designInteractionKey, homeAction, homeDestination} from './home-data.js';
 
 test('home categories and submitted keyword filter the design stories together', () => {
   assert.equal(filterHomeStories(homeStories, '学习成长')[0].id, 'design-study');
@@ -55,6 +55,19 @@ test('a date range filters by the chain and never drops a story with no date at 
   // Known dates are still filtered; only the dateless row is exempt.
   assert.deepEqual(filterByDateRange(rows, {from: '2026-01-01'}).map(r => r.id), ['b', 'c', 'd']);
   assert.deepEqual(filterByDateRange(rows, {to: '2022-01-01'}).map(r => r.id), ['a', 'd']);
+});
+
+test('a card without an id never breaks the local counter lookup', () => {
+  // The deployed homepage blanked out with "Cannot read properties of undefined (reading
+  // 'replace')": official candidates carry candidate_id only, and the interaction key used
+  // to be read from item.id unconditionally while rendering the feed.
+  const candidate = {candidate_id: 'cand-1', title: '考研回忆录(已上岸版) - 知乎'};
+  assert.equal(designInteractionKey(candidate), '');
+  assert.equal(designInteractionKey({}), '');
+  assert.equal(designInteractionKey(undefined), '');
+  assert.equal(designInteractionKey({id: 'source-id'}), '');
+  assert.equal(designInteractionKey(homeStories[0]), 'career');
+  assert.deepEqual(cardCounts(candidate, {interaction: {}}).map(row => row.value), [0, 0, 0]);
 });
 
 test('a card keeps the platform heat and this site counters as separate numbers', () => {
