@@ -73,10 +73,10 @@
 .home-stats>div:last-child {border:0;}
 .home-stats b {display:block; font-size:18px; line-height:1.5;}
 .home-stats span {color:#7385a6; font-size:12px; white-space:nowrap;}
-.home-quote {min-height:128px; padding:18px 16px 14px; background:#e7f4ff; border-radius:8px; position:relative; overflow:hidden; color:#3c5880;}
-.home-quote p {font-size:13px; margin:0 0 3px; position:relative;z-index:1; max-width:50%;}
+.home-quote {min-height:104px; padding:16px 14px 12px; background:#e7f4ff; border-radius:8px; position:relative; overflow:hidden; color:#3c5880;}
+.home-quote p {font-size:13px; margin:0 0 3px; position:relative;z-index:1; max-width:58%;}
 .home-quote>span:not(.home-quote-bear) {font-size:12px; position:relative;z-index:1;}
-.home-quote-bear {position:absolute; right:-8px; bottom:-20px; height:158%; width:auto; max-width:64%; object-fit:contain; object-position:right bottom; pointer-events:none;}
+.home-quote-bear {position:absolute; right:-2px; bottom:-10px; height:108%; width:auto; max-width:44%; object-fit:contain; object-position:right bottom; pointer-events:none;}
 .home-provenance {font-size:11px; color:#8291a7; margin:12px 0;}
 .home-no-results {padding:35px; color:#7385a6;}
 .home-no-results button {border:0;background:none;color:#0878ff;}
