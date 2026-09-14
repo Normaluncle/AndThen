@@ -49,7 +49,7 @@ test('playground reset is allowed for guests and local demo fixtures only', () =
 });
 
 test('quote illustration is the committed ChatGPT asset served from demo public', () => {
-  const root = fileURLToPath(new URL('../../ChatGPT Image 2026年9月14日 10_35_01.png', import.meta.url));
+  const root = fileURLToPath(new URL('../../ChatGPT Image 2026年9月14日 15_48_13.png', import.meta.url));
   const served = fileURLToPath(new URL('../public/home/quote-bear.png', import.meta.url));
   assert.equal(existsSync(root), true);
   assert.equal(existsSync(served), true);
