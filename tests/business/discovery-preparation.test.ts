@@ -112,3 +112,22 @@ it('marks a partial index failure as error, retries with a new generation, and i
  expect((await h.ctx.db.select().from(sourcePreparations).where(eq(sourcePreparations.sourceId,sourceId)))[0]!.status).toBe('invalidated');
  await h.ctx.db.update(jobs).set({status:'cancelled'}).where(and(eq(jobs.kind,'memory.prepare'),eq(jobs.status,'running')));
 });
+
+it('reports the caller own follow state on a candidate and stays readable without a session',async()=>{
+ const reader=await seedUser(h,'reader'),stranger=await seedUser(h,'reader');
+ const [candidate]=await storeCandidates(h.moduleCtx,[{url:'https://www.zhihu.com/answer/993',title:'fixture follow state',text:'测试资料：一年后转行成功。',author_name:'测试',author_avatar:null,author_url:null,material_level:'api_summary',comments:[],comments_coverage:'selected'}]);
+ const url=`/api/discovery/candidates/${candidate!.candidate_id}`;
+ // The route is public; without a session the answer is simply "not followed".
+ const anonymous=await h.app.inject({url});
+ expect(anonymous.statusCode).toBe(200);
+ expect(anonymous.json().data.candidate.interested).toBe(false);
+ expect(anonymous.json().data.candidate.linked_source_id).toBeNull();
+ expect((await h.app.inject({method:'PUT',url:`${url}/interest`,headers:auth(reader.token),payload:{active:true}})).statusCode).toBe(200);
+ // The detail page shows 取消关注 from this flag instead of offering the same follow again.
+ const mine=await h.app.inject({url,headers:auth(reader.token)});
+ expect(mine.json().data.candidate.interested).toBe(true);
+ expect(mine.json().data.candidate.linked_source_id).toBeTruthy();
+ expect((await h.app.inject({url,headers:auth(stranger.token)})).json().data.candidate.interested).toBe(false);
+ expect((await h.app.inject({method:'PUT',url:`${url}/interest`,headers:auth(reader.token),payload:{active:false}})).statusCode).toBe(200);
+ expect((await h.app.inject({url,headers:auth(reader.token)})).json().data.candidate.interested).toBe(false);
+});

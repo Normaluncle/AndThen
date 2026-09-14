@@ -45,9 +45,17 @@ export function ConnectedHome({query,onQuery,navigate}){
 }
 
 export function ConnectedCandidate({id,navigate,user,onLogin}){
- const item=readCandidate(id);const action=useAction();
- if(!item)return <Panel><h1>未找到这则摘要</h1><Button onClick={()=>navigate('01')}>返回发现</Button></Panel>;
- return <Story story={{...item,author:item.author_name,original_url:item.url}} navigate={navigate} engagement={<Engagement fixtureId={'candidate-'+id} user={user} onLogin={onLogin}/>} followSlot={<FollowBlock busy={action.busy} extra={<p className="d-muted">仅为官方搜索摘要，不是全文，也不是作者发布的后来。</p>} notice={<ActionError action={action}/>} onFollow={()=>{if(!user){onLogin();return;}action.run(async()=>{await api(`/discovery/candidates/${id}/interest`,'PUT',{active:true});navigate('03');});}}/>}/>;
+ // The API answer carries the caller's own follow state, so the button reflects reality after a
+ // reload or from a link opened in a fresh tab (sessionStorage alone would be empty there).
+ const remembered=readCandidate(id);
+ const resource=useResource('/discovery/candidates/'+id);
+ const [followed,setFollowed]=useState(false);
+ useEffect(()=>{setFollowed(!!resource.value?.candidate?.interested);},[resource.value]);
+ const action=useAction();
+ const candidate=resource.value?.candidate??remembered;
+ const setInterest=active=>{if(!user){onLogin();return;}action.run(async()=>{await api(`/discovery/candidates/${id}/interest`,'PUT',{active});setFollowed(active);});};
+ if(!candidate)return resource.error?<Panel><h1>未找到这则摘要</h1><Button onClick={()=>navigate('01')}>返回发现</Button></Panel>:<ResourceStatus resource={resource}/>;
+ return <Story story={{...candidate,author:candidate.author_name,original_url:candidate.url}} navigate={navigate} engagement={<Engagement fixtureId={'candidate-'+id} user={user} onLogin={onLogin}/>} followSlot={<FollowBlock followed={followed} busy={action.busy} extra={<p className="d-muted">仅为官方搜索摘要，不是全文，也不是作者发布的后来。</p>} notice={<ActionError action={action}/>} onFollow={()=>setInterest(!followed)}/>}/>;
 }
 
 export function ConnectedPersonal({tab,navigate,user,filter='全部',onFilter}){

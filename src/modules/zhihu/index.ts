@@ -4,15 +4,17 @@ import {presentationShape} from '../sources/presentation-schema.js';
 import { z } from 'zod';
 import { oauthReady, registerOAuthRoutes } from './oauth-routes.js';
 import {syncOAuthAuthor} from './oauth-sync.js';
-import { eq } from 'drizzle-orm';
-import { sources, zhihuCommentSyncs,discoveryCandidates } from '../../db/schema.js';
+import { and, eq } from 'drizzle-orm';
+import { sources, zhihuCommentSyncs,discoveryCandidates, interests } from '../../db/schema.js';
 import { storeCandidates,candidateFeed,followCandidate } from './discovery.js';
 import { syncCommentPage } from './comments.js';
 import { requirePublicStory } from '../sources/service.js';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import type { ModuleDefinition } from '../../shared/types.js';
 import { success, AppError } from '../../http/errors.js';
-import { requireAuthContext } from '../../http/auth.js';
+import { requireAuthContext, parseBearerToken } from '../../http/auth.js';
+import { cookieToken } from '../../http/session-cookie.js';
+import { resolveSession } from '../identity/service.js';
 import { envelopeSchema, errorEnvelopeSchema } from '../../http/envelope.js';
 import { canonicalZhihuUrl, parseZhihuShare, officialSearch } from './client.js';
 import { engagementFields } from './heat.js';
@@ -36,11 +38,18 @@ export const zhihuModule: ModuleDefinition = {
       search: !!ctx.env.ZHIHU_ACCESS_SECRET, creator_account_reads: !!ctx.env.ZHIHU_ACCESS_SECRET, comment_sync_scope: 'access_secret_owner_only', oauth: oauthReady(ctx), oauth_reason: oauthReady(ctx) ? 'available' : ctx.env.ZHIHU_APP_ID && ctx.env.ZHIHU_APP_KEY ? 'callback_security_requires_verification' : 'app_credentials_missing', arbitrary_fulltext: false, comments: 'selected_search_comments',
     }));
     r.get('/discovery/search', { schema: { tags: ['zhihu'], querystring: z.object({ q: z.string().trim().min(1).max(300) }), response: { 200: envelopeSchema(z.object({ items: z.array(candidate) })) } } }, async request => success(request.id, { items: await presentCandidates(await storeCandidates(ctx,await officialSearch(ctx.env.ZHIHU_ACCESS_SECRET, request.query.q))) }));
-    r.get('/discovery/candidates/:id',{schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),response:{200:envelopeSchema(z.object({candidate}))}}},async request=>{
+    r.get('/discovery/candidates/:id',{schema:{tags:['zhihu'],params:z.object({id:z.string().uuid()}),response:{200:envelopeSchema(z.object({candidate}))}}},async (request,reply)=>{
       const [row]=await ctx.db.select().from(discoveryCandidates).where(eq(discoveryCandidates.id,request.params.id));
       if(!row)throw AppError.notFound();
       if(row.sourceId){const [source]=await ctx.db.select().from(sources).where(eq(sources.id,row.sourceId));if(!source||source.deletedAt||['rejected','revoked'].includes(source.permissionStatus))throw AppError.notFound();}
-      return success(request.id,{candidate:(await presentCandidates([{...row.data,candidate_id:row.id}]))[0]!});
+      // A signed-in reader also learns whether they already follow this candidate, so the detail
+      // page offers 取消关注 instead of asking them to follow something they already follow. The
+      // route stays public: without a session the answer is simply `interested: false`.
+      const token=request.headers.authorization?parseBearerToken(request.headers.authorization):cookieToken(request,ctx.env);
+      const session=token?await resolveSession(ctx.db,token):null;
+      const [interest]=session&&row.sourceId?await ctx.db.select().from(interests).where(and(eq(interests.sourceId,row.sourceId),eq(interests.readerKey,session.user.id))):[];
+      if(session)reply.header('cache-control','no-store');
+      return success(request.id,{candidate:{...(await presentCandidates([{...row.data,candidate_id:row.id}]))[0]!,linked_source_id:row.sourceId??null,interested:interest?.active??false}});
     });
     r.get('/discovery/feed',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request)))}));
     r.get('/discovery/following',{preHandler:[app.authenticate],schema:{tags:['zhihu'],response:{200:envelopeSchema(z.object({items:z.array(candidate)}))}}},async request=>success(request.id,{items:await presentCandidates(await candidateFeed(ctx,requireAuthContext(request),true))}));
