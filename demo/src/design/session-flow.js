@@ -23,7 +23,9 @@ export function sessionTabs(demo) {
  * demo logins switched on. `?judge=0` (or false/no/off) keeps them hidden.
  */
 export function judgeEntry(search = '') {
-  const params = new URLSearchParams(search.startsWith('?') ? search : `?${search}`);
+  // Tolerates a non-string (e.g. `routes.map(routeUrl)` passes the index as the second argument).
+  const text = typeof search === 'string' ? search : '';
+  const params = new URLSearchParams(text.startsWith('?') ? text : `?${text}`);
   if (!params.has('judge')) return false;
   return !['0', 'false', 'no', 'off'].includes((params.get('judge') ?? '').trim().toLowerCase());
 }

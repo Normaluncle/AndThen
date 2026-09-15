@@ -22,6 +22,18 @@ test('story identity survives reading and author workflow; explicit selections r
   assert.equal(nextRoute(route,'01').story,undefined);
   assert.deepEqual(readRoute(routeUrl(route).slice(2)),route);
 });
+test('the judge suffix survives every navigation',()=>{
+  const judge='?screen=01&judge=1';
+  for(const route of [routeFor('01'),routeFor('09',{tab:'following'}),routeFor('02',{source:'s1'}),routeFor('12')]){
+    const url=routeUrl(route,judge);
+    assert.ok(url.includes('judge=1'),url);
+    assert.ok(url.includes(`screen=${route.screen}`),url);
+    assert.deepEqual(readRoute(url.slice(2)),route);
+  }
+  // An ordinary visitor never gets the suffix added, and ?judge=0 keeps it off.
+  assert.equal(routeUrl(routeFor('01'),'?screen=01').includes('judge'),false);
+  assert.equal(routeUrl(routeFor('01'),'?screen=01&judge=0').includes('judge'),false);
+});
 test('invalid destinations and tabs have safe defaults',()=>{
   assert.equal(readRoute('?screen=99').screen,'01');
   assert.equal(readRoute('?screen=09&tab=admin').tab,'settings');

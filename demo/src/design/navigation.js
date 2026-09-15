@@ -1,5 +1,6 @@
 import {searchOptions} from './search-model.js';
 import {designScreen} from './logic.js';
+import {judgeEntry} from './session-flow.js';
 
 export const personalTabs = [
   ['profile','home','我的主页'], ['answers','comment','我的回答'],
@@ -31,10 +32,13 @@ export function readRoute(search) {
   const params = new URLSearchParams(search);
   return routeFor(designScreen(search), Object.fromEntries(['q','from','to','sort','page','tab','story','source','followup','case','interview','draft','candidate'].map(key=>[key,params.get(key)])));
 }
-export function routeUrl(route) {
+export function routeUrl(route, search = typeof location === 'undefined' ? '' : location.search) {
   const params = new URLSearchParams({screen:route.screen});
   if (route.tab) params.set('tab',route.tab);
   for(const key of ['q','from','to','sort','page','story','source','followup','case','interview','draft','candidate']) if(route[key]) params.set(key,route[key]);
+  // Every page keeps the judge suffix: navigation rebuilds the query string, and dropping the
+  // suffix would hide the demo tab the moment a reviewer clicks anything.
+  if (judgeEntry(search)) params.set('judge','1');
   return `/?${params}`;
 }
 export function mayOpenRoute(route,user) {return !developerScreens.includes(route.screen) || canUseDeveloperPages(user);}
